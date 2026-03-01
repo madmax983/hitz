@@ -1,0 +1,18 @@
+[package]
+name = "hitz-boot"
+description = "Linux direct boot — ELF loader, boot_params, page tables"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+hitz-hal.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+# Phase 1+ deps (vm-memory/linux-loader need Windows compat work)
+# vm-memory.workspace = true
+# linux-loader.workspace = true

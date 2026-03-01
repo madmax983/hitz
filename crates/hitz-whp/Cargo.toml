@@ -1,0 +1,21 @@
+[package]
+name = "hitz-whp"
+description = "Windows Hypervisor Platform backend implementing hitz-hal"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+hitz-hal.workspace = true
+windows.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+anyhow.workspace = true
+windows = { workspace = true, features = [
+    "Win32_System_Memory",
+] }

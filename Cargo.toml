@@ -1,0 +1,76 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/hitz-hal",
+    "crates/hitz-whp",
+    "crates/hitz-vmm",
+    "crates/hitz-boot",
+    "crates/hitz-devices",
+    "crates/hitz-net",
+    "crates/hitz-api",
+    "crates/hitz-daemon",
+    "crates/hitz-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/markm/hitz"
+
+[workspace.lints.rust]
+unsafe_code = "warn"
+missing_docs = "warn"
+unused_results = "warn"
+
+[workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+unwrap_used = "warn"
+expect_used = "warn"
+missing_errors_doc = "allow"
+module_name_repetitions = "allow"
+
+[workspace.dependencies]
+# Internal crates
+hitz-hal = { path = "crates/hitz-hal" }
+hitz-whp = { path = "crates/hitz-whp" }
+hitz-vmm = { path = "crates/hitz-vmm" }
+hitz-boot = { path = "crates/hitz-boot" }
+hitz-devices = { path = "crates/hitz-devices" }
+hitz-net = { path = "crates/hitz-net" }
+hitz-api = { path = "crates/hitz-api" }
+hitz-daemon = { path = "crates/hitz-daemon" }
+
+# External - hypervisor
+windows = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_System_Hypervisor",
+] }
+
+# External - VMM building blocks
+vm-memory = { version = "0.18", features = ["backend-mmap"] }
+linux-loader = { version = "0.13", features = ["elf", "bzimage"] }
+virtio-queue = "0.17"
+vm-superio = "0.8"
+
+# External - networking
+wintun = "0.5"
+
+# External - async runtime & server
+tokio = { version = "1", features = ["full"] }
+hyper = { version = "1", features = ["http1", "server"] }
+http-body-util = "0.1"
+hyper-util = { version = "0.1", features = ["tokio"] }
+
+# External - serialization & CLI
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+clap = { version = "4", features = ["derive"] }
+
+# External - error handling & utilities
+thiserror = "2"
+anyhow = "1"
+uuid = { version = "1", features = ["v4", "serde"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }

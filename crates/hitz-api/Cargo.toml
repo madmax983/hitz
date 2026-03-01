@@ -1,0 +1,14 @@
+[package]
+name = "hitz-api"
+description = "REST types, VmAction enum — no I/O"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+hitz-hal.workspace = true
+serde.workspace = true
+uuid.workspace = true

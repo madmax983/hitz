@@ -1,0 +1,19 @@
+[package]
+name = "hitz-vmm"
+description = "VM lifecycle, vCPU threads, memory management"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+hitz-hal.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+# Phase 1+ deps (vm-memory needs Windows compat work)
+# hitz-boot.workspace = true
+# hitz-devices.workspace = true
+# vm-memory.workspace = true

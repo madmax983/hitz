@@ -1,0 +1,19 @@
+[package]
+name = "hitz-net"
+description = "virtio-net + WinTun networking"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+hitz-hal.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+# Phase 4+ deps
+# hitz-devices.workspace = true
+# wintun.workspace = true
+# tokio.workspace = true

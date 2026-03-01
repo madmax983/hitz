@@ -1,0 +1,26 @@
+[package]
+name = "hitz-daemon"
+description = "tokio runtime, named pipe server, VM coordinator"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+hitz-api.workspace = true
+hitz-hal.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+# Phase 5+ deps
+# hitz-vmm.workspace = true
+# tokio.workspace = true
+# hyper.workspace = true
+# http-body-util.workspace = true
+# hyper-util.workspace = true
+# serde.workspace = true
+# serde_json.workspace = true
+# anyhow.workspace = true
+# tracing-subscriber.workspace = true

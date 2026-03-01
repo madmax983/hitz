@@ -1,0 +1,19 @@
+[package]
+name = "hitz-devices"
+description = "MMIO/IO bus, virtio-mmio transport, serial, block device"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+hitz-hal.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+# Phase 2+ deps (vm-memory needs Windows compat work)
+# vm-memory.workspace = true
+# virtio-queue.workspace = true
+# vm-superio.workspace = true
