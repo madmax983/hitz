@@ -13,7 +13,9 @@ hitz-hal.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 
-# Phase 2+ deps (vm-memory needs Windows compat work)
+# Phase 2
+vm-superio = { workspace = true }
+
+# Phase 3+ deps (vm-memory needs Windows compat work)
 # vm-memory.workspace = true
 # virtio-queue.workspace = true
-# vm-superio.workspace = true

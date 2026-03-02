@@ -6,6 +6,10 @@
 //! To enable WHP: Settings > Apps > Optional Features > More Windows Features >
 //! check "Windows Hypervisor Platform", reboot.
 
+// Tests use expect() liberally — panicking on failure is the point.
+// RAM sizes are u64 but add_region takes usize; safe on 64-bit Windows.
+#![allow(clippy::expect_used, clippy::cast_possible_truncation)]
+
 use std::ptr;
 
 use hitz_hal::{Gpa, Hypervisor, MemFlags, Partition, Vcpu, VcpuExit, VcpuId};
@@ -451,4 +455,168 @@ fn phase1_boot_elf_to_io_port_exit() {
         }
         other => panic!("expected IoPort exit, got: {other:?}"),
     }
+}
+
+// ─── Phase 2: Serial console integration tests ──────────────────────────────
+
+/// Helper: set up the full boot pipeline (memory, page tables, `boot_params`,
+/// GDT, ELF) and return a configured vCPU ready to run.
+///
+/// Returns `(partition, vcpu, guest_mem)` — caller owns the lifetime.
+fn boot_elf_pipeline(code: &[u8]) -> (crate::WhpPartition, crate::WhpVcpu, hitz_vmm::GuestMemory) {
+    use hitz_boot::{BOOT_PARAMS_GPA, CMDLINE_GPA, build_boot_params, build_page_tables, load_elf};
+    use hitz_vmm::{GuestMemory, boot_regs};
+
+    let load_addr = 0x10_0000u64;
+    let elf = make_boot_elf(load_addr, code);
+    let ram_size = 128 * 1024 * 1024u64;
+
+    let mut guest_mem = GuestMemory::new();
+    guest_mem
+        .add_region(Gpa::new(0), ram_size as usize)
+        .expect("add_region failed");
+
+    let (pml4_gpa, page_table_writes) = build_page_tables(4).expect("build_page_tables failed");
+    for write in &page_table_writes {
+        guest_mem
+            .write_slice(write.gpa, &write.data)
+            .expect("write page table failed");
+    }
+
+    let boot_params =
+        build_boot_params(ram_size, Gpa::new(CMDLINE_GPA)).expect("build_boot_params failed");
+    guest_mem
+        .write_obj(Gpa::new(BOOT_PARAMS_GPA), &boot_params)
+        .expect("write boot_params failed");
+
+    let cmdline = b"console=ttyS0\0";
+    guest_mem
+        .write_slice(Gpa::new(CMDLINE_GPA), cmdline)
+        .expect("write cmdline failed");
+
+    boot_regs::write_gdt(&guest_mem).expect("write_gdt failed");
+
+    let load_result = load_elf(&elf, &guest_mem).expect("load_elf failed");
+
+    let hv = WhpHypervisor::new().expect("WHP not available");
+    let cfg = hitz_hal::PartitionConfig {
+        vcpu_count: 1,
+        memory_size: hitz_hal::MemSizeMiB::new(128),
+    };
+    let mut partition = hv.create_partition(&cfg).expect("create_partition failed");
+
+    guest_mem
+        .map_to_partition(&mut partition, MemFlags::READ_WRITE_EXEC)
+        .expect("map_to_partition failed");
+
+    let mut vcpu = partition
+        .create_vcpu(VcpuId::new(0))
+        .expect("create_vcpu failed");
+
+    boot_regs::configure_sregs(&mut vcpu, pml4_gpa).expect("configure_sregs failed");
+    boot_regs::configure_regs(
+        &mut vcpu,
+        load_result.entry_point,
+        Gpa::new(BOOT_PARAMS_GPA),
+    )
+    .expect("configure_regs failed");
+
+    (partition, vcpu, guest_mem)
+}
+
+/// Phase 2 checkpoint: ELF writes "Hello" to COM1 via the run loop.
+///
+/// Exercises the complete Phase 2 pipeline:
+/// 1. Serial device receives OUT instructions via run loop dispatch
+/// 2. RIP is advanced after each I/O exit
+/// 3. Guest executes HLT → run loop returns `ExitReason::Halt`
+/// 4. Serial output buffer contains "Hello"
+#[test]
+#[ignore = "requires WHP enabled (Hyper-V)"]
+fn phase2_serial_output_from_elf() {
+    use hitz_devices::serial::SerialDevice;
+    use hitz_vmm::run_loop::{ExitReason, run_vcpu_loop};
+
+    // x86-64 machine code that writes "Hello" to COM1 (0x3F8) then halts.
+    //
+    //   mov edx, 0x3F8        ; BA F8 03 00 00   — COM1 THR
+    //   mov al, 'H'           ; B0 48
+    //   out dx, al            ; EE
+    //   mov al, 'e'           ; B0 65
+    //   out dx, al            ; EE
+    //   mov al, 'l'           ; B0 6C
+    //   out dx, al            ; EE
+    //   mov al, 'l'           ; B0 6C
+    //   out dx, al            ; EE
+    //   mov al, 'o'           ; B0 6F
+    //   out dx, al            ; EE
+    //   hlt                   ; F4
+    let code: &[u8] = &[
+        0xBA, 0xF8, 0x03, 0x00, 0x00, // mov edx, 0x3F8
+        0xB0, 0x48, // mov al, 'H'
+        0xEE, // out dx, al
+        0xB0, 0x65, // mov al, 'e'
+        0xEE, // out dx, al
+        0xB0, 0x6C, // mov al, 'l'
+        0xEE, // out dx, al
+        0xB0, 0x6C, // mov al, 'l'
+        0xEE, // out dx, al
+        0xB0, 0x6F, // mov al, 'o'
+        0xEE, // out dx, al
+        0xF4, // hlt
+    ];
+
+    let (_partition, mut vcpu, _guest_mem) = boot_elf_pipeline(code);
+    let mut serial = SerialDevice::new(Vec::new());
+
+    let reason = run_vcpu_loop(&mut vcpu, &mut serial).expect("run_vcpu_loop failed");
+
+    assert_eq!(reason, ExitReason::Halt, "expected Halt exit");
+    assert_eq!(
+        serial.writer().as_slice(),
+        b"Hello",
+        "serial output mismatch"
+    );
+}
+
+/// Phase 2: Verify IN instruction handling (guest reads LSR, writes result).
+///
+/// The guest reads the Line Status Register (port 0x3FD), which should
+/// return THRE|TEMT (0x60), then writes that value to COM1 THR so we
+/// can inspect it, then halts.
+#[test]
+#[ignore = "requires WHP enabled (Hyper-V)"]
+fn phase2_serial_in_reads_lsr() {
+    use hitz_devices::serial::SerialDevice;
+    use hitz_vmm::run_loop::{ExitReason, run_vcpu_loop};
+
+    // x86-64 machine code:
+    //   mov edx, 0x3FD        ; BA FD 03 00 00   — COM1 LSR
+    //   in  al, dx            ; EC               — read LSR into AL
+    //   mov edx, 0x3F8        ; BA F8 03 00 00   — COM1 THR
+    //   out dx, al            ; EE               — write LSR value to output
+    //   hlt                   ; F4
+    let code: &[u8] = &[
+        0xBA, 0xFD, 0x03, 0x00, 0x00, // mov edx, 0x3FD (LSR)
+        0xEC, // in al, dx
+        0xBA, 0xF8, 0x03, 0x00, 0x00, // mov edx, 0x3F8 (THR)
+        0xEE, // out dx, al
+        0xF4, // hlt
+    ];
+
+    let (_partition, mut vcpu, _guest_mem) = boot_elf_pipeline(code);
+    let mut serial = SerialDevice::new(Vec::new());
+
+    let reason = run_vcpu_loop(&mut vcpu, &mut serial).expect("run_vcpu_loop failed");
+
+    assert_eq!(reason, ExitReason::Halt, "expected Halt exit");
+
+    // LSR default = THRE (0x20) | TEMT (0x40) = 0x60
+    let output = serial.writer();
+    assert_eq!(output.len(), 1, "expected 1 byte of serial output");
+    assert_eq!(
+        output[0], 0x60,
+        "expected LSR = THRE|TEMT (0x60), got {:#x}",
+        output[0]
+    );
 }

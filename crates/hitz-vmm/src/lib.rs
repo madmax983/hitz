@@ -9,7 +9,9 @@
 pub mod boot_regs;
 pub mod error;
 pub mod memory;
+pub mod run_loop;
 
 pub use boot_regs::{GDT_GPA, configure_regs, configure_sregs, write_gdt};
 pub use error::MemError;
 pub use memory::GuestMemory;
+pub use run_loop::{ExitReason, run_vcpu_loop};

@@ -17,6 +17,7 @@ tracing.workspace = true
 [dev-dependencies]
 anyhow.workspace = true
 hitz-boot.workspace = true
+hitz-devices.workspace = true
 hitz-vmm.workspace = true
 windows = { workspace = true, features = [
     "Win32_System_Memory",

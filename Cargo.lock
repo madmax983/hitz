@@ -115,6 +115,7 @@ dependencies = [
  "hitz-hal",
  "thiserror",
  "tracing",
+ "vm-superio",
 ]
 
 [[package]]
@@ -139,6 +140,7 @@ name = "hitz-vmm"
 version = "0.1.0"
 dependencies = [
  "hitz-boot",
+ "hitz-devices",
  "hitz-hal",
  "thiserror",
  "tracing",
@@ -151,6 +153,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "hitz-boot",
+ "hitz-devices",
  "hitz-hal",
  "hitz-vmm",
  "thiserror",
@@ -402,6 +405,12 @@ dependencies = [
  "serde_core",
  "wasm-bindgen",
 ]
+
+[[package]]
+name = "vm-superio"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "69c376a9b84afdf97bddd2628096cf3554208b2a676cf06b4532e0f433a54e02"
 
 [[package]]
 name = "wasip2"

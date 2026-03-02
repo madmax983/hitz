@@ -14,8 +14,8 @@ hitz-boot.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 
-# Phase 2+ deps
-# hitz-devices.workspace = true
+# Phase 2
+hitz-devices.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 windows = { workspace = true, features = ["Win32_System_Memory"] }

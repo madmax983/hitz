@@ -267,6 +267,11 @@ const fn hal_table_to_whp(table: &DescriptorTable) -> WHV_X64_TABLE_REGISTER {
 pub fn exit_context_to_hal(ctx: &WHV_RUN_VP_EXIT_CONTEXT) -> Result<VcpuExit, HalError> {
     let reason = ctx.ExitReason;
 
+    // InstructionLength is in the low 4 bits of VpContext._bitfield.
+    // WHP does NOT auto-advance RIP on I/O or MMIO exits — the VMM must
+    // add this to RIP before re-entering the guest.
+    let instruction_len = ctx.VpContext._bitfield & 0x0F;
+
     if reason == WHvRunVpExitReasonMemoryAccess {
         let mem = unsafe { &ctx.Anonymous.MemoryAccess };
         let access_info = unsafe { mem.AccessInfo.Anonymous };
@@ -281,6 +286,7 @@ pub fn exit_context_to_hal(ctx: &WHV_RUN_VP_EXIT_CONTEXT) -> Result<VcpuExit, Ha
             data,
             len: 0, // Will be filled by emulator in later phases
             is_write,
+            instruction_len,
         }))
     } else if reason == WHvRunVpExitReasonX64IoPortAccess {
         let io = unsafe { &ctx.Anonymous.IoPortAccess };
@@ -299,6 +305,7 @@ pub fn exit_context_to_hal(ctx: &WHV_RUN_VP_EXIT_CONTEXT) -> Result<VcpuExit, Ha
             data,
             len: access_size,
             is_write,
+            instruction_len,
         }))
     } else if reason == WHvRunVpExitReasonX64Halt {
         Ok(VcpuExit::Halt)

@@ -42,6 +42,9 @@ pub struct MmioExit {
     pub len: u8,
     /// `true` = guest is writing to the address, `false` = reading.
     pub is_write: bool,
+    /// Length of the faulting instruction in bytes.
+    /// The VMM must advance RIP by this amount before re-entering the guest.
+    pub instruction_len: u8,
 }
 
 /// Details of an I/O port exit.
@@ -56,6 +59,9 @@ pub struct IoPortExit {
     pub len: u8,
     /// `true` = guest is writing (OUT), `false` = reading (IN).
     pub is_write: bool,
+    /// Length of the faulting instruction in bytes.
+    /// The VMM must advance RIP by this amount before re-entering the guest.
+    pub instruction_len: u8,
 }
 
 /// x86-64 general-purpose registers + RIP, RFLAGS.
