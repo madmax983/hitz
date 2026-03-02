@@ -7,10 +7,19 @@
 
 use hitz_devices::mmio_bus::MmioBus;
 use hitz_devices::serial::SerialDevice;
-use hitz_hal::{GuestMemAccess, HalError, Vcpu, VcpuExit};
+use hitz_hal::{GuestMemAccess, HalError, IoPortExit, Vcpu, VcpuExit};
 use std::io::Write;
 
 use crate::mmio_decode;
+
+/// Safety net: maximum iterations before the run loop bails out.
+/// Prevents infinite loops in the VMM from hanging the host.
+const MAX_RUN_ITERATIONS: u64 = 100_000_000;
+
+/// Legacy 8259 PIC ports. Linux probes these during early boot even when
+/// no PIC is present. Absorb writes and return 0x00 for reads (no IRQs
+/// pending) to prevent the kernel from entering spurious-IRQ error paths.
+const PIC_PORTS: [u16; 4] = [0x20, 0x21, 0xA0, 0xA1];
 
 /// Reason the run loop terminated.
 #[derive(Debug, PartialEq, Eq)]
@@ -39,31 +48,22 @@ pub fn run_vcpu_loop<V: Vcpu, W: Write>(
     mmio_bus: &mut MmioBus,
     mem: &dyn GuestMemAccess,
 ) -> Result<ExitReason, HalError> {
+    let mut pending_irq: Option<u8> = None;
+    let mut iterations: u64 = 0;
+
     loop {
+        iterations += 1;
+        if iterations > MAX_RUN_ITERATIONS {
+            return Ok(ExitReason::Unexpected(
+                "iteration limit reached".to_string(),
+            ));
+        }
+
         let exit = vcpu.run()?;
 
         match exit {
             VcpuExit::IoPort(io) => {
-                if SerialDevice::<W>::handles_port(io.port) {
-                    if io.is_write {
-                        // OUT — guest writing to serial register.
-                        serial.pio_write(io.port, io.data[0]);
-                        advance_rip(vcpu, io.instruction_len)?;
-                    } else {
-                        // IN — guest reading from serial register.
-                        let value = serial.pio_read(io.port);
-                        advance_rip_with_rax(vcpu, io.instruction_len, u64::from(value))?;
-                    }
-                } else {
-                    // Unhandled port — log and skip.
-                    tracing::debug!(port = io.port, is_write = io.is_write, "unhandled I/O port");
-                    if io.is_write {
-                        advance_rip(vcpu, io.instruction_len)?;
-                    } else {
-                        // Return 0xFF for unhandled IN (standard "nothing here" response).
-                        advance_rip_with_rax(vcpu, io.instruction_len, 0xFF)?;
-                    }
-                }
+                handle_io_port(vcpu, serial, &io)?;
             }
 
             VcpuExit::Halt => {
@@ -97,12 +97,17 @@ pub fn run_vcpu_loop<V: Vcpu, W: Write>(
                         let irq = mmio_bus.write(mmio.gpa.as_u64(), &data[..size], mem);
                         advance_rip(vcpu, instr_len)?;
                         if let Some(vector) = irq {
-                            // Best-effort interrupt injection. WHP may reject if
-                            // APIC emulation is not configured or the vCPU is in
-                            // interrupt shadow. Phase 3 block I/O is synchronous
-                            // so the guest can poll for completion without IRQs.
-                            if let Err(e) = vcpu.inject_interrupt(vector) {
-                                tracing::debug!(vector, error = %e, "interrupt injection skipped");
+                            // Try to inject immediately. If the guest has IF=0
+                            // (interrupts disabled) or is in interrupt shadow,
+                            // WHP rejects the injection — stash the IRQ and
+                            // request an interrupt window exit.
+                            if vcpu.inject_interrupt(vector).is_err() {
+                                pending_irq = Some(vector);
+                                vcpu.request_interrupt_window()?;
+                                tracing::debug!(
+                                    vector,
+                                    "interrupt deferred, requested interrupt window"
+                                );
                             }
                         }
                     } else {
@@ -128,11 +133,23 @@ pub fn run_vcpu_loop<V: Vcpu, W: Write>(
                 }
             }
 
-            // Phase 3 will handle these differently:
-            // - InterruptWindow: inject queued interrupts
-            // - Canceled: check pending IRQs, request interrupt window
-            // For now, just re-enter the guest.
-            VcpuExit::InterruptWindow | VcpuExit::Canceled => {}
+            VcpuExit::InterruptWindow => {
+                // Guest is now interruptible. WHP auto-clears the
+                // deliverability notification after this exit fires.
+                if let Some(vector) = pending_irq.take() {
+                    vcpu.inject_interrupt(vector)?;
+                    tracing::debug!(vector, "deferred interrupt injected via interrupt window");
+                }
+            }
+
+            VcpuExit::Canceled => {
+                // vCPU run was canceled (e.g. by another thread).
+                // If we have a pending IRQ, re-request the interrupt window
+                // so we get notified once the guest becomes interruptible.
+                if pending_irq.is_some() {
+                    vcpu.request_interrupt_window()?;
+                }
+            }
 
             VcpuExit::Unknown(code) => {
                 return Ok(ExitReason::Unexpected(format!(
@@ -141,6 +158,39 @@ pub fn run_vcpu_loop<V: Vcpu, W: Write>(
             }
         }
     }
+}
+
+/// Dispatch an I/O port exit to the appropriate device handler.
+fn handle_io_port<V: Vcpu, W: Write>(
+    vcpu: &mut V,
+    serial: &mut SerialDevice<W>,
+    io: &IoPortExit,
+) -> Result<(), HalError> {
+    if SerialDevice::<W>::handles_port(io.port) {
+        if io.is_write {
+            serial.pio_write(io.port, io.data[0]);
+            advance_rip(vcpu, io.instruction_len)?;
+        } else {
+            let value = serial.pio_read(io.port);
+            advance_rip_with_rax(vcpu, io.instruction_len, u64::from(value))?;
+        }
+    } else if PIC_PORTS.contains(&io.port) {
+        // Legacy 8259 PIC stub — absorb writes, return 0x00 for reads.
+        if io.is_write {
+            advance_rip(vcpu, io.instruction_len)?;
+        } else {
+            advance_rip_with_rax(vcpu, io.instruction_len, 0x00)?;
+        }
+    } else {
+        tracing::debug!(port = io.port, is_write = io.is_write, "unhandled I/O port");
+        if io.is_write {
+            advance_rip(vcpu, io.instruction_len)?;
+        } else {
+            // Return 0xFF for unhandled IN (standard "nothing here" response).
+            advance_rip_with_rax(vcpu, io.instruction_len, 0xFF)?;
+        }
+    }
+    Ok(())
 }
 
 /// Advance RIP past the faulting instruction.

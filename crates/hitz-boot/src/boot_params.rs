@@ -230,6 +230,33 @@ pub fn build_boot_params(ram_bytes: u64, cmdline_gpa: Gpa) -> Result<BootParams,
     Ok(bp)
 }
 
+/// Set the initramfs address and size in `boot_params`.
+///
+/// Updates `hdr.ramdisk_image` and `hdr.ramdisk_size` so the kernel
+/// knows where to find the cpio archive in guest memory.
+///
+/// # Errors
+///
+/// Returns `BootError::InvalidBootParams` if GPA or size exceeds `u32::MAX`
+/// (Linux boot protocol limitation).
+#[allow(clippy::cast_possible_truncation)]
+pub fn set_initramfs_params(bp: &mut BootParams, gpa: Gpa, size: u64) -> Result<(), BootError> {
+    let gpa_val = gpa.as_u64();
+    if gpa_val > u64::from(u32::MAX) {
+        return Err(BootError::InvalidBootParams(format!(
+            "initramfs GPA {gpa_val:#x} exceeds 32-bit limit"
+        )));
+    }
+    if size > u64::from(u32::MAX) {
+        return Err(BootError::InvalidBootParams(format!(
+            "initramfs size {size:#x} exceeds 32-bit limit"
+        )));
+    }
+    bp.hdr.ramdisk_image = gpa_val as u32;
+    bp.hdr.ramdisk_size = size as u32;
+    Ok(())
+}
+
 // ---- Tests ----------------------------------------------------------------
 
 #[cfg(test)]
@@ -314,5 +341,43 @@ mod tests {
     fn boot_params_too_small_ram() {
         let result = build_boot_params(0x10_0000, Gpa::new(CMDLINE_GPA));
         assert!(result.is_err());
+    }
+
+    #[test]
+    #[allow(clippy::cast_possible_truncation)]
+    fn set_initramfs_params_works() {
+        let mut bp = BootParams::default();
+        let gpa = Gpa::new(0x20_0000);
+        let size = 0x1_0000_u64;
+
+        set_initramfs_params(&mut bp, gpa, size).expect("should succeed");
+
+        let ramdisk_image = { bp.hdr }.ramdisk_image;
+        let ramdisk_size = { bp.hdr }.ramdisk_size;
+        assert_eq!(ramdisk_image, 0x20_0000);
+        assert_eq!(ramdisk_size, 0x1_0000);
+    }
+
+    #[test]
+    fn set_initramfs_params_gpa_too_large() {
+        let mut bp = BootParams::default();
+        let gpa = Gpa::new(u64::from(u32::MAX) + 1);
+        let err = set_initramfs_params(&mut bp, gpa, 4096).unwrap_err();
+        assert!(
+            err.to_string().contains("32-bit limit"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn set_initramfs_params_size_too_large() {
+        let mut bp = BootParams::default();
+        let gpa = Gpa::new(0x20_0000);
+        let size = u64::from(u32::MAX) + 1;
+        let err = set_initramfs_params(&mut bp, gpa, size).unwrap_err();
+        assert!(
+            err.to_string().contains("32-bit limit"),
+            "unexpected error: {err}"
+        );
     }
 }

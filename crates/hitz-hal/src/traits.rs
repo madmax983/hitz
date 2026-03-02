@@ -98,4 +98,11 @@ pub trait Vcpu: Send {
     /// the guest. The guest must have IF=1 (interrupts enabled) for this
     /// to take effect immediately.
     fn inject_interrupt(&mut self, vector: u8) -> Result<(), HalError>;
+
+    /// Request an `InterruptWindow` exit when the guest becomes interruptible.
+    ///
+    /// On WHP this sets `WHvX64RegisterDeliverabilityNotifications` bit 0,
+    /// causing the next `run` to exit with `VcpuExit::InterruptWindow` once
+    /// IF=1 and the vCPU is not in an interrupt shadow.
+    fn request_interrupt_window(&mut self) -> Result<(), HalError>;
 }

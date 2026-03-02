@@ -5,8 +5,9 @@ use std::sync::Arc;
 use hitz_hal::{Gpa, HalError, MemFlags, Partition, PartitionConfig, VcpuId};
 use windows::Win32::System::Hypervisor::{
     WHV_MAP_GPA_RANGE_FLAGS, WHV_PARTITION_HANDLE, WHV_PARTITION_PROPERTY, WHvCreatePartition,
-    WHvDeletePartition, WHvMapGpaRange, WHvPartitionPropertyCodeProcessorCount,
-    WHvSetPartitionProperty, WHvSetupPartition, WHvUnmapGpaRange,
+    WHvDeletePartition, WHvMapGpaRange, WHvPartitionPropertyCodeLocalApicEmulationMode,
+    WHvPartitionPropertyCodeProcessorCount, WHvSetPartitionProperty, WHvSetupPartition,
+    WHvUnmapGpaRange, WHvX64LocalApicEmulationModeXApic,
 };
 
 use crate::vcpu::WhpVcpu;
@@ -59,6 +60,22 @@ impl WhpPartition {
             )
         }
         .map_err(|e| HalError::SetupPartition(format!("set ProcessorCount: {e}")))?;
+
+        // Step 2b: Enable WHP built-in xAPIC emulation.
+        // This gives us LAPIC timer, interrupt delivery, and EOI — required
+        // for Linux boot (setup_local_APIC). Harmless for simple real-mode stubs.
+        let apic_prop = WHV_PARTITION_PROPERTY {
+            LocalApicEmulationMode: WHvX64LocalApicEmulationModeXApic,
+        };
+        unsafe {
+            WHvSetPartitionProperty(
+                handle,
+                WHvPartitionPropertyCodeLocalApicEmulationMode,
+                (&raw const apic_prop).cast(),
+                prop_size,
+            )
+        }
+        .map_err(|e| HalError::SetupPartition(format!("set LocalApicEmulationMode: {e}")))?;
 
         // Step 3: Finalize the partition — properties are frozen after this.
         unsafe { WHvSetupPartition(handle) }

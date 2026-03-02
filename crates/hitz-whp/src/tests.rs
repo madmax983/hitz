@@ -668,9 +668,6 @@ fn build_blk_request(req_type: u32, sector: u64) -> [u8; 16] {
 /// IDT base is at GPA 0 (from `configure_sregs`), so the entry for vector N
 /// is at GPA `N * 16`.
 ///
-/// Currently unused — Phase 3 block I/O is synchronous (no IRQ needed).
-/// Will be used in Phase 4+ for async interrupt delivery.
-#[allow(dead_code)]
 fn write_idt_gate(guest_mem: &hitz_vmm::GuestMemory, vector: u8, handler_gpa: u64) {
     #[allow(clippy::cast_possible_truncation)]
     let offset_lo = (handler_gpa & 0xFFFF) as u16;
@@ -928,5 +925,349 @@ fn phase3_virtio_block_read() {
         &output[1..5],
         b"HITZ",
         "first 4 data bytes should be 'HITZ'"
+    );
+}
+
+// ─── Phase 4: APIC + Interrupt Window + Initramfs ────────────────────────────
+
+/// Phase 4 checkpoint: APIC emulation enables interrupt delivery through IDT.
+///
+/// Exercises the complete Phase 4 interrupt pipeline:
+/// 1. WHP partition with xAPIC emulation (Task 0)
+/// 2. Guest does STI (enable interrupts) with a valid stack + IDT
+/// 3. Virtio-block QueueNotify triggers IRQ 5
+/// 4. `inject_interrupt` succeeds (IF=1 from STI)
+/// 5. CPU vectors to IDT handler, which writes "I" to serial
+/// 6. IRETQ returns to main code, which writes "D" + status to serial
+/// 7. HLT terminates the run loop
+///
+/// Expected serial output: `b"ID\x00"` — "I" from IRQ handler, "D" for
+/// done, 0x00 for `VIRTIO_BLK_S_OK`.
+#[test]
+#[ignore = "requires WHP enabled (Hyper-V)"]
+fn phase4_apic_interrupt_delivery() {
+    use std::sync::Arc;
+
+    use hitz_devices::mmio_bus::MmioBus;
+    use hitz_devices::serial::SerialDevice;
+    use hitz_devices::virtio::block::VirtioBlockDevice;
+    use hitz_devices::virtio::mmio_transport::VirtioMmioTransport;
+    use hitz_vmm::run_loop::{ExitReason, run_vcpu_loop};
+
+    const IRQ_VECTOR: u8 = 5;
+
+    // ── Interrupt handler at GPA 0x90000 ──
+    // push rax; push rdx; mov edx, 0x3F8; mov al, 'I'; out dx, al;
+    // pop rdx; pop rax; iretq
+    let irq_handler: &[u8] = &[
+        0x50, // push rax
+        0x52, // push rdx
+        0xBA, 0xF8, 0x03, 0x00, 0x00, // mov edx, 0x3F8
+        0xB0, 0x49, // mov al, 'I'
+        0xEE, // out dx, al
+        0x5A, // pop rdx
+        0x58, // pop rax
+        0x48, 0xCF, // iretq
+    ];
+
+    // ── Main ELF code ──
+    // Set up stack, enable interrupts, init virtio, trigger block read,
+    // write "D" + status to serial, halt.
+    #[rustfmt::skip]
+    let code: &[u8] = &[
+        // ---- Stack + interrupts ----
+        0xBC, 0x00, 0x00, 0x08, 0x00,                          // mov esp, 0x80000
+        0xFB,                                                    // sti
+
+        // ---- Set up MMIO base ----
+        0xBB, 0x00, 0x00, 0x00, 0xD0,                          // mov ebx, 0xD0000000
+
+        // ---- Virtio status state machine (offset 0x70) ----
+        0xC7, 0x43, 0x70, 0x01, 0x00, 0x00, 0x00,              // mov [rbx+0x70], 1   (ACKNOWLEDGE)
+        0xC7, 0x43, 0x70, 0x03, 0x00, 0x00, 0x00,              // mov [rbx+0x70], 3   (ACK|DRIVER)
+        0xC7, 0x43, 0x70, 0x0B, 0x00, 0x00, 0x00,              // mov [rbx+0x70], 0xB (ACK|DRIVER|FEATURES_OK)
+        0xC7, 0x43, 0x70, 0x0F, 0x00, 0x00, 0x00,              // mov [rbx+0x70], 0xF (DRIVER_OK)
+
+        // ---- Queue configuration ----
+        0xC7, 0x43, 0x38, 0x00, 0x01, 0x00, 0x00,              // mov [rbx+0x38], 256 (QueueNum)
+        0xC7, 0x83, 0x80,0x00,0x00,0x00, 0x00,0x00,0x20,0x00,  // mov [rbx+0x80], 0x200000 (QueueDescLow)
+        0xC7, 0x83, 0x84,0x00,0x00,0x00, 0x00,0x00,0x00,0x00,  // mov [rbx+0x84], 0        (QueueDescHigh)
+        0xC7, 0x83, 0x90,0x00,0x00,0x00, 0x00,0x10,0x20,0x00,  // mov [rbx+0x90], 0x201000 (QueueAvailLow)
+        0xC7, 0x83, 0x94,0x00,0x00,0x00, 0x00,0x00,0x00,0x00,  // mov [rbx+0x94], 0        (QueueAvailHigh)
+        0xC7, 0x83, 0xA0,0x00,0x00,0x00, 0x00,0x20,0x20,0x00,  // mov [rbx+0xA0], 0x202000 (QueueUsedLow)
+        0xC7, 0x83, 0xA4,0x00,0x00,0x00, 0x00,0x00,0x00,0x00,  // mov [rbx+0xA4], 0        (QueueUsedHigh)
+        0xC7, 0x43, 0x44, 0x01, 0x00, 0x00, 0x00,              // mov [rbx+0x44], 1 (QueueReady)
+
+        // ---- Trigger block read (QueueNotify at offset 0x50) ----
+        0xC7, 0x43, 0x50, 0x00, 0x00, 0x00, 0x00,              // mov [rbx+0x50], 0
+
+        // ---- Post-interrupt: "D" to serial, status byte, halt ----
+        0xBA, 0xF8, 0x03, 0x00, 0x00,                          // mov edx, 0x3F8
+        0xB0, 0x44,                                              // mov al, 'D'
+        0xEE,                                                    // out dx, al
+        0xB9, 0x00, 0x50, 0x20, 0x00,                          // mov ecx, 0x205000
+        0x8A, 0x01,                                              // mov al, [rcx]
+        0xEE,                                                    // out dx, al
+        0xF4,                                                    // hlt
+    ];
+
+    let (_partition, mut vcpu, guest_mem) = boot_elf_pipeline(code);
+    let guest_mem = Arc::new(guest_mem);
+
+    // ── Write interrupt handler into guest memory at 0x90000 ──
+    guest_mem
+        .write_slice(Gpa::new(0x9_0000), irq_handler)
+        .expect("write IRQ handler");
+
+    // ── Set up IDT gate for vector 5 → handler at 0x90000 ──
+    write_idt_gate(&guest_mem, IRQ_VECTOR, 0x9_0000);
+
+    // ── Disk image: "HITZ" repeated for 512 bytes ──
+    let mut disk_file = tempfile::tempfile().expect("create temp disk");
+    let disk_data: Vec<u8> = b"HITZ".iter().copied().cycle().take(512).collect();
+    std::io::Write::write_all(&mut disk_file, &disk_data).expect("write disk data");
+    let block_dev = VirtioBlockDevice::new(disk_file).expect("create block device");
+
+    let mem: Arc<dyn hitz_hal::GuestMemAccess> = guest_mem.clone();
+    let transport = VirtioMmioTransport::new(block_dev, mem, IRQ_VECTOR);
+    let mut mmio_bus = MmioBus::new();
+    mmio_bus.register(0xD000_0000, 0x1000, Box::new(transport));
+
+    // ── Pre-fill virtqueue structures (same as Phase 3) ──
+    let desc0 = build_descriptor(0x20_3000, 16, 1 /* NEXT */, 1);
+    let desc1 = build_descriptor(0x20_4000, 512, 3 /* NEXT|WRITE */, 2);
+    let desc2 = build_descriptor(0x20_5000, 1, 2 /* WRITE */, 0);
+    guest_mem
+        .write_slice(Gpa::new(0x20_0000), &desc0)
+        .expect("write desc 0");
+    guest_mem
+        .write_slice(Gpa::new(0x20_0010), &desc1)
+        .expect("write desc 1");
+    guest_mem
+        .write_slice(Gpa::new(0x20_0020), &desc2)
+        .expect("write desc 2");
+
+    let avail = build_avail_ring(1, &[0]);
+    guest_mem
+        .write_slice(Gpa::new(0x20_1000), &avail)
+        .expect("write avail ring");
+
+    let req = build_blk_request(0 /* VIRTIO_BLK_T_IN */, 0);
+    guest_mem
+        .write_slice(Gpa::new(0x20_3000), &req)
+        .expect("write request header");
+
+    // ── Run ──
+    let mut serial = SerialDevice::new(Vec::new());
+    let reason = run_vcpu_loop(&mut vcpu, &mut serial, &mut mmio_bus, &*guest_mem)
+        .expect("run_vcpu_loop failed");
+
+    assert_eq!(reason, ExitReason::Halt, "expected Halt exit");
+
+    // Expected serial: "I" (IRQ handler) + "D" (done) + 0x00 (status OK)
+    let output = serial.writer().as_slice();
+    assert!(
+        output.len() >= 3,
+        "expected at least 3 bytes of serial output, got {} bytes: {output:?}",
+        output.len()
+    );
+
+    // The 'I' from the interrupt handler proves the full pipeline:
+    // APIC enabled → inject_interrupt → IDT vectoring → handler → IRETQ
+    assert!(
+        output.contains(&b'I'),
+        "expected 'I' from interrupt handler in output: {output:?}"
+    );
+    assert!(
+        output.contains(&b'D'),
+        "expected 'D' (done marker) in output: {output:?}"
+    );
+    // Status byte should be 0 (VIRTIO_BLK_S_OK)
+    assert_eq!(
+        output.last().copied(),
+        Some(0),
+        "last byte should be status OK (0), got: {output:?}"
+    );
+}
+
+/// Phase 4 checkpoint: Boot a real vmlinux with initramfs.
+///
+/// This is the end-to-end test for Phase 4. It loads an uncompressed
+/// vmlinux ELF and a cpio initramfs, boots the kernel through the
+/// full pipeline (page tables, boot_params, GDT, long mode entry),
+/// and checks for the Linux boot banner or a custom init message
+/// on the serial console.
+///
+/// # Test artifacts
+///
+/// Requires env vars:
+///   `HITZ_VMLINUX=/path/to/vmlinux`
+///   `HITZ_INITRAMFS=/path/to/initramfs.cpio`
+///
+/// To build these on a Linux machine:
+/// ```bash
+/// # Extract vmlinux from bzImage
+/// scripts/extract-vmlinux arch/x86/boot/bzImage > vmlinux
+///
+/// # Minimal initramfs
+/// mkdir /tmp/initramfs && cat > /tmp/initramfs/init << 'EOF'
+/// #!/bin/sh
+/// echo "hitz-boot-ok"
+/// poweroff -f
+/// EOF
+/// chmod +x /tmp/initramfs/init
+/// cd /tmp/initramfs && find . | cpio -o -H newc > /tmp/initramfs.cpio
+/// ```
+///
+/// Run:
+/// ```bash
+/// HITZ_VMLINUX=path/to/vmlinux HITZ_INITRAMFS=path/to/initramfs.cpio \
+///   cargo test -p hitz-whp -- --ignored phase4_boot_real_linux --test-threads=1
+/// ```
+#[test]
+#[ignore = "requires WHP + vmlinux + initramfs (set HITZ_VMLINUX + HITZ_INITRAMFS)"]
+fn phase4_boot_real_linux() {
+    use std::sync::Arc;
+
+    use hitz_boot::{
+        BOOT_PARAMS_GPA, CMDLINE_GPA, build_boot_params, build_page_tables, load_elf,
+        load_initramfs, set_initramfs_params,
+    };
+    use hitz_devices::mmio_bus::MmioBus;
+    use hitz_devices::serial::SerialDevice;
+    use hitz_vmm::run_loop::run_vcpu_loop;
+    use hitz_vmm::{GuestMemory, boot_regs};
+
+    // ── 1. Read env vars (skip if not set) ──
+    let vmlinux_path = match std::env::var("HITZ_VMLINUX") {
+        Ok(p) => p,
+        Err(_) => {
+            eprintln!("HITZ_VMLINUX not set, skipping phase4_boot_real_linux");
+            return;
+        }
+    };
+    let initramfs_path = match std::env::var("HITZ_INITRAMFS") {
+        Ok(p) => p,
+        Err(_) => {
+            eprintln!("HITZ_INITRAMFS not set, skipping phase4_boot_real_linux");
+            return;
+        }
+    };
+
+    let vmlinux = std::fs::read(&vmlinux_path).expect("failed to read vmlinux file");
+    let initramfs_data = std::fs::read(&initramfs_path).expect("failed to read initramfs file");
+
+    eprintln!(
+        "vmlinux: {} ({} bytes), initramfs: {} ({} bytes)",
+        vmlinux_path,
+        vmlinux.len(),
+        initramfs_path,
+        initramfs_data.len()
+    );
+
+    // ── 2. Allocate 256 MiB guest memory ──
+    let ram_size = 256 * 1024 * 1024u64;
+    let mut guest_mem = GuestMemory::new();
+    guest_mem
+        .add_region(Gpa::new(0), ram_size as usize)
+        .expect("add_region failed");
+
+    // ── 3. Build page tables (1 GiB identity map) ──
+    let (pml4_gpa, page_table_writes) = build_page_tables(1).expect("build_page_tables failed");
+    for write in &page_table_writes {
+        guest_mem
+            .write_slice(write.gpa, &write.data)
+            .expect("write page table failed");
+    }
+
+    // ── 4. Load vmlinux ELF ──
+    let load_result = load_elf(&vmlinux, &guest_mem).expect("load vmlinux failed");
+    eprintln!(
+        "kernel: load={}, end={}, entry={}",
+        load_result.kernel_load, load_result.kernel_end, load_result.entry_point
+    );
+
+    // ── 5. Load initramfs after kernel ──
+    let initramfs_result = load_initramfs(
+        &initramfs_data,
+        load_result.kernel_end,
+        ram_size,
+        &guest_mem,
+    )
+    .expect("load_initramfs failed");
+    eprintln!(
+        "initramfs: gpa={}, size={:#x}",
+        initramfs_result.gpa, initramfs_result.size
+    );
+
+    // ── 6. Build boot_params + patch with initramfs info ──
+    let mut boot_params =
+        build_boot_params(ram_size, Gpa::new(CMDLINE_GPA)).expect("build_boot_params failed");
+    set_initramfs_params(
+        &mut boot_params,
+        initramfs_result.gpa,
+        initramfs_result.size,
+    )
+    .expect("set_initramfs_params failed");
+    guest_mem
+        .write_obj(Gpa::new(BOOT_PARAMS_GPA), &boot_params)
+        .expect("write boot_params failed");
+
+    // ── 7. Write command line ──
+    let cmdline = b"console=ttyS0 earlyprintk=serial rdinit=/init\0";
+    guest_mem
+        .write_slice(Gpa::new(CMDLINE_GPA), cmdline)
+        .expect("write cmdline failed");
+
+    // ── 8. Write GDT ──
+    boot_regs::write_gdt(&guest_mem).expect("write_gdt failed");
+
+    // ── 9. Create WHP partition (now with APIC) + map memory ──
+    let hv = WhpHypervisor::new().expect("WHP not available");
+    let cfg = hitz_hal::PartitionConfig {
+        vcpu_count: 1,
+        memory_size: hitz_hal::MemSizeMiB::new(256),
+    };
+    let mut partition = hv.create_partition(&cfg).expect("create_partition failed");
+
+    guest_mem
+        .map_to_partition(&mut partition, MemFlags::READ_WRITE_EXEC)
+        .expect("map_to_partition failed");
+
+    // ── 10. Create vCPU + configure registers ──
+    let mut vcpu = partition
+        .create_vcpu(VcpuId::new(0))
+        .expect("create_vcpu failed");
+
+    boot_regs::configure_sregs(&mut vcpu, pml4_gpa).expect("configure_sregs failed");
+    boot_regs::configure_regs(
+        &mut vcpu,
+        load_result.entry_point,
+        Gpa::new(BOOT_PARAMS_GPA),
+    )
+    .expect("configure_regs failed");
+
+    // ── 11. Set up devices ──
+    let guest_mem = Arc::new(guest_mem);
+    let mut serial = SerialDevice::new(Vec::new());
+    let mut mmio_bus = MmioBus::new();
+
+    // ── 12. Run! ──
+    let reason = run_vcpu_loop(&mut vcpu, &mut serial, &mut mmio_bus, &*guest_mem)
+        .expect("run_vcpu_loop failed");
+
+    // ── 13. Check results ──
+    let output = String::from_utf8_lossy(serial.writer().as_slice());
+    let output_len = output.len();
+    let preview_end = output_len.min(4000);
+    eprintln!(
+        "--- Serial output ({output_len} bytes, showing first {preview_end}) ---\n{}",
+        &output[..preview_end]
+    );
+    eprintln!("--- Exit reason: {reason:?} ---");
+
+    assert!(
+        output.contains("Linux version") || output.contains("hitz-boot-ok"),
+        "expected 'Linux version' or 'hitz-boot-ok' in serial output ({output_len} bytes)"
     );
 }

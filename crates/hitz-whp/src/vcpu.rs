@@ -170,6 +170,26 @@ impl Vcpu for WhpVcpu {
         Ok(())
     }
 
+    fn request_interrupt_window(&mut self) -> Result<(), HalError> {
+        use windows::Win32::System::Hypervisor::WHvX64RegisterDeliverabilityNotifications;
+
+        // Bit 0: InterruptNotification — exit when IF=1 and not in shadow.
+        let value = convert::reg64_val(1u64);
+        let name = WHvX64RegisterDeliverabilityNotifications;
+
+        // SAFETY: single register name/value pair, properly aligned.
+        unsafe {
+            WHvSetVirtualProcessorRegisters(
+                self.partition.handle,
+                self.index,
+                &raw const name,
+                1,
+                &raw const value,
+            )
+        }
+        .map_err(|e| HalError::RegisterAccess(format!("set DeliverabilityNotifications: {e}")))
+    }
+
     fn set_sregs(&mut self, sregs: &SpecialRegs) -> Result<(), HalError> {
         let names = convert::SPECIAL_REG_NAMES;
         let values = convert::special_regs_to_values(sregs);
