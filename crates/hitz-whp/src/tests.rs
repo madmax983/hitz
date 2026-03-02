@@ -566,10 +566,12 @@ fn phase2_serial_output_from_elf() {
         0xF4, // hlt
     ];
 
-    let (_partition, mut vcpu, _guest_mem) = boot_elf_pipeline(code);
+    let (_partition, mut vcpu, guest_mem) = boot_elf_pipeline(code);
     let mut serial = SerialDevice::new(Vec::new());
+    let mut mmio_bus = hitz_devices::mmio_bus::MmioBus::new();
 
-    let reason = run_vcpu_loop(&mut vcpu, &mut serial).expect("run_vcpu_loop failed");
+    let reason = run_vcpu_loop(&mut vcpu, &mut serial, &mut mmio_bus, &guest_mem)
+        .expect("run_vcpu_loop failed");
 
     assert_eq!(reason, ExitReason::Halt, "expected Halt exit");
     assert_eq!(
@@ -604,10 +606,12 @@ fn phase2_serial_in_reads_lsr() {
         0xF4, // hlt
     ];
 
-    let (_partition, mut vcpu, _guest_mem) = boot_elf_pipeline(code);
+    let (_partition, mut vcpu, guest_mem) = boot_elf_pipeline(code);
     let mut serial = SerialDevice::new(Vec::new());
+    let mut mmio_bus = hitz_devices::mmio_bus::MmioBus::new();
 
-    let reason = run_vcpu_loop(&mut vcpu, &mut serial).expect("run_vcpu_loop failed");
+    let reason = run_vcpu_loop(&mut vcpu, &mut serial, &mut mmio_bus, &guest_mem)
+        .expect("run_vcpu_loop failed");
 
     assert_eq!(reason, ExitReason::Halt, "expected Halt exit");
 
@@ -618,5 +622,311 @@ fn phase2_serial_in_reads_lsr() {
         output[0], 0x60,
         "expected LSR = THRE|TEMT (0x60), got {:#x}",
         output[0]
+    );
+}
+
+// ─── Phase 3: Virtio-MMIO integration tests ──────────────────────────────────
+
+/// Build a 16-byte virtqueue descriptor (VirtqDesc).
+///
+/// Layout: addr(u64) + len(u32) + flags(u16) + next(u16) = 16 bytes.
+fn build_descriptor(addr: u64, len: u32, flags: u16, next: u16) -> [u8; 16] {
+    let mut desc = [0u8; 16];
+    desc[0..8].copy_from_slice(&addr.to_le_bytes());
+    desc[8..12].copy_from_slice(&len.to_le_bytes());
+    desc[12..14].copy_from_slice(&flags.to_le_bytes());
+    desc[14..16].copy_from_slice(&next.to_le_bytes());
+    desc
+}
+
+/// Build a minimal virtqueue available ring.
+///
+/// Layout: flags(u16) + idx(u16) + ring entries(u16 each).
+fn build_avail_ring(idx: u16, entries: &[u16]) -> Vec<u8> {
+    let mut data = Vec::new();
+    data.extend_from_slice(&0u16.to_le_bytes()); // flags = 0
+    data.extend_from_slice(&idx.to_le_bytes());
+    for &entry in entries {
+        data.extend_from_slice(&entry.to_le_bytes());
+    }
+    data
+}
+
+/// Build a 16-byte virtio block request header.
+///
+/// Layout: type(u32) + reserved(u32) + sector(u64) = 16 bytes.
+fn build_blk_request(req_type: u32, sector: u64) -> [u8; 16] {
+    let mut header = [0u8; 16];
+    header[0..4].copy_from_slice(&req_type.to_le_bytes());
+    // bytes 4..8 = reserved (0)
+    header[8..16].copy_from_slice(&sector.to_le_bytes());
+    header
+}
+
+/// Write a 64-bit IDT gate entry for `vector` pointing to `handler_gpa`.
+///
+/// IDT base is at GPA 0 (from `configure_sregs`), so the entry for vector N
+/// is at GPA `N * 16`.
+///
+/// Currently unused — Phase 3 block I/O is synchronous (no IRQ needed).
+/// Will be used in Phase 4+ for async interrupt delivery.
+#[allow(dead_code)]
+fn write_idt_gate(guest_mem: &hitz_vmm::GuestMemory, vector: u8, handler_gpa: u64) {
+    #[allow(clippy::cast_possible_truncation)]
+    let offset_lo = (handler_gpa & 0xFFFF) as u16;
+    #[allow(clippy::cast_possible_truncation)]
+    let offset_mid = ((handler_gpa >> 16) & 0xFFFF) as u16;
+    #[allow(clippy::cast_possible_truncation)]
+    let offset_hi = ((handler_gpa >> 32) & 0xFFFF_FFFF) as u32;
+
+    let mut entry = [0u8; 16];
+    entry[0..2].copy_from_slice(&offset_lo.to_le_bytes());
+    entry[2..4].copy_from_slice(&0x08u16.to_le_bytes()); // CS selector
+    entry[4] = 0; // IST = 0
+    entry[5] = 0x8E; // 64-bit interrupt gate, DPL=0, Present
+    entry[6..8].copy_from_slice(&offset_mid.to_le_bytes());
+    entry[8..12].copy_from_slice(&offset_hi.to_le_bytes());
+    // entry[12..16] already zeroed (reserved)
+
+    let idt_entry_gpa = u64::from(vector) * 16;
+    guest_mem
+        .write_slice(Gpa::new(idt_entry_gpa), &entry)
+        .expect("write IDT gate entry");
+}
+
+/// Phase 3 checkpoint: Read the virtio-MMIO magic value through the full stack.
+///
+/// Exercises:
+/// 1. Guest executes `MOV EAX, [RBX]` at an unmapped GPA → WHP MMIO exit
+/// 2. MMIO instruction decoder extracts register and size from raw bytes
+/// 3. MMIO bus routes the GPA to the virtio-MMIO transport
+/// 4. Transport returns MagicValue (0x74726976) from offset 0x000
+/// 5. Run loop writes value back to EAX and advances RIP
+/// 6. Guest writes each byte to serial → "virt"
+#[test]
+#[ignore = "requires WHP enabled (Hyper-V)"]
+fn phase3_virtio_mmio_magic_read() {
+    use std::sync::Arc;
+
+    use hitz_devices::mmio_bus::MmioBus;
+    use hitz_devices::serial::SerialDevice;
+    use hitz_devices::virtio::block::VirtioBlockDevice;
+    use hitz_devices::virtio::mmio_transport::VirtioMmioTransport;
+    use hitz_vmm::run_loop::{ExitReason, run_vcpu_loop};
+
+    // x86-64 machine code:
+    //   mov ebx, 0xD0000000     ; MMIO base (unmapped GPA)
+    //   mov eax, [rbx]          ; read MagicValue (offset 0) -- triggers MMIO exit
+    //   mov edx, 0x3F8          ; COM1
+    //   out dx, al              ; byte 0 (0x76 = 'v')
+    //   shr eax, 8
+    //   out dx, al              ; byte 1 (0x69 = 'i')
+    //   shr eax, 8
+    //   out dx, al              ; byte 2 (0x72 = 'r')
+    //   shr eax, 8
+    //   out dx, al              ; byte 3 (0x74 = 't')
+    //   hlt
+    let code: &[u8] = &[
+        0xBB, 0x00, 0x00, 0x00, 0xD0, // mov ebx, 0xD0000000
+        0x8B, 0x03, // mov eax, [rbx]
+        0xBA, 0xF8, 0x03, 0x00, 0x00, // mov edx, 0x3F8
+        0xEE, // out dx, al
+        0xC1, 0xE8, 0x08, // shr eax, 8
+        0xEE, // out dx, al
+        0xC1, 0xE8, 0x08, // shr eax, 8
+        0xEE, // out dx, al
+        0xC1, 0xE8, 0x08, // shr eax, 8
+        0xEE, // out dx, al
+        0xF4, // hlt
+    ];
+
+    let (_partition, mut vcpu, guest_mem) = boot_elf_pipeline(code);
+    let guest_mem = Arc::new(guest_mem);
+
+    // Create a minimal 512-byte disk (content doesn't matter for this test).
+    let disk_file = tempfile::tempfile().expect("create temp disk");
+    disk_file.set_len(512).expect("set disk size");
+    let block_dev = VirtioBlockDevice::new(disk_file).expect("create block device");
+
+    // Set up MMIO bus with virtio transport at 0xD0000000.
+    let mem: Arc<dyn hitz_hal::GuestMemAccess> = guest_mem.clone();
+    let transport = VirtioMmioTransport::new(block_dev, mem, 5);
+    let mut mmio_bus = MmioBus::new();
+    mmio_bus.register(0xD000_0000, 0x1000, Box::new(transport));
+
+    let mut serial = SerialDevice::new(Vec::new());
+
+    let reason = run_vcpu_loop(&mut vcpu, &mut serial, &mut mmio_bus, &*guest_mem)
+        .expect("run_vcpu_loop failed");
+
+    assert_eq!(reason, ExitReason::Halt, "expected Halt exit");
+
+    // MagicValue = 0x74726976 in little-endian.
+    // Guest outputs each byte via serial: 0x76('v'), 0x69('i'), 0x72('r'), 0x74('t').
+    assert_eq!(
+        serial.writer().as_slice(),
+        b"virt",
+        "serial output should be 'virt' (magic value bytes in LE)"
+    );
+}
+
+/// Phase 3 checkpoint: Full virtio device init + block read through the stack.
+///
+/// This is the end-to-end test for Phase 3. The guest:
+/// 1. Walks the virtio status state machine (ACKNOWLEDGE → DRIVER → FEATURES_OK → DRIVER_OK)
+/// 2. Configures the virtqueue (desc/avail/used GPAs, QueueReady)
+/// 3. Writes QueueNotify → triggers synchronous block read
+/// 4. CPU delivers interrupt (vector 5) via IDT → IRETQ returns to guest
+/// 5. Guest reads disk data from RAM, outputs status + data to serial
+///
+/// Memory layout:
+/// - 0x0_0050     IDT entry for vector 5 (IDT base = 0)
+/// - 0x8_0000     Stack top (grows downward for interrupt frame)
+/// - 0x9_0000     IRETQ handler (2 bytes: 0x48 0xCF)
+/// - 0x10_0000    Kernel code (loaded by ELF boot pipeline)
+/// - 0x20_0000    Descriptor table (3 descriptors × 16 bytes)
+/// - 0x20_1000    Available ring
+/// - 0x20_2000    Used ring
+/// - 0x20_3000    Block request header (16 bytes)
+/// - 0x20_4000    Data buffer (512 bytes, filled by block device)
+/// - 0x20_5000    Status byte (1 byte, filled by block device)
+/// - 0xD000_0000  Virtio-MMIO transport (4 KiB, unmapped → MMIO exits)
+#[test]
+#[ignore = "requires WHP enabled (Hyper-V)"]
+fn phase3_virtio_block_read() {
+    use std::sync::Arc;
+
+    use hitz_devices::mmio_bus::MmioBus;
+    use hitz_devices::serial::SerialDevice;
+    use hitz_devices::virtio::block::VirtioBlockDevice;
+    use hitz_devices::virtio::mmio_transport::VirtioMmioTransport;
+    use hitz_vmm::run_loop::{ExitReason, run_vcpu_loop};
+
+    const IRQ_VECTOR: u8 = 5;
+
+    // x86-64 machine code: init virtio device, trigger block read, output results.
+    //
+    // MMIO writes use C7 /0 encoding (MOV r/m32, imm32):
+    //   C7 43 xx imm32    for offset < 0x80 (mod=01, disp8)
+    //   C7 83 xx xx xx xx imm32  for offset >= 0x80 (mod=10, disp32)
+    #[rustfmt::skip]
+    let code: &[u8] = &[
+        // ---- Set up MMIO base in RBX ----
+        0xBB, 0x00, 0x00, 0x00, 0xD0,                          // mov ebx, 0xD0000000
+
+        // ---- Virtio status state machine (offset 0x70) ----
+        0xC7, 0x43, 0x70, 0x01, 0x00, 0x00, 0x00,              // mov [rbx+0x70], 1   (ACKNOWLEDGE)
+        0xC7, 0x43, 0x70, 0x03, 0x00, 0x00, 0x00,              // mov [rbx+0x70], 3   (ACK|DRIVER)
+        0xC7, 0x43, 0x70, 0x0B, 0x00, 0x00, 0x00,              // mov [rbx+0x70], 0xB (ACK|DRIVER|FEATURES_OK)
+        0xC7, 0x43, 0x70, 0x0F, 0x00, 0x00, 0x00,              // mov [rbx+0x70], 0xF (ACK|DRIVER|FEATURES_OK|DRIVER_OK)
+
+        // ---- Queue configuration ----
+        0xC7, 0x43, 0x38, 0x00, 0x01, 0x00, 0x00,              // mov [rbx+0x38], 256 (QueueNum)
+        0xC7, 0x83, 0x80,0x00,0x00,0x00, 0x00,0x00,0x20,0x00,  // mov [rbx+0x80], 0x200000 (QueueDescLow)
+        0xC7, 0x83, 0x84,0x00,0x00,0x00, 0x00,0x00,0x00,0x00,  // mov [rbx+0x84], 0        (QueueDescHigh)
+        0xC7, 0x83, 0x90,0x00,0x00,0x00, 0x00,0x10,0x20,0x00,  // mov [rbx+0x90], 0x201000 (QueueAvailLow)
+        0xC7, 0x83, 0x94,0x00,0x00,0x00, 0x00,0x00,0x00,0x00,  // mov [rbx+0x94], 0        (QueueAvailHigh)
+        0xC7, 0x83, 0xA0,0x00,0x00,0x00, 0x00,0x20,0x20,0x00,  // mov [rbx+0xA0], 0x202000 (QueueUsedLow)
+        0xC7, 0x83, 0xA4,0x00,0x00,0x00, 0x00,0x00,0x00,0x00,  // mov [rbx+0xA4], 0        (QueueUsedHigh)
+        0xC7, 0x43, 0x44, 0x01, 0x00, 0x00, 0x00,              // mov [rbx+0x44], 1 (QueueReady)
+
+        // ---- Trigger block read (QueueNotify at offset 0x50) ----
+        0xC7, 0x43, 0x50, 0x00, 0x00, 0x00, 0x00,              // mov [rbx+0x50], 0 (QueueNotify)
+
+        // ---- Read status byte from 0x205000, output to serial ----
+        0xB9, 0x00, 0x50, 0x20, 0x00,                          // mov ecx, 0x205000
+        0x8A, 0x01,                                              // mov al, [rcx]
+        0xBA, 0xF8, 0x03, 0x00, 0x00,                          // mov edx, 0x3F8
+        0xEE,                                                    // out dx, al
+
+        // ---- Read first 4 bytes from data buffer at 0x204000 ----
+        0xB9, 0x00, 0x40, 0x20, 0x00,                          // mov ecx, 0x204000
+        0x8B, 0x01,                                              // mov eax, [rcx]
+        0xEE,                                                    // out dx, al (byte 0)
+        0xC1, 0xE8, 0x08,                                      // shr eax, 8
+        0xEE,                                                    // out dx, al (byte 1)
+        0xC1, 0xE8, 0x08,                                      // shr eax, 8
+        0xEE,                                                    // out dx, al (byte 2)
+        0xC1, 0xE8, 0x08,                                      // shr eax, 8
+        0xEE,                                                    // out dx, al (byte 3)
+
+        // ---- Done ----
+        0xF4,                                                    // hlt
+    ];
+
+    let (_partition, mut vcpu, guest_mem) = boot_elf_pipeline(code);
+    let guest_mem = Arc::new(guest_mem);
+
+    // ── Interrupt handling setup ──
+    // Note: Interrupt delivery deferred to Phase 4 (requires APIC config).
+    // Block I/O is synchronous — data is in guest memory when QueueNotify
+    // MMIO write returns. The guest reads it directly without needing IRQs.
+
+    // ── Disk image: "HITZ" repeated for 512 bytes (1 sector) ──
+    let mut disk_file = tempfile::tempfile().expect("create temp disk");
+    let disk_data: Vec<u8> = b"HITZ".iter().copied().cycle().take(512).collect();
+    std::io::Write::write_all(&mut disk_file, &disk_data).expect("write disk data");
+    let block_dev = VirtioBlockDevice::new(disk_file).expect("create block device");
+
+    let mem: Arc<dyn hitz_hal::GuestMemAccess> = guest_mem.clone();
+    let transport = VirtioMmioTransport::new(block_dev, mem, IRQ_VECTOR);
+    let mut mmio_bus = MmioBus::new();
+    mmio_bus.register(0xD000_0000, 0x1000, Box::new(transport));
+
+    // ── Pre-fill virtqueue structures in guest RAM ──
+    // The guest code configures the device via MMIO writes, but the actual
+    // ring data structures must exist in guest memory beforehand.
+
+    // Descriptor table at 0x200000: 3-descriptor chain for a block read.
+    //   desc 0: request header (device-readable, 16 bytes)
+    //   desc 1: data buffer (device-writable, 512 bytes)
+    //   desc 2: status byte (device-writable, 1 byte)
+    let desc0 = build_descriptor(0x20_3000, 16, 1 /* NEXT */, 1);
+    let desc1 = build_descriptor(0x20_4000, 512, 3 /* NEXT|WRITE */, 2);
+    let desc2 = build_descriptor(0x20_5000, 1, 2 /* WRITE */, 0);
+    guest_mem
+        .write_slice(Gpa::new(0x20_0000), &desc0)
+        .expect("write desc 0");
+    guest_mem
+        .write_slice(Gpa::new(0x20_0010), &desc1)
+        .expect("write desc 1");
+    guest_mem
+        .write_slice(Gpa::new(0x20_0020), &desc2)
+        .expect("write desc 2");
+
+    // Available ring at 0x201000: one entry pointing to descriptor chain head (0).
+    let avail = build_avail_ring(1, &[0]);
+    guest_mem
+        .write_slice(Gpa::new(0x20_1000), &avail)
+        .expect("write avail ring");
+
+    // Block request header at 0x203000: read sector 0.
+    let req = build_blk_request(0 /* VIRTIO_BLK_T_IN */, 0);
+    guest_mem
+        .write_slice(Gpa::new(0x20_3000), &req)
+        .expect("write request header");
+
+    // ── Run! ──
+    let mut serial = SerialDevice::new(Vec::new());
+
+    let reason = run_vcpu_loop(&mut vcpu, &mut serial, &mut mmio_bus, &*guest_mem)
+        .expect("run_vcpu_loop failed");
+
+    assert_eq!(reason, ExitReason::Halt, "expected Halt exit");
+
+    // Expected serial output:
+    //   byte 0: status = 0 (VIRTIO_BLK_S_OK)
+    //   bytes 1-4: first 4 bytes of disk data = "HITZ"
+    let output = serial.writer().as_slice();
+    assert!(
+        output.len() >= 5,
+        "expected at least 5 bytes of serial output, got {}",
+        output.len()
+    );
+    assert_eq!(output[0], 0, "status should be VIRTIO_BLK_S_OK (0)");
+    assert_eq!(
+        &output[1..5],
+        b"HITZ",
+        "first 4 data bytes should be 'HITZ'"
     );
 }

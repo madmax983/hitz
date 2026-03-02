@@ -15,7 +15,7 @@ mod types;
 
 pub use error::HalError;
 pub use newtypes::{DiskOffset, Gpa, IrqLine, MacAddress, MemSizeMiB, MmioSlot, VcpuId, VmId};
-pub use traits::{Hypervisor, Partition, Vcpu};
+pub use traits::{GuestMemAccess, Hypervisor, Partition, Vcpu};
 pub use types::{
     DescriptorTable, InterruptRequest, IoPortExit, MemFlags, MmioExit, PartitionConfig,
     SegmentDescriptor, SpecialRegs, StandardRegs, VcpuExit,

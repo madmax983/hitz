@@ -19,3 +19,6 @@ vm-superio = { workspace = true }
 # Phase 3+ deps (vm-memory needs Windows compat work)
 # vm-memory.workspace = true
 # virtio-queue.workspace = true
+
+[dev-dependencies]
+tempfile = "3"

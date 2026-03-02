@@ -140,6 +140,36 @@ impl Vcpu for WhpVcpu {
         Ok(convert::values_to_special_regs(&values))
     }
 
+    fn inject_interrupt(&mut self, vector: u8) -> Result<(), HalError> {
+        use windows::Win32::System::Hypervisor::WHvRegisterPendingInterruption;
+
+        // WHV_X64_PENDING_INTERRUPTION_REGISTER layout:
+        //   bit 0: InterruptionPending = 1
+        //   bits 1-3: InterruptionType = 0 (external interrupt)
+        //   bits 4: DeliverErrorCode = 0
+        //   bits 5-8: InstructionLength = 0
+        //   bit 9: NestedEvent = 0
+        //   bits 10-15: Reserved = 0
+        //   bits 16-31: InterruptionVector = vector
+        let value = 1u64 | (u64::from(vector) << 16);
+        let name = WHvRegisterPendingInterruption;
+        let reg_value = convert::reg64_val(value);
+
+        // SAFETY: single register name/value pair, properly aligned.
+        unsafe {
+            WHvSetVirtualProcessorRegisters(
+                self.partition.handle,
+                self.index,
+                &raw const name,
+                1,
+                &raw const reg_value,
+            )
+        }
+        .map_err(|e| HalError::InjectInterrupt(format!("WHvSetVirtualProcessorRegisters: {e}")))?;
+
+        Ok(())
+    }
+
     fn set_sregs(&mut self, sregs: &SpecialRegs) -> Result<(), HalError> {
         let names = convert::SPECIAL_REG_NAMES;
         let values = convert::special_regs_to_values(sregs);

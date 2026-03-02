@@ -7,7 +7,7 @@
 
 use std::ptr;
 
-use hitz_hal::{Gpa, MemFlags, Partition};
+use hitz_hal::{Gpa, GuestMemAccess, HalError, MemFlags, Partition};
 use tracing::debug;
 
 use crate::error::MemError;
@@ -226,6 +226,24 @@ impl GuestMemory {
 impl Default for GuestMemory {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl GuestMemAccess for GuestMemory {
+    fn read_guest(&self, gpa: u64, buf: &mut [u8]) -> Result<(), HalError> {
+        self.read_slice(Gpa::new(gpa), buf)
+            .map_err(|e| HalError::GuestMem {
+                gpa,
+                reason: e.to_string(),
+            })
+    }
+
+    fn write_guest(&self, gpa: u64, data: &[u8]) -> Result<(), HalError> {
+        self.write_slice(Gpa::new(gpa), data)
+            .map_err(|e| HalError::GuestMem {
+                gpa,
+                reason: e.to_string(),
+            })
     }
 }
 

@@ -30,7 +30,7 @@ use windows::Win32::System::Hypervisor::{
 /// 8 bytes contain stack garbage. WHP reads all 16 bytes per register, so
 /// uninitialized data there causes `ACCESS_VIOLATION`. Writing via `Reg128`
 /// ensures the full union is initialized.
-const fn reg64_val(val: u64) -> WHV_REGISTER_VALUE {
+pub const fn reg64_val(val: u64) -> WHV_REGISTER_VALUE {
     WHV_REGISTER_VALUE {
         Reg128: WHV_UINT128 {
             Anonymous: WHV_UINT128_0 {
@@ -277,16 +277,22 @@ pub fn exit_context_to_hal(ctx: &WHV_RUN_VP_EXIT_CONTEXT) -> Result<VcpuExit, Ha
         let access_info = unsafe { mem.AccessInfo.Anonymous };
         let is_write = is_memory_write(access_info);
         let data = [0u8; 8];
-        // For writes, the data is in the instruction context.
-        // For reads, the VMM fills the data before resuming.
-        // WHP provides instruction bytes but not decoded data directly for MMIO.
-        // The full decode happens via WinHvEmulation in later phases.
+
+        // Copy the raw instruction bytes from the WHP exit context.
+        // The MMIO decoder uses these to determine register and access size.
+        let instruction_byte_count = mem.InstructionByteCount;
+        let mut instruction_bytes = [0u8; 16];
+        let count = usize::from(instruction_byte_count).min(16);
+        instruction_bytes[..count].copy_from_slice(&mem.InstructionBytes[..count]);
+
         Ok(VcpuExit::Mmio(MmioExit {
             gpa: Gpa::new(mem.Gpa),
             data,
-            len: 0, // Will be filled by emulator in later phases
+            len: 0, // Determined by MMIO decoder from instruction bytes
             is_write,
             instruction_len,
+            instruction_bytes,
+            instruction_byte_count,
         }))
     } else if reason == WHvRunVpExitReasonX64IoPortAccess {
         let io = unsafe { &ctx.Anonymous.IoPortAccess };
@@ -320,9 +326,12 @@ pub fn exit_context_to_hal(ctx: &WHV_RUN_VP_EXIT_CONTEXT) -> Result<VcpuExit, Ha
     }
 }
 
-/// Check if a memory access is a write (bit 1 of the bitfield).
+/// Check if a memory access is a write.
+///
+/// `WHV_MEMORY_ACCESS_INFO.AccessType` is a 2-bit field in bits [0:1]:
+///   0 = Read, 1 = Write, 2 = Execute.
 const fn is_memory_write(info: WHV_MEMORY_ACCESS_INFO_0) -> bool {
-    (info._bitfield & 0b10) != 0
+    (info._bitfield & 0b11) == 1
 }
 
 /// Check if an I/O port access is a write (bit 0 of the bitfield).

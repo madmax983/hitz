@@ -8,6 +8,19 @@ use crate::error::HalError;
 use crate::newtypes::{Gpa, VcpuId};
 use crate::types::{MemFlags, PartitionConfig, SpecialRegs, StandardRegs, VcpuExit};
 
+/// Guest physical memory access — allows devices to read/write guest RAM
+/// without depending on a concrete memory implementation.
+///
+/// This is the key abstraction that decouples hitz-devices (virtio stack)
+/// from hitz-vmm (memory management), preventing circular dependencies.
+pub trait GuestMemAccess: Send + Sync {
+    /// Read `buf.len()` bytes from guest physical address `gpa` into `buf`.
+    fn read_guest(&self, gpa: u64, buf: &mut [u8]) -> Result<(), HalError>;
+
+    /// Write `data` into guest memory starting at `gpa`.
+    fn write_guest(&self, gpa: u64, data: &[u8]) -> Result<(), HalError>;
+}
+
 /// Top-level hypervisor interface. One per process.
 pub trait Hypervisor: Send + Sync {
     /// The partition type produced by this hypervisor.
@@ -78,4 +91,11 @@ pub trait Vcpu: Send {
 
     /// Write the special (system) registers.
     fn set_sregs(&mut self, sregs: &SpecialRegs) -> Result<(), HalError>;
+
+    /// Inject an external interrupt into the vCPU.
+    ///
+    /// On WHP this sets `WHvRegisterPendingInterruption` before re-entering
+    /// the guest. The guest must have IF=1 (interrupts enabled) for this
+    /// to take effect immediately.
+    fn inject_interrupt(&mut self, vector: u8) -> Result<(), HalError>;
 }

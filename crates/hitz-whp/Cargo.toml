@@ -19,6 +19,7 @@ anyhow.workspace = true
 hitz-boot.workspace = true
 hitz-devices.workspace = true
 hitz-vmm.workspace = true
+tempfile = "3"
 windows = { workspace = true, features = [
     "Win32_System_Memory",
 ] }

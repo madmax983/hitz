@@ -1,0 +1,619 @@
+//! Virtio MMIO transport (version 2).
+//!
+//! Implements the [`MmioDevice`] trait, translating MMIO register reads/writes
+//! into virtqueue operations and device config accesses. This is the "glue"
+//! between the guest driver and a [`VirtioBackend`].
+
+use std::sync::Arc;
+
+use hitz_hal::GuestMemAccess;
+
+use crate::mmio_bus::MmioDevice;
+use crate::virtio::queue::VirtQueue;
+
+// -- MMIO register offsets ----------------------------------------------------
+
+/// Magic value register -- always `0x7472_6976` ("virt").
+const MMIO_MAGIC: u64 = 0x000;
+/// Version register -- always 2 (virtio-mmio v2).
+const MMIO_VERSION: u64 = 0x004;
+/// Device ID register -- identifies the device type.
+const MMIO_DEVICE_ID: u64 = 0x008;
+/// Vendor ID register.
+const MMIO_VENDOR_ID: u64 = 0x00C;
+/// Device features (selected page).
+const MMIO_DEVICE_FEATURES: u64 = 0x010;
+/// Device features page selector (write-only).
+const MMIO_DEVICE_FEATURES_SEL: u64 = 0x014;
+/// Driver-accepted features (write-only).
+const MMIO_DRIVER_FEATURES: u64 = 0x020;
+/// Driver features page selector (write-only).
+const MMIO_DRIVER_FEATURES_SEL: u64 = 0x024;
+/// Queue selector (write-only).
+const MMIO_QUEUE_SEL: u64 = 0x030;
+/// Maximum queue size (read-only).
+const MMIO_QUEUE_NUM_MAX: u64 = 0x034;
+/// Actual queue size (write-only).
+const MMIO_QUEUE_NUM: u64 = 0x038;
+/// Queue ready flag (read-write).
+const MMIO_QUEUE_READY: u64 = 0x044;
+/// Queue notify (write-only) -- triggers queue processing.
+const MMIO_QUEUE_NOTIFY: u64 = 0x050;
+/// Interrupt status (read-only).
+const MMIO_INTERRUPT_STATUS: u64 = 0x060;
+/// Interrupt acknowledge (write-only).
+const MMIO_INTERRUPT_ACK: u64 = 0x064;
+/// Device status (read-write).
+const MMIO_STATUS: u64 = 0x070;
+/// Queue descriptor table GPA, low 32 bits.
+const MMIO_QUEUE_DESC_LOW: u64 = 0x080;
+/// Queue descriptor table GPA, high 32 bits.
+const MMIO_QUEUE_DESC_HIGH: u64 = 0x084;
+/// Queue available ring GPA, low 32 bits.
+const MMIO_QUEUE_AVAIL_LOW: u64 = 0x090;
+/// Queue available ring GPA, high 32 bits.
+const MMIO_QUEUE_AVAIL_HIGH: u64 = 0x094;
+/// Queue used ring GPA, low 32 bits.
+const MMIO_QUEUE_USED_LOW: u64 = 0x0A0;
+/// Queue used ring GPA, high 32 bits.
+const MMIO_QUEUE_USED_HIGH: u64 = 0x0A4;
+/// Config generation counter.
+const MMIO_CONFIG_GENERATION: u64 = 0x0FC;
+/// Start of device-specific config space.
+const MMIO_CONFIG_START: u64 = 0x100;
+
+// -- Well-known constants -----------------------------------------------------
+
+/// The magic value identifying a virtio-MMIO device.
+const VIRTIO_MMIO_MAGIC: u32 = 0x7472_6976;
+/// We implement virtio-MMIO version 2.
+const VIRTIO_MMIO_VERSION: u32 = 2;
+/// Vendor ID ("QEMU" in little-endian ASCII).
+const VIRTIO_VENDOR_ID: u32 = 0x554D_4551;
+/// Maximum queue size we support.
+const QUEUE_NUM_MAX: u16 = 256;
+
+// -- Status bits --------------------------------------------------------------
+
+/// Guest OS has found the device.
+pub const STATUS_ACKNOWLEDGE: u8 = 0x01;
+/// Guest OS knows how to drive the device.
+pub const STATUS_DRIVER: u8 = 0x02;
+/// Feature negotiation complete.
+pub const STATUS_FEATURES_OK: u8 = 0x08;
+/// Driver setup complete, device is live.
+pub const STATUS_DRIVER_OK: u8 = 0x04;
+/// Something went wrong in the guest.
+pub const STATUS_FAILED: u8 = 0x80;
+
+/// A virtio device backend that processes queue requests.
+///
+/// Implementations provide the device-specific logic (block, net, etc.)
+/// while the [`VirtioMmioTransport`] handles MMIO register decode and
+/// queue management.
+pub trait VirtioBackend: Send {
+    /// Return the virtio device ID (e.g., 2 for block, 1 for net).
+    fn device_id(&self) -> u32;
+
+    /// Return the 64-bit device feature bits.
+    fn device_features(&self) -> u64;
+
+    /// Process all pending requests on the given queue.
+    fn process_queue(&mut self, queue: &mut VirtQueue, mem: &dyn GuestMemAccess);
+
+    /// Read from device-specific config space.
+    ///
+    /// `offset` is relative to the start of config space (MMIO 0x100).
+    fn read_config(&self, offset: u64, data: &mut [u8]);
+
+    /// Write to device-specific config space.
+    ///
+    /// `offset` is relative to the start of config space (MMIO 0x100).
+    fn write_config(&mut self, offset: u64, data: &[u8]);
+}
+
+/// Virtio MMIO transport wrapping a backend device.
+///
+/// Implements [`MmioDevice`] and manages the MMIO register file,
+/// virtqueue configuration, and device status state machine.
+pub struct VirtioMmioTransport<D: VirtioBackend> {
+    /// The backend device.
+    device: D,
+    /// The single virtqueue (most simple devices need only one).
+    queue: VirtQueue,
+    /// Reference to guest memory for queue operations.
+    mem: Arc<dyn GuestMemAccess>,
+    /// Device status register (guest-driven state machine).
+    status: u8,
+    /// Pending interrupt status bits.
+    interrupt_status: u32,
+    /// IRQ vector to return when raising an interrupt.
+    irq_vector: u8,
+    /// Which feature page the guest is reading.
+    device_features_sel: u32,
+    /// Feature bits accepted by the driver.
+    driver_features: u64,
+    /// Which feature page the driver is writing.
+    driver_features_sel: u32,
+    /// Queue descriptor table GPA, low 32 bits.
+    queue_desc_low: u32,
+    /// Queue descriptor table GPA, high 32 bits.
+    queue_desc_high: u32,
+    /// Queue available ring GPA, low 32 bits.
+    queue_avail_low: u32,
+    /// Queue available ring GPA, high 32 bits.
+    queue_avail_high: u32,
+    /// Queue used ring GPA, low 32 bits.
+    queue_used_low: u32,
+    /// Queue used ring GPA, high 32 bits.
+    queue_used_high: u32,
+    /// Actual queue size set by the guest.
+    queue_num: u16,
+    /// Config space generation counter (bumped on config change).
+    config_generation: u32,
+}
+
+impl<D: VirtioBackend> VirtioMmioTransport<D> {
+    /// Create a new MMIO transport for the given backend.
+    ///
+    /// * `device` -- the virtio backend (block, net, etc.)
+    /// * `mem` -- shared reference to guest memory
+    /// * `irq_vector` -- interrupt vector number for this device
+    #[must_use]
+    pub fn new(device: D, mem: Arc<dyn GuestMemAccess>, irq_vector: u8) -> Self {
+        Self {
+            device,
+            queue: VirtQueue::new(QUEUE_NUM_MAX),
+            mem,
+            status: 0,
+            interrupt_status: 0,
+            irq_vector,
+            device_features_sel: 0,
+            driver_features: 0,
+            driver_features_sel: 0,
+            queue_desc_low: 0,
+            queue_desc_high: 0,
+            queue_avail_low: 0,
+            queue_avail_high: 0,
+            queue_used_low: 0,
+            queue_used_high: 0,
+            queue_num: QUEUE_NUM_MAX,
+            config_generation: 0,
+        }
+    }
+
+    /// Reset the transport and device to initial state.
+    const fn reset(&mut self) {
+        self.status = 0;
+        self.interrupt_status = 0;
+        self.driver_features = 0;
+        self.driver_features_sel = 0;
+        self.device_features_sel = 0;
+        self.queue_desc_low = 0;
+        self.queue_desc_high = 0;
+        self.queue_avail_low = 0;
+        self.queue_avail_high = 0;
+        self.queue_used_low = 0;
+        self.queue_used_high = 0;
+        self.queue_num = QUEUE_NUM_MAX;
+        self.queue.reset();
+    }
+
+    /// Read a 32-bit MMIO register.
+    fn read_reg(&self, offset: u64) -> u32 {
+        match offset {
+            MMIO_MAGIC => VIRTIO_MMIO_MAGIC,
+            MMIO_VERSION => VIRTIO_MMIO_VERSION,
+            MMIO_DEVICE_ID => self.device.device_id(),
+            MMIO_VENDOR_ID => VIRTIO_VENDOR_ID,
+            MMIO_DEVICE_FEATURES => {
+                let features = self.device.device_features();
+                if self.device_features_sel == 0 {
+                    // Low 32 bits.
+                    #[allow(clippy::cast_possible_truncation)]
+                    {
+                        features as u32
+                    }
+                } else {
+                    // High 32 bits.
+                    #[allow(clippy::cast_possible_truncation)]
+                    {
+                        (features >> 32) as u32
+                    }
+                }
+            }
+            MMIO_QUEUE_NUM_MAX => u32::from(QUEUE_NUM_MAX),
+            MMIO_QUEUE_READY => u32::from(self.queue.is_ready()),
+            MMIO_INTERRUPT_STATUS => self.interrupt_status,
+            MMIO_STATUS => u32::from(self.status),
+            MMIO_CONFIG_GENERATION => self.config_generation,
+            _ => {
+                tracing::debug!(offset, "unhandled MMIO read");
+                0
+            }
+        }
+    }
+
+    /// Write a 32-bit MMIO register. Returns `Some(irq)` if an interrupt should fire.
+    fn write_reg(&mut self, offset: u64, value: u32) -> Option<u8> {
+        match offset {
+            MMIO_DEVICE_FEATURES_SEL => {
+                self.device_features_sel = value;
+            }
+            MMIO_DRIVER_FEATURES => {
+                if self.driver_features_sel == 0 {
+                    // Low 32 bits.
+                    self.driver_features =
+                        (self.driver_features & 0xFFFF_FFFF_0000_0000) | u64::from(value);
+                } else {
+                    // High 32 bits.
+                    self.driver_features =
+                        (self.driver_features & 0x0000_0000_FFFF_FFFF) | (u64::from(value) << 32);
+                }
+            }
+            MMIO_DRIVER_FEATURES_SEL => {
+                self.driver_features_sel = value;
+            }
+            MMIO_QUEUE_SEL => {
+                // We only have one queue (index 0). Ignore others.
+                if value != 0 {
+                    tracing::debug!(value, "guest selected non-existent queue");
+                }
+            }
+            MMIO_QUEUE_NUM => {
+                // Queue size fits in u16 (max 256). Higher bits are ignored per spec.
+                #[allow(clippy::cast_possible_truncation)]
+                let size = value as u16;
+                self.queue_num = size;
+                self.queue.set_size(size);
+            }
+            MMIO_QUEUE_READY => {
+                let ready = value != 0;
+                if ready {
+                    // Configure the queue GPAs before marking ready.
+                    let desc_gpa =
+                        u64::from(self.queue_desc_low) | (u64::from(self.queue_desc_high) << 32);
+                    let avail_gpa =
+                        u64::from(self.queue_avail_low) | (u64::from(self.queue_avail_high) << 32);
+                    let used_gpa =
+                        u64::from(self.queue_used_low) | (u64::from(self.queue_used_high) << 32);
+                    self.queue.configure(desc_gpa, avail_gpa, used_gpa);
+                }
+                self.queue.set_ready(ready);
+            }
+            MMIO_QUEUE_NOTIFY => {
+                // Trigger queue processing.
+                self.device.process_queue(&mut self.queue, &*self.mem);
+                // Signal used ring update.
+                self.interrupt_status |= 1;
+                return Some(self.irq_vector);
+            }
+            MMIO_INTERRUPT_ACK => {
+                self.interrupt_status &= !value;
+            }
+            MMIO_STATUS => {
+                // Status is an 8-bit register. Higher bits are ignored per spec.
+                #[allow(clippy::cast_possible_truncation)]
+                let val = value as u8;
+                if val == 0 {
+                    // Writing 0 resets the device.
+                    self.reset();
+                } else {
+                    self.status = val;
+                }
+            }
+            MMIO_QUEUE_DESC_LOW => self.queue_desc_low = value,
+            MMIO_QUEUE_DESC_HIGH => self.queue_desc_high = value,
+            MMIO_QUEUE_AVAIL_LOW => self.queue_avail_low = value,
+            MMIO_QUEUE_AVAIL_HIGH => self.queue_avail_high = value,
+            MMIO_QUEUE_USED_LOW => self.queue_used_low = value,
+            MMIO_QUEUE_USED_HIGH => self.queue_used_high = value,
+            _ => {
+                tracing::debug!(offset, value, "unhandled MMIO write");
+            }
+        }
+        None
+    }
+}
+
+impl<D: VirtioBackend> MmioDevice for VirtioMmioTransport<D> {
+    fn mmio_read(&mut self, offset: u64, data: &mut [u8]) {
+        if offset >= MMIO_CONFIG_START {
+            // Device-specific config space.
+            self.device.read_config(offset - MMIO_CONFIG_START, data);
+            return;
+        }
+
+        let value = self.read_reg(offset);
+        let bytes = value.to_le_bytes();
+        let len = data.len().min(bytes.len());
+        data[..len].copy_from_slice(&bytes[..len]);
+    }
+
+    fn mmio_write(&mut self, offset: u64, data: &[u8], _mem: &dyn GuestMemAccess) -> Option<u8> {
+        if offset >= MMIO_CONFIG_START {
+            self.device.write_config(offset - MMIO_CONFIG_START, data);
+            return None;
+        }
+
+        // Parse the value from little-endian bytes.
+        let mut buf = [0u8; 4];
+        let len = data.len().min(4);
+        buf[..len].copy_from_slice(&data[..len]);
+        let value = u32::from_le_bytes(buf);
+
+        self.write_reg(offset, value)
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, unused_results)]
+mod tests {
+    use super::*;
+    use std::sync::Mutex;
+
+    /// Minimal backend for testing the transport layer.
+    struct DummyBackend {
+        features: u64,
+        config: Vec<u8>,
+        process_count: u32,
+    }
+
+    impl DummyBackend {
+        fn new() -> Self {
+            Self {
+                features: 0,
+                config: vec![0u8; 16],
+                process_count: 0,
+            }
+        }
+    }
+
+    impl VirtioBackend for DummyBackend {
+        fn device_id(&self) -> u32 {
+            42
+        }
+
+        fn device_features(&self) -> u64 {
+            self.features
+        }
+
+        fn process_queue(&mut self, _queue: &mut VirtQueue, _mem: &dyn GuestMemAccess) {
+            self.process_count += 1;
+        }
+
+        fn read_config(&self, offset: u64, data: &mut [u8]) {
+            let start = offset as usize;
+            let end = (start + data.len()).min(self.config.len());
+            if start < self.config.len() {
+                let len = end - start;
+                data[..len].copy_from_slice(&self.config[start..end]);
+            }
+        }
+
+        fn write_config(&mut self, offset: u64, data: &[u8]) {
+            let start = offset as usize;
+            let end = (start + data.len()).min(self.config.len());
+            if start < self.config.len() {
+                let len = end - start;
+                self.config[start..end].copy_from_slice(&data[..len]);
+            }
+        }
+    }
+
+    /// Mock guest memory.
+    struct MockMem {
+        inner: Mutex<Vec<u8>>,
+    }
+
+    impl MockMem {
+        fn new(size: usize) -> Self {
+            Self {
+                inner: Mutex::new(vec![0u8; size]),
+            }
+        }
+    }
+
+    impl GuestMemAccess for MockMem {
+        fn read_guest(&self, gpa: u64, buf: &mut [u8]) -> Result<(), hitz_hal::HalError> {
+            let mem = self.inner.lock().unwrap();
+            let start = gpa as usize;
+            if start + buf.len() > mem.len() {
+                return Err(hitz_hal::HalError::MapMemory {
+                    gpa,
+                    size: buf.len(),
+                    reason: "out of bounds".to_string(),
+                });
+            }
+            buf.copy_from_slice(&mem[start..start + buf.len()]);
+            Ok(())
+        }
+
+        fn write_guest(&self, gpa: u64, data: &[u8]) -> Result<(), hitz_hal::HalError> {
+            let mut mem = self.inner.lock().unwrap();
+            let start = gpa as usize;
+            if start + data.len() > mem.len() {
+                return Err(hitz_hal::HalError::MapMemory {
+                    gpa,
+                    size: data.len(),
+                    reason: "out of bounds".to_string(),
+                });
+            }
+            mem[start..start + data.len()].copy_from_slice(data);
+            Ok(())
+        }
+    }
+
+    fn make_transport() -> VirtioMmioTransport<DummyBackend> {
+        let mem = Arc::new(MockMem::new(0x10000));
+        VirtioMmioTransport::new(DummyBackend::new(), mem, 5)
+    }
+
+    fn read_u32(transport: &mut VirtioMmioTransport<DummyBackend>, offset: u64) -> u32 {
+        let mut buf = [0u8; 4];
+        transport.mmio_read(offset, &mut buf);
+        u32::from_le_bytes(buf)
+    }
+
+    fn write_u32(
+        transport: &mut VirtioMmioTransport<DummyBackend>,
+        offset: u64,
+        value: u32,
+    ) -> Option<u8> {
+        let mem = Arc::new(MockMem::new(16));
+        transport.mmio_write(offset, &value.to_le_bytes(), &*mem)
+    }
+
+    #[test]
+    fn magic_value() {
+        let mut t = make_transport();
+        assert_eq!(read_u32(&mut t, MMIO_MAGIC), 0x7472_6976);
+    }
+
+    #[test]
+    fn version_is_2() {
+        let mut t = make_transport();
+        assert_eq!(read_u32(&mut t, MMIO_VERSION), 2);
+    }
+
+    #[test]
+    fn device_id_from_backend() {
+        let mut t = make_transport();
+        assert_eq!(read_u32(&mut t, MMIO_DEVICE_ID), 42);
+    }
+
+    #[test]
+    fn vendor_id() {
+        let mut t = make_transport();
+        assert_eq!(read_u32(&mut t, MMIO_VENDOR_ID), 0x554D_4551);
+    }
+
+    #[test]
+    fn queue_num_max() {
+        let mut t = make_transport();
+        assert_eq!(read_u32(&mut t, MMIO_QUEUE_NUM_MAX), 256);
+    }
+
+    #[test]
+    fn status_state_machine() {
+        let mut t = make_transport();
+
+        // Initial status is 0.
+        assert_eq!(read_u32(&mut t, MMIO_STATUS), 0);
+
+        // ACKNOWLEDGE.
+        write_u32(&mut t, MMIO_STATUS, u32::from(STATUS_ACKNOWLEDGE));
+        assert_eq!(read_u32(&mut t, MMIO_STATUS), u32::from(STATUS_ACKNOWLEDGE));
+
+        // DRIVER.
+        write_u32(
+            &mut t,
+            MMIO_STATUS,
+            u32::from(STATUS_ACKNOWLEDGE | STATUS_DRIVER),
+        );
+        assert_eq!(
+            read_u32(&mut t, MMIO_STATUS),
+            u32::from(STATUS_ACKNOWLEDGE | STATUS_DRIVER)
+        );
+
+        // FEATURES_OK.
+        write_u32(
+            &mut t,
+            MMIO_STATUS,
+            u32::from(STATUS_ACKNOWLEDGE | STATUS_DRIVER | STATUS_FEATURES_OK),
+        );
+        assert_eq!(
+            read_u32(&mut t, MMIO_STATUS),
+            u32::from(STATUS_ACKNOWLEDGE | STATUS_DRIVER | STATUS_FEATURES_OK)
+        );
+
+        // DRIVER_OK.
+        write_u32(
+            &mut t,
+            MMIO_STATUS,
+            u32::from(STATUS_ACKNOWLEDGE | STATUS_DRIVER | STATUS_FEATURES_OK | STATUS_DRIVER_OK),
+        );
+        assert_eq!(
+            read_u32(&mut t, MMIO_STATUS),
+            u32::from(STATUS_ACKNOWLEDGE | STATUS_DRIVER | STATUS_FEATURES_OK | STATUS_DRIVER_OK)
+        );
+    }
+
+    #[test]
+    fn status_reset() {
+        let mut t = make_transport();
+
+        // Set some status.
+        write_u32(&mut t, MMIO_STATUS, u32::from(STATUS_ACKNOWLEDGE));
+        assert_eq!(read_u32(&mut t, MMIO_STATUS), u32::from(STATUS_ACKNOWLEDGE));
+
+        // Write 0 resets.
+        write_u32(&mut t, MMIO_STATUS, 0);
+        assert_eq!(read_u32(&mut t, MMIO_STATUS), 0);
+    }
+
+    #[test]
+    fn device_features_paging() {
+        let mem = Arc::new(MockMem::new(0x10000));
+        let mut backend = DummyBackend::new();
+        backend.features = 0xDEAD_BEEF_CAFE_BABE;
+        let mut t = VirtioMmioTransport::new(backend, mem, 5);
+
+        // Page 0 = low 32 bits.
+        write_u32(&mut t, MMIO_DEVICE_FEATURES_SEL, 0);
+        assert_eq!(read_u32(&mut t, MMIO_DEVICE_FEATURES), 0xCAFE_BABE);
+
+        // Page 1 = high 32 bits.
+        write_u32(&mut t, MMIO_DEVICE_FEATURES_SEL, 1);
+        assert_eq!(read_u32(&mut t, MMIO_DEVICE_FEATURES), 0xDEAD_BEEF);
+    }
+
+    #[test]
+    fn queue_notify_triggers_processing() {
+        let mut t = make_transport();
+
+        // Notify should trigger process_queue and return IRQ.
+        let irq = write_u32(&mut t, MMIO_QUEUE_NOTIFY, 0);
+        assert_eq!(irq, Some(5));
+
+        // Interrupt status should have bit 0 set.
+        assert_eq!(read_u32(&mut t, MMIO_INTERRUPT_STATUS), 1);
+
+        // ACK the interrupt.
+        write_u32(&mut t, MMIO_INTERRUPT_ACK, 1);
+        assert_eq!(read_u32(&mut t, MMIO_INTERRUPT_STATUS), 0);
+    }
+
+    #[test]
+    fn config_space_read_write() {
+        let mut t = make_transport();
+
+        // Write to config space at offset 0x100 + 4.
+        let fake_mem = MockMem::new(16);
+        let data = 0xDEAD_BEEFu32.to_le_bytes();
+        t.mmio_write(MMIO_CONFIG_START + 4, &data, &fake_mem);
+
+        // Read back.
+        let mut buf = [0u8; 4];
+        t.mmio_read(MMIO_CONFIG_START + 4, &mut buf);
+        assert_eq!(u32::from_le_bytes(buf), 0xDEAD_BEEF);
+    }
+
+    #[test]
+    fn queue_ready_configures_gpas() {
+        let mut t = make_transport();
+
+        // Set the GPA registers.
+        write_u32(&mut t, MMIO_QUEUE_DESC_LOW, 0x1000);
+        write_u32(&mut t, MMIO_QUEUE_DESC_HIGH, 0);
+        write_u32(&mut t, MMIO_QUEUE_AVAIL_LOW, 0x2000);
+        write_u32(&mut t, MMIO_QUEUE_AVAIL_HIGH, 0);
+        write_u32(&mut t, MMIO_QUEUE_USED_LOW, 0x3000);
+        write_u32(&mut t, MMIO_QUEUE_USED_HIGH, 0);
+
+        // Mark ready.
+        write_u32(&mut t, MMIO_QUEUE_READY, 1);
+        assert_eq!(read_u32(&mut t, MMIO_QUEUE_READY), 1);
+        assert!(t.queue.is_ready());
+    }
+}

@@ -56,6 +56,19 @@ pub enum HalError {
     #[error("interrupt request failed: {0}")]
     InterruptRequest(String),
 
+    /// Failed to read or write guest memory.
+    #[error("guest memory access at GPA {gpa:#x}: {reason}")]
+    GuestMem {
+        /// Guest physical address.
+        gpa: u64,
+        /// Error detail.
+        reason: String,
+    },
+
+    /// Failed to inject an interrupt.
+    #[error("interrupt injection failed: {0}")]
+    InjectInterrupt(String),
+
     /// The hypervisor platform is not available.
     #[error("hypervisor not available: {0}")]
     NotAvailable(String),

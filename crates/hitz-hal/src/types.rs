@@ -45,6 +45,11 @@ pub struct MmioExit {
     /// Length of the faulting instruction in bytes.
     /// The VMM must advance RIP by this amount before re-entering the guest.
     pub instruction_len: u8,
+    /// Raw instruction bytes from WHP's exit context.
+    /// Used by the MMIO decoder to determine which register and access size.
+    pub instruction_bytes: [u8; 16],
+    /// Number of valid bytes in `instruction_bytes`.
+    pub instruction_byte_count: u8,
 }
 
 /// Details of an I/O port exit.
