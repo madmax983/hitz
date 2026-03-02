@@ -138,9 +138,11 @@ dependencies = [
 name = "hitz-vmm"
 version = "0.1.0"
 dependencies = [
+ "hitz-boot",
  "hitz-hal",
  "thiserror",
  "tracing",
+ "windows",
 ]
 
 [[package]]
@@ -148,7 +150,9 @@ name = "hitz-whp"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "hitz-boot",
  "hitz-hal",
+ "hitz-vmm",
  "thiserror",
  "tracing",
  "windows",

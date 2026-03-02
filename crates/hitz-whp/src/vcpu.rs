@@ -144,20 +144,26 @@ impl Vcpu for WhpVcpu {
         let names = convert::SPECIAL_REG_NAMES;
         let values = convert::special_regs_to_values(sregs);
 
-        #[allow(clippy::cast_possible_truncation)]
-        let count = names.len() as u32;
-
-        // SAFETY: arrays are properly sized and aligned.
-        unsafe {
-            WHvSetVirtualProcessorRegisters(
-                self.partition.handle,
-                self.index,
-                names.as_ptr(),
-                count,
-                values.as_ptr(),
-            )
+        // Set registers individually to avoid a WHP batch-call crash
+        // (`STATUS_ACCESS_VIOLATION`) that occurs when setting all 14
+        // special registers in a single `WHvSetVirtualProcessorRegisters`
+        // call with mixed 64-bit + segment + table register types.
+        // Setting them one-by-one is functionally identical and reliable.
+        for i in 0..names.len() {
+            // SAFETY: single register name/value pair, properly aligned.
+            unsafe {
+                WHvSetVirtualProcessorRegisters(
+                    self.partition.handle,
+                    self.index,
+                    &raw const names[i],
+                    1,
+                    &raw const values[i],
+                )
+            }
+            .map_err(|e| {
+                HalError::RegisterAccess(format!("set special reg {}: {e}", names[i].0))
+            })?;
         }
-        .map_err(|e| HalError::RegisterAccess(format!("set special regs: {e}")))?;
 
         Ok(())
     }

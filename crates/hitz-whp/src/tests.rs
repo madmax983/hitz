@@ -309,3 +309,146 @@ fn cancel_vcpu() {
         .request_interrupt(VcpuId::new(0), 0)
         .expect("cancel (via request_interrupt) failed");
 }
+
+// ─── Phase 1: Full boot path integration test ───────────────────────────────
+
+/// Build a minimal ELF64 binary containing `code` loaded at `load_addr`.
+///
+/// Uses the same structure as `hitz-boot`'s test helpers but is self-contained
+/// so the test module stays isolated.
+fn make_boot_elf(load_addr: u64, code: &[u8]) -> Vec<u8> {
+    let elf_header_size = 64usize;
+    let phdr_size = 56usize;
+    let mut buf = vec![0u8; elf_header_size + phdr_size];
+
+    // ELF header
+    buf[0..4].copy_from_slice(&[0x7F, b'E', b'L', b'F']);
+    buf[4] = 2; // ELFCLASS64
+    buf[5] = 1; // ELFDATA2LSB
+    buf[6] = 1; // EV_CURRENT
+    buf[16..18].copy_from_slice(&2u16.to_le_bytes()); // ET_EXEC
+    buf[18..20].copy_from_slice(&62u16.to_le_bytes()); // EM_X86_64
+    buf[20..24].copy_from_slice(&1u32.to_le_bytes()); // e_version
+    buf[24..32].copy_from_slice(&load_addr.to_le_bytes()); // e_entry
+    buf[32..40].copy_from_slice(&64u64.to_le_bytes()); // e_phoff
+    buf[52..54].copy_from_slice(&64u16.to_le_bytes()); // e_ehsize
+    buf[54..56].copy_from_slice(&56u16.to_le_bytes()); // e_phentsize
+    buf[56..58].copy_from_slice(&1u16.to_le_bytes()); // e_phnum
+
+    // Program header
+    let data_offset = (elf_header_size + phdr_size) as u64;
+    let ph = elf_header_size;
+    buf[ph..ph + 4].copy_from_slice(&1u32.to_le_bytes()); // PT_LOAD
+    buf[ph + 8..ph + 16].copy_from_slice(&data_offset.to_le_bytes()); // p_offset
+    buf[ph + 16..ph + 24].copy_from_slice(&load_addr.to_le_bytes()); // p_vaddr
+    buf[ph + 24..ph + 32].copy_from_slice(&load_addr.to_le_bytes()); // p_paddr
+    buf[ph + 32..ph + 40].copy_from_slice(&(code.len() as u64).to_le_bytes()); // p_filesz
+    buf[ph + 40..ph + 48].copy_from_slice(&(code.len() as u64).to_le_bytes()); // p_memsz
+
+    buf.extend_from_slice(code);
+    buf
+}
+
+/// Phase 1 checkpoint: Load a tiny 64-bit ELF, boot in long mode, expect I/O
+/// port exit.
+///
+/// This exercises the complete Phase 1 pipeline:
+/// 1. `GuestMemory` (VirtualAlloc-backed)
+/// 2. `build_page_tables` (4-level identity map)
+/// 3. `build_boot_params` (Linux zero page)
+/// 4. `load_elf` (ELF64 loader)
+/// 5. `write_gdt` + `configure_sregs` + `configure_regs` (long mode setup)
+/// 6. `vcpu.run()` → `VcpuExit::IoPort`
+#[test]
+#[ignore = "requires WHP enabled (Hyper-V)"]
+fn phase1_boot_elf_to_io_port_exit() {
+    use hitz_boot::{BOOT_PARAMS_GPA, CMDLINE_GPA, build_boot_params, build_page_tables, load_elf};
+    use hitz_vmm::{GuestMemory, boot_regs};
+
+    // x86-64 machine code:
+    //   mov al, 0x42          ; B0 42
+    //   mov edx, 0x3F8        ; BA F8 03 00 00
+    //   out dx, al            ; EE
+    //   hlt                   ; F4
+    let code: &[u8] = &[
+        0xB0, 0x42, // mov al, 0x42 ('B')
+        0xBA, 0xF8, 0x03, 0x00, 0x00, // mov edx, 0x3F8 (COM1)
+        0xEE, // out dx, al
+        0xF4, // hlt
+    ];
+
+    let load_addr = 0x10_0000u64; // 1 MiB — standard kernel load address
+    let elf = make_boot_elf(load_addr, code);
+    let ram_size = 128 * 1024 * 1024u64; // 128 MiB
+
+    // ── 1. Allocate guest memory ──
+    let mut guest_mem = GuestMemory::new();
+    guest_mem
+        .add_region(Gpa::new(0), ram_size as usize)
+        .expect("add_region failed");
+
+    // ── 2. Write page tables ──
+    let (pml4_gpa, page_table_writes) = build_page_tables(4).expect("build_page_tables failed");
+    for write in &page_table_writes {
+        guest_mem
+            .write_slice(write.gpa, &write.data)
+            .expect("write page table failed");
+    }
+
+    // ── 3. Write boot_params ──
+    let boot_params =
+        build_boot_params(ram_size, Gpa::new(CMDLINE_GPA)).expect("build_boot_params failed");
+    guest_mem
+        .write_obj(Gpa::new(BOOT_PARAMS_GPA), &boot_params)
+        .expect("write boot_params failed");
+
+    // ── 4. Write command line ──
+    let cmdline = b"console=ttyS0\0";
+    guest_mem
+        .write_slice(Gpa::new(CMDLINE_GPA), cmdline)
+        .expect("write cmdline failed");
+
+    // ── 5. Write GDT ──
+    boot_regs::write_gdt(&guest_mem).expect("write_gdt failed");
+
+    // ── 6. Load ELF ──
+    let load_result = load_elf(&elf, &guest_mem).expect("load_elf failed");
+    assert_eq!(load_result.entry_point, Gpa::new(load_addr));
+
+    // ── 7. Create WHP partition and map memory ──
+    let hv = WhpHypervisor::new().expect("WHP not available");
+    let cfg = hitz_hal::PartitionConfig {
+        vcpu_count: 1,
+        memory_size: hitz_hal::MemSizeMiB::new(128),
+    };
+    let mut partition = hv.create_partition(&cfg).expect("create_partition failed");
+
+    guest_mem
+        .map_to_partition(&mut partition, MemFlags::READ_WRITE_EXEC)
+        .expect("map_to_partition failed");
+
+    // ── 8. Create vCPU and configure registers ──
+    let mut vcpu = partition
+        .create_vcpu(VcpuId::new(0))
+        .expect("create_vcpu failed");
+
+    boot_regs::configure_sregs(&mut vcpu, pml4_gpa).expect("configure_sregs failed");
+    boot_regs::configure_regs(
+        &mut vcpu,
+        load_result.entry_point,
+        Gpa::new(BOOT_PARAMS_GPA),
+    )
+    .expect("configure_regs failed");
+
+    // ── 9. Run! ──
+    let exit = vcpu.run().expect("run failed");
+
+    match exit {
+        VcpuExit::IoPort(io) => {
+            assert_eq!(io.port, 0x3F8, "expected COM1 port");
+            assert!(io.is_write, "expected write (OUT)");
+            assert_eq!(io.data[0], 0x42, "expected 'B'");
+        }
+        other => panic!("expected IoPort exit, got: {other:?}"),
+    }
+}

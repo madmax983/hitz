@@ -10,10 +10,12 @@ workspace = true
 
 [dependencies]
 hitz-hal.workspace = true
+hitz-boot.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 
-# Phase 1+ deps (vm-memory needs Windows compat work)
-# hitz-boot.workspace = true
+# Phase 2+ deps
 # hitz-devices.workspace = true
-# vm-memory.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows = { workspace = true, features = ["Win32_System_Memory"] }

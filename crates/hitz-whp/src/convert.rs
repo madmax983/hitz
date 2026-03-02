@@ -164,51 +164,47 @@ pub const fn values_to_special_regs(v: &[WHV_REGISTER_VALUE; SPECIAL_REG_COUNT])
 }
 
 /// Convert HAL `SpecialRegs` to WHP register values.
+///
+/// The array is zero-initialized first, then each element is overwritten.
+/// This ensures no uninitialized padding bytes in the `WHV_REGISTER_VALUE`
+/// union, which can cause `ACCESS_VIOLATION` when passed as a batch to
+/// `WHvSetVirtualProcessorRegisters`.
 pub fn special_regs_to_values(sregs: &SpecialRegs) -> [WHV_REGISTER_VALUE; SPECIAL_REG_COUNT] {
-    [
-        reg64_val(sregs.cr0),
-        reg64_val(sregs.cr3),
-        reg64_val(sregs.cr4),
-        reg64_val(sregs.efer),
-        WHV_REGISTER_VALUE {
-            Segment: hal_seg_to_whp(&sregs.cs),
-        },
-        WHV_REGISTER_VALUE {
-            Segment: hal_seg_to_whp(&sregs.ds),
-        },
-        WHV_REGISTER_VALUE {
-            Segment: hal_seg_to_whp(&sregs.es),
-        },
-        WHV_REGISTER_VALUE {
-            Segment: hal_seg_to_whp(&sregs.fs),
-        },
-        WHV_REGISTER_VALUE {
-            Segment: hal_seg_to_whp(&sregs.gs),
-        },
-        WHV_REGISTER_VALUE {
-            Segment: hal_seg_to_whp(&sregs.ss),
-        },
-        WHV_REGISTER_VALUE {
-            Segment: hal_seg_to_whp(&sregs.tr),
-        },
-        WHV_REGISTER_VALUE {
-            Segment: hal_seg_to_whp(&sregs.ldt),
-        },
-        WHV_REGISTER_VALUE {
-            Table: hal_table_to_whp(&sregs.gdt),
-        },
-        WHV_REGISTER_VALUE {
-            Table: hal_table_to_whp(&sregs.idt),
-        },
-    ]
+    // Zero the entire array first so no union variant leaves garbage bytes.
+    let mut vals: [WHV_REGISTER_VALUE; SPECIAL_REG_COUNT] = unsafe { core::mem::zeroed() };
+
+    vals[0] = reg64_val(sregs.cr0);
+    vals[1] = reg64_val(sregs.cr3);
+    vals[2] = reg64_val(sregs.cr4);
+    vals[3] = reg64_val(sregs.efer);
+    vals[4].Segment = hal_seg_to_whp(&sregs.cs);
+    vals[5].Segment = hal_seg_to_whp(&sregs.ds);
+    vals[6].Segment = hal_seg_to_whp(&sregs.es);
+    vals[7].Segment = hal_seg_to_whp(&sregs.fs);
+    vals[8].Segment = hal_seg_to_whp(&sregs.gs);
+    vals[9].Segment = hal_seg_to_whp(&sregs.ss);
+    vals[10].Segment = hal_seg_to_whp(&sregs.tr);
+    vals[11].Segment = hal_seg_to_whp(&sregs.ldt);
+    vals[12].Table = hal_table_to_whp(&sregs.gdt);
+    vals[13].Table = hal_table_to_whp(&sregs.idt);
+
+    vals
 }
 
 // ─── Segment / table conversions ─────────────────────────────────────────────
 
 /// Convert a WHP segment register to HAL `SegmentDescriptor`.
 const fn whp_seg_to_hal(seg: &WHV_X64_SEGMENT_REGISTER) -> SegmentDescriptor {
-    // The attributes are packed into a bitfield inside the Anonymous union.
-    // Layout: type(4) | s(1) | dpl(2) | present(1) | avl(1) | long(1) | db(1) | gran(1)
+    // WHP Attributes bitfield layout (from WinHvPlatformDefs.h):
+    //   bits  0-3: SegmentType
+    //   bit     4: NonSystemSegment (S)
+    //   bits  5-6: DescriptorPrivilegeLevel (DPL)
+    //   bit     7: Present
+    //   bits 8-11: Reserved (4 bits — NOT the same as raw GDT flags!)
+    //   bit    12: Available (AVL)
+    //   bit    13: Long (L)
+    //   bit    14: Default (D/B)
+    //   bit    15: Granularity (G)
     let attrs = unsafe { seg.Anonymous.Anonymous._bitfield };
     SegmentDescriptor {
         base: seg.Base,
@@ -218,21 +214,23 @@ const fn whp_seg_to_hal(seg: &WHV_X64_SEGMENT_REGISTER) -> SegmentDescriptor {
         s: ((attrs >> 4) & 1) as u8,
         dpl: ((attrs >> 5) & 3) as u8,
         present: ((attrs >> 7) & 1) as u8,
-        long_mode: ((attrs >> 9) & 1) as u8,
-        db: ((attrs >> 10) & 1) as u8,
-        granularity: ((attrs >> 11) & 1) as u8,
+        long_mode: ((attrs >> 13) & 1) as u8,
+        db: ((attrs >> 14) & 1) as u8,
+        granularity: ((attrs >> 15) & 1) as u8,
     }
 }
 
 /// Convert a HAL `SegmentDescriptor` to WHP segment register.
 fn hal_seg_to_whp(seg: &SegmentDescriptor) -> WHV_X64_SEGMENT_REGISTER {
+    // See whp_seg_to_hal for the WHP Attributes bitfield layout.
+    // AVL/L/D/G are at bits 12-15, NOT bits 8-11 like in a raw GDT entry.
     let attrs: u16 = u16::from(seg.type_ & 0xF)
         | (u16::from(seg.s & 1) << 4)
         | (u16::from(seg.dpl & 3) << 5)
         | (u16::from(seg.present & 1) << 7)
-        | (u16::from(seg.long_mode & 1) << 9)
-        | (u16::from(seg.db & 1) << 10)
-        | (u16::from(seg.granularity & 1) << 11);
+        | (u16::from(seg.long_mode & 1) << 13)
+        | (u16::from(seg.db & 1) << 14)
+        | (u16::from(seg.granularity & 1) << 15);
 
     WHV_X64_SEGMENT_REGISTER {
         Base: seg.base,
