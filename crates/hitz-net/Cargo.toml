@@ -13,8 +13,4 @@ hitz-hal.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 crossbeam-channel.workspace = true
-
-# Phase 4+ deps
-# hitz-devices.workspace = true
-# wintun.workspace = true
-# tokio.workspace = true
+wintun.workspace = true

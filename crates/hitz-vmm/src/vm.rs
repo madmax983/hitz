@@ -3,6 +3,7 @@
 //! Extracts the 17-step boot sequence from integration tests into a single
 //! `boot_and_run` function that can be called from the CLI, daemon, or tests.
 
+use std::fmt::Write as _;
 use std::fs;
 use std::io::Write;
 use std::sync::Arc;
@@ -17,9 +18,11 @@ use hitz_devices::mmio_bus::MmioBus;
 use hitz_devices::serial::SerialDevice;
 use hitz_devices::virtio::block::VirtioBlockDevice;
 use hitz_devices::virtio::mmio_transport::VirtioMmioTransport;
+use hitz_devices::virtio::net::VirtioNetDevice;
 use hitz_hal::{
     Gpa, GuestMemAccess, Hypervisor, MemFlags, MemSizeMiB, Partition, PartitionConfig, VcpuId,
 };
+use hitz_net::ethernet;
 
 use crate::boot_regs;
 use crate::memory::GuestMemory;
@@ -29,8 +32,10 @@ use crate::run_loop::{self, ExitReason};
 const VIRTIO_MMIO_BASE: u64 = 0xD000_0000;
 /// Size of each virtio-MMIO slot.
 const VIRTIO_MMIO_SIZE: u64 = 0x1000;
-/// IRQ vector for the first virtio device.
+/// IRQ vector for the first virtio device (block).
 const VIRTIO_IRQ_BASE: u8 = 5;
+/// IRQ vector for the virtio-net device.
+const VIRTIO_IRQ_NET: u8 = 6;
 
 /// Minimum RAM in MiB (kernel + page tables + `boot_params` need at least 2 MiB).
 const MIN_RAM_MIB: u32 = 2;
@@ -111,7 +116,7 @@ pub fn validate_config(config: &VmConfig) -> Result<(), VmError> {
 /// 7. Runs the vCPU loop until the guest exits
 ///
 /// Serial output goes to `serial_out` (e.g. stdout, `Vec<u8>` for tests).
-#[allow(clippy::cast_possible_truncation)] // ram_mib -> GiB count is small
+#[allow(clippy::cast_possible_truncation, clippy::too_many_lines)]
 pub fn boot_and_run<H: Hypervisor, W: Write>(
     hypervisor: &H,
     config: &VmConfig,
@@ -162,7 +167,35 @@ pub fn boot_and_run<H: Hypervisor, W: Write>(
     guest_mem.write_obj(Gpa::new(BOOT_PARAMS_GPA), &boot_params)?;
 
     // ── 8. Write command line ──
-    let cmdline = config.effective_cmdline();
+    let mut cmdline = config.effective_cmdline().to_string();
+
+    // Append virtio-net MMIO device descriptor to the kernel command line.
+    if config.net.is_some() {
+        let net_base = VIRTIO_MMIO_BASE + VIRTIO_MMIO_SIZE;
+        let _ = write!(
+            cmdline,
+            " virtio_mmio.device=0x{VIRTIO_MMIO_SIZE:x}@0x{net_base:x}:{VIRTIO_IRQ_NET}"
+        );
+    }
+
+    // Append static IP configuration for the guest's network interface.
+    if let Some(ref net_cfg) = config.net {
+        let (guest_ip, _) = ethernet::parse_cidr(&net_cfg.guest_ip).map_err(VmError::Config)?;
+        let (gateway_ip, _) = ethernet::parse_cidr(&net_cfg.host_ip).map_err(VmError::Config)?;
+        let _ = write!(
+            cmdline,
+            " ip={}.{}.{}.{}::{}.{}.{}.{}:255.255.255.0::eth0:off",
+            guest_ip[0],
+            guest_ip[1],
+            guest_ip[2],
+            guest_ip[3],
+            gateway_ip[0],
+            gateway_ip[1],
+            gateway_ip[2],
+            gateway_ip[3],
+        );
+    }
+
     let mut cmdline_bytes = cmdline.as_bytes().to_vec();
     cmdline_bytes.push(0); // null-terminate
     guest_mem.write_slice(Gpa::new(CMDLINE_GPA), &cmdline_bytes)?;
@@ -202,6 +235,48 @@ pub fn boot_and_run<H: Hypervisor, W: Write>(
         mmio_bus.register(VIRTIO_MMIO_BASE, VIRTIO_MMIO_SIZE, Box::new(transport));
     }
 
+    // ── 13b. Optional virtio-net ──
+    //
+    // The `net_io_handle` must stay alive until after the run loop exits;
+    // its `Drop` impl signals the I/O thread to stop and joins it.
+    let net_io_handle: Option<hitz_net::NetIoHandle> = if let Some(ref net_cfg) = config.net {
+        let guest_mac = if let Some(ref mac_str) = net_cfg.mac {
+            ethernet::parse_mac(mac_str).map_err(VmError::Config)?
+        } else {
+            ethernet::random_mac()
+        };
+
+        let gateway_mac: [u8; 6] = [0xAA, 0xBB, 0xCC, 0x00, 0x00, 0x01];
+        let (gateway_ip, _) = ethernet::parse_cidr(&net_cfg.host_ip).map_err(VmError::Config)?;
+
+        let (net_dev, tx_receiver, rx_sender) = VirtioNetDevice::new(guest_mac);
+
+        let mem: Arc<dyn GuestMemAccess> = guest_mem_arc.clone();
+        let net_transport = VirtioMmioTransport::new(net_dev, mem, VIRTIO_IRQ_NET);
+        let net_base = VIRTIO_MMIO_BASE + VIRTIO_MMIO_SIZE;
+        mmio_bus.register(net_base, VIRTIO_MMIO_SIZE, Box::new(net_transport));
+
+        let adapter_name = net_cfg
+            .adapter_name
+            .clone()
+            .unwrap_or_else(|| "hitz-net".to_string());
+
+        let handle = hitz_net::start_net_io(
+            &adapter_name,
+            &net_cfg.host_ip,
+            guest_mac,
+            gateway_mac,
+            gateway_ip,
+            tx_receiver,
+            rx_sender,
+        )
+        .map_err(|e| VmError::Config(format!("network setup: {e}")))?;
+
+        Some(handle)
+    } else {
+        None
+    };
+
     // ── 14. Run vCPU loop ──
     let exit_reason = run_loop::run_vcpu_loop(
         &mut vcpu,
@@ -210,6 +285,10 @@ pub fn boot_and_run<H: Hypervisor, W: Write>(
         &*guest_mem_arc,
         stop_flag,
     )?;
+
+    // Explicitly drop the net I/O handle after the run loop exits.
+    // This signals the I/O thread to stop and joins it.
+    drop(net_io_handle);
 
     Ok(VmRunResult { exit_reason })
 }
