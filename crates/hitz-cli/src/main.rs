@@ -139,6 +139,8 @@ enum VmCommand {
     List(VmListArgs),
     /// Delete a stopped VM.
     Delete(VmIdArgs),
+    /// Stream serial console output.
+    Serial(VmIdArgs),
 }
 
 /// Arguments for `vm create`.
@@ -461,6 +463,41 @@ fn run_vm_command(cmd: VmCommand) -> Result<()> {
                     println!("deleted {}", args.id);
                 } else {
                     println!("{status}: {resp}");
+                }
+            }
+            VmCommand::Serial(args) => {
+                use http_body_util::BodyExt as _;
+
+                let resp = pipe_client::request_stream(
+                    &args.pipe,
+                    args.tcp,
+                    &format!("/vms/{}/serial", args.id),
+                )
+                .await?;
+
+                let status = resp.status();
+                let mut body = resp.into_body();
+
+                if !status.is_success() {
+                    let collected = body.collect().await.context("read error body")?.to_bytes();
+                    let text = String::from_utf8_lossy(&collected);
+                    anyhow::bail!("serial stream failed ({status}): {text}");
+                }
+
+                let mut out = stdout();
+                while let Some(frame_result) = body.frame().await {
+                    match frame_result {
+                        Ok(frame) => {
+                            if let Some(data) = frame.data_ref() {
+                                out.write_all(data)?;
+                                out.flush()?;
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("stream error: {e}");
+                            break;
+                        }
+                    }
                 }
             }
         }

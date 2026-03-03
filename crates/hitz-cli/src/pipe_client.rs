@@ -35,6 +35,52 @@ pub async fn pipe_request(
     }
 }
 
+/// Send a GET request and return the raw response for streaming.
+///
+/// Unlike [`pipe_request`], this does **not** collect the response body.
+/// The caller is expected to consume frames from the returned
+/// [`hyper::body::Incoming`] body.
+pub async fn request_stream(
+    pipe_path: &str,
+    tcp_addr: Option<SocketAddr>,
+    path: &str,
+) -> Result<hyper::Response<hyper::body::Incoming>> {
+    if let Some(addr) = tcp_addr {
+        let stream = TcpStream::connect(addr)
+            .await
+            .with_context(|| format!("cannot connect to daemon at {addr} — is it running?"))?;
+        do_request_stream(TokioIo::new(stream), path).await
+    } else {
+        let pipe = ClientOptions::new()
+            .open(pipe_path)
+            .with_context(|| format!("cannot connect to daemon at {pipe_path} — is it running?"))?;
+        do_request_stream(TokioIo::new(pipe), path).await
+    }
+}
+
+/// Send a GET request and return the raw response (body not collected).
+async fn do_request_stream<I>(io: I, path: &str) -> Result<hyper::Response<hyper::body::Incoming>>
+where
+    I: hyper::rt::Read + hyper::rt::Write + Unpin + Send + 'static,
+{
+    let (mut sender, conn) = http1::handshake(io)
+        .await
+        .context("HTTP handshake failed")?;
+
+    drop(tokio::spawn(conn));
+
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri(path)
+        .body(Full::new(Bytes::new()))
+        .context("build request")?;
+
+    sender
+        .send_request(req)
+        .await
+        .context("send request failed")
+}
+
 /// Perform an HTTP/1.1 request over the given I/O transport.
 async fn do_request<I>(
     io: I,

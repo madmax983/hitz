@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 
 use hitz_api::{VmConfig, VmInfo, VmState};
 use hitz_hal::Hypervisor;
-use hitz_vmm::ExitReason;
+use hitz_vmm::{ExitReason, SerialBuf, SerialReader};
 
 use crate::error::DaemonError;
 
@@ -16,6 +16,7 @@ struct VmEntry {
     state: VmState,
     exit_reason: Option<String>,
     stop_flag: Option<Arc<AtomicBool>>,
+    serial_buf: Option<SerialBuf>,
 }
 
 impl VmEntry {
@@ -78,6 +79,7 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
             state: VmState::Created,
             exit_reason: None,
             stop_flag: None,
+            serial_buf: None,
         };
         let info = entry.to_info(&id);
         let _ = vms.insert(id, entry);
@@ -88,7 +90,7 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
     /// Boot a previously created VM.
     #[allow(clippy::significant_drop_tightening)]
     pub fn start_vm(&self, id: &str) -> Result<VmInfo, DaemonError> {
-        let (config, stop_flag, info) = {
+        let (config, stop_flag, serial_buf, info) = {
             let mut vms = self
                 .vms
                 .lock()
@@ -109,7 +111,10 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
             entry.stop_flag = Some(flag.clone());
             entry.state = VmState::Running;
 
-            (entry.config.clone(), flag, entry.to_info(id))
+            let serial_buf = SerialBuf::new();
+            entry.serial_buf = Some(serial_buf.clone());
+
+            (entry.config.clone(), flag, serial_buf, entry.to_info(id))
         };
         // Mutex released here — spawn_blocking must not hold it.
 
@@ -120,8 +125,7 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
         // Fire-and-forget: the spawned task updates VM state on completion.
         drop(tokio::task::spawn(async move {
             let result = tokio::task::spawn_blocking(move || {
-                // Serial output goes to a sink (log file deferred).
-                hitz_vmm::boot_and_run(&*hv, &config, std::io::sink(), Some(&*stop_flag))
+                hitz_vmm::boot_and_run(&*hv, &config, serial_buf, Some(&*stop_flag))
             })
             .await;
 
@@ -150,6 +154,9 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
                     }
                 }
                 entry.stop_flag = None;
+                if let Some(ref buf) = entry.serial_buf {
+                    buf.close();
+                }
             }
         }));
 
@@ -181,6 +188,32 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
         let info = entry.to_info(id);
         drop(vms);
         Ok(info)
+    }
+
+    /// Get a serial output reader for a VM.
+    ///
+    /// Returns a [`SerialReader`] that can be polled for chunks of serial
+    /// output.  Only available while the VM is running (i.e. has a serial
+    /// buffer attached).
+    pub fn serial_reader(&self, id: &str) -> Result<SerialReader, DaemonError> {
+        let vms = self
+            .vms
+            .lock()
+            .map_err(|e| DaemonError::Internal(e.to_string()))?;
+        let entry = vms
+            .get(id)
+            .ok_or_else(|| DaemonError::NotFound(id.to_string()))?;
+        let reader = entry
+            .serial_buf
+            .as_ref()
+            .map(SerialBuf::reader)
+            .ok_or_else(|| DaemonError::InvalidState {
+                id: id.to_string(),
+                state: entry.state,
+                expected: "Running (with serial buffer)".to_string(),
+            })?;
+        drop(vms);
+        Ok(reader)
     }
 
     /// Get info about a single VM.

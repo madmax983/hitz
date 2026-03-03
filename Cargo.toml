@@ -56,6 +56,7 @@ vm-superio = "0.8"
 
 # External - networking
 wintun = "0.5"
+crossbeam-channel = "0.5"
 
 # External - async runtime & server
 tokio = { version = "1", features = ["full"] }

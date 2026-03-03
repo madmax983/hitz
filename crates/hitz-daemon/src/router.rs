@@ -5,21 +5,51 @@
 #![allow(clippy::expect_used)]
 
 use std::convert::Infallible;
+use std::pin::Pin;
+use std::task::{Context, Poll};
 
 use bytes::Bytes;
 use hitz_api::{ActionVmRequest, ApiError, CreateVmRequest, VmAction};
 use hitz_hal::Hypervisor;
+use http_body_util::combinators::BoxBody;
 use http_body_util::{BodyExt, Full};
+use hyper::body::{Body, Frame};
 use hyper::{Method, Request, Response, StatusCode, body::Incoming};
 
 use crate::error::DaemonError;
 use crate::vm_manager::VmManager;
 
+/// Streaming body backed by a tokio mpsc channel.
+struct ChannelBody {
+    rx: tokio::sync::mpsc::Receiver<Bytes>,
+}
+
+impl Body for ChannelBody {
+    type Data = Bytes;
+    type Error = Infallible;
+
+    fn poll_frame(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Result<Frame<Bytes>, Infallible>>> {
+        match self.rx.poll_recv(cx) {
+            Poll::Ready(Some(bytes)) => Poll::Ready(Some(Ok(Frame::data(bytes)))),
+            Poll::Ready(None) => Poll::Ready(None),
+            Poll::Pending => Poll::Pending,
+        }
+    }
+}
+
+/// Wrap a `Full<Bytes>` body into a boxed body.
+fn full_boxed(body: Full<Bytes>) -> BoxBody<Bytes, Infallible> {
+    body.map_err(|never| match never {}).boxed()
+}
+
 /// Route an incoming HTTP request to the appropriate handler.
 pub async fn route<H>(
     req: Request<Incoming>,
     manager: &VmManager<H>,
-) -> Result<Response<Full<Bytes>>, Infallible>
+) -> Result<Response<BoxBody<Bytes, Infallible>>, Infallible>
 where
     H: Hypervisor + Send + Sync + 'static,
 {
@@ -51,13 +81,14 @@ async fn route_vm<H>(
     id: &str,
     suffix: Option<&str>,
     manager: &VmManager<H>,
-) -> Result<Response<Full<Bytes>>, DaemonError>
+) -> Result<Response<BoxBody<Bytes, Infallible>>, DaemonError>
 where
     H: Hypervisor + Send + Sync + 'static,
 {
     match (method, suffix) {
         (&Method::PUT, None) => handle_create(req, id, manager).await,
         (&Method::GET, None) => handle_get(id, manager),
+        (&Method::GET, Some("serial")) => handle_serial(id, manager),
         (&Method::DELETE, None) => handle_delete(id, manager),
         (&Method::POST, Some("action")) => handle_action(req, id, manager).await,
         _ => Ok(error_response(
@@ -71,7 +102,7 @@ async fn handle_create<H>(
     req: Request<Incoming>,
     id: &str,
     manager: &VmManager<H>,
-) -> Result<Response<Full<Bytes>>, DaemonError>
+) -> Result<Response<BoxBody<Bytes, Infallible>>, DaemonError>
 where
     H: Hypervisor + Send + Sync + 'static,
 {
@@ -87,7 +118,10 @@ where
     json_response(StatusCode::CREATED, &info)
 }
 
-fn handle_get<H>(id: &str, manager: &VmManager<H>) -> Result<Response<Full<Bytes>>, DaemonError>
+fn handle_get<H>(
+    id: &str,
+    manager: &VmManager<H>,
+) -> Result<Response<BoxBody<Bytes, Infallible>>, DaemonError>
 where
     H: Hypervisor + Send + Sync + 'static,
 {
@@ -95,7 +129,9 @@ where
     json_response(StatusCode::OK, &info)
 }
 
-fn handle_list<H>(manager: &VmManager<H>) -> Result<Response<Full<Bytes>>, DaemonError>
+fn handle_list<H>(
+    manager: &VmManager<H>,
+) -> Result<Response<BoxBody<Bytes, Infallible>>, DaemonError>
 where
     H: Hypervisor + Send + Sync + 'static,
 {
@@ -103,14 +139,17 @@ where
     json_response(StatusCode::OK, &list)
 }
 
-fn handle_delete<H>(id: &str, manager: &VmManager<H>) -> Result<Response<Full<Bytes>>, DaemonError>
+fn handle_delete<H>(
+    id: &str,
+    manager: &VmManager<H>,
+) -> Result<Response<BoxBody<Bytes, Infallible>>, DaemonError>
 where
     H: Hypervisor + Send + Sync + 'static,
 {
     manager.delete_vm(id)?;
     Ok(Response::builder()
         .status(StatusCode::NO_CONTENT)
-        .body(Full::new(Bytes::new()))
+        .body(full_boxed(Full::new(Bytes::new())))
         .expect("build empty response"))
 }
 
@@ -118,7 +157,7 @@ async fn handle_action<H>(
     req: Request<Incoming>,
     id: &str,
     manager: &VmManager<H>,
-) -> Result<Response<Full<Bytes>>, DaemonError>
+) -> Result<Response<BoxBody<Bytes, Infallible>>, DaemonError>
 where
     H: Hypervisor + Send + Sync + 'static,
 {
@@ -137,20 +176,46 @@ where
     json_response(StatusCode::OK, &info)
 }
 
+fn handle_serial<H>(
+    id: &str,
+    manager: &VmManager<H>,
+) -> Result<Response<BoxBody<Bytes, Infallible>>, DaemonError>
+where
+    H: Hypervisor + Send + Sync + 'static,
+{
+    let mut reader = manager.serial_reader(id)?;
+    let (tx, rx) = tokio::sync::mpsc::channel::<Bytes>(64);
+
+    drop(tokio::spawn(async move {
+        while let Some(chunk) = reader.read_chunk().await {
+            if tx.send(Bytes::from(chunk)).await.is_err() {
+                break;
+            }
+        }
+    }));
+
+    Ok(Response::builder()
+        .status(StatusCode::OK)
+        .header("content-type", "application/octet-stream")
+        .header("transfer-encoding", "chunked")
+        .body(ChannelBody { rx }.boxed())
+        .expect("build serial response"))
+}
+
 fn json_response<T: serde::Serialize>(
     status: StatusCode,
     body: &T,
-) -> Result<Response<Full<Bytes>>, DaemonError> {
+) -> Result<Response<BoxBody<Bytes, Infallible>>, DaemonError> {
     let json = serde_json::to_string(body)
         .map_err(|e| DaemonError::Internal(format!("JSON serialize: {e}")))?;
     Ok(Response::builder()
         .status(status)
         .header("content-type", "application/json")
-        .body(Full::new(Bytes::from(json)))
+        .body(full_boxed(Full::new(Bytes::from(json))))
         .expect("build json response"))
 }
 
-fn error_response(status: StatusCode, message: &str) -> Response<Full<Bytes>> {
+fn error_response(status: StatusCode, message: &str) -> Response<BoxBody<Bytes, Infallible>> {
     let body = ApiError {
         message: message.to_string(),
     };
@@ -159,11 +224,11 @@ fn error_response(status: StatusCode, message: &str) -> Response<Full<Bytes>> {
     Response::builder()
         .status(status)
         .header("content-type", "application/json")
-        .body(Full::new(Bytes::from(json)))
+        .body(full_boxed(Full::new(Bytes::from(json))))
         .expect("build error response")
 }
 
-fn daemon_error_response(err: &DaemonError) -> Response<Full<Bytes>> {
+fn daemon_error_response(err: &DaemonError) -> Response<BoxBody<Bytes, Infallible>> {
     let status = match err {
         DaemonError::NotFound(_) => StatusCode::NOT_FOUND,
         DaemonError::AlreadyExists(_) | DaemonError::InvalidState { .. } => StatusCode::CONFLICT,

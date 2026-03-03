@@ -1,3 +1,6 @@
 //! Networking for Hitz.
 //!
-//! virtio-net device + `WinTun` adapter integration.
+//! Ethernet frame parsing, ARP handling, virtio-net support,
+//! and `WinTun` adapter integration.
+
+pub mod ethernet;
