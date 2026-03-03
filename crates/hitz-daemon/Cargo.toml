@@ -11,16 +11,11 @@ workspace = true
 [dependencies]
 hitz-api.workspace = true
 hitz-hal.workspace = true
+hitz-vmm.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
+tokio.workspace = true
+serde_json.workspace = true
 
-# Phase 5+ deps
-# hitz-vmm.workspace = true
-# tokio.workspace = true
-# hyper.workspace = true
-# http-body-util.workspace = true
-# hyper-util.workspace = true
-# serde.workspace = true
-# serde_json.workspace = true
-# anyhow.workspace = true
-# tracing-subscriber.workspace = true
+[dev-dependencies]
+tempfile = "3"
