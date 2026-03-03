@@ -1271,3 +1271,95 @@ fn phase4_boot_real_linux() {
         "expected 'Linux version' or 'hitz-boot-ok' in serial output ({output_len} bytes)"
     );
 }
+
+// ─── Phase 5: boot_and_run extraction ────────────────────────────────────────
+
+/// Phase 5 checkpoint: `boot_and_run` produces identical results to the Phase 2
+/// hand-rolled pipeline.
+///
+/// Creates a temporary ELF file that writes "Hello" to COM1 then halts,
+/// wraps it in a `VmConfig`, and calls `boot_and_run`. Validates that the
+/// extracted pipeline produces the same serial output as the Phase 2 test.
+#[test]
+#[ignore = "requires WHP enabled (Hyper-V)"]
+fn phase5_boot_and_run_hello() {
+    use std::io::Write;
+    use std::sync::{Arc, Mutex};
+
+    use hitz_api::VmConfig;
+    use hitz_vmm::ExitReason;
+
+    // x86-64 machine code that writes "Hello" to COM1 (0x3F8) then halts.
+    // Same code as phase2_serial_output_from_elf.
+    let code: &[u8] = &[
+        0xBA, 0xF8, 0x03, 0x00, 0x00, // mov edx, 0x3F8
+        0xB0, 0x48, // mov al, 'H'
+        0xEE, // out dx, al
+        0xB0, 0x65, // mov al, 'e'
+        0xEE, // out dx, al
+        0xB0, 0x6C, // mov al, 'l'
+        0xEE, // out dx, al
+        0xB0, 0x6C, // mov al, 'l'
+        0xEE, // out dx, al
+        0xB0, 0x6F, // mov al, 'o'
+        0xEE, // out dx, al
+        0xF4, // hlt
+    ];
+
+    let load_addr = 0x10_0000u64;
+    let elf = make_boot_elf(load_addr, code);
+
+    // Write ELF to a temp file so boot_and_run can read it by path.
+    let mut tmp = tempfile::NamedTempFile::new().expect("create temp file");
+    tmp.write_all(&elf).expect("write ELF to temp file");
+    tmp.flush().expect("flush temp file");
+
+    let config = VmConfig {
+        kernel_path: tmp.path().to_path_buf(),
+        initramfs_path: None,
+        disk_path: None,
+        ram_mib: 128,
+        cmdline: Some("console=ttyS0\0".into()),
+    };
+
+    let hv = WhpHypervisor::new().expect("WHP not available");
+
+    // SharedWriter: captures serial output via Arc<Mutex<Vec<u8>>>.
+    let buffer: Arc<Mutex<Vec<u8>>> = Arc::new(Mutex::new(Vec::new()));
+    let writer = SharedWriter(Arc::clone(&buffer));
+
+    let result = hitz_vmm::boot_and_run(&hv, &config, writer).expect("boot_and_run failed");
+
+    assert_eq!(
+        result.exit_reason,
+        ExitReason::Halt,
+        "expected Halt exit, got {:?}",
+        result.exit_reason
+    );
+
+    let output = buffer.lock().expect("lock buffer");
+    assert_eq!(
+        output.as_slice(),
+        b"Hello",
+        "serial output mismatch: got {:?}",
+        String::from_utf8_lossy(&output)
+    );
+}
+
+/// Thread-safe writer for capturing serial output in tests.
+struct SharedWriter(std::sync::Arc<std::sync::Mutex<Vec<u8>>>);
+
+impl std::io::Write for SharedWriter {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let mut vec = self
+            .0
+            .lock()
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+        vec.extend_from_slice(buf);
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}

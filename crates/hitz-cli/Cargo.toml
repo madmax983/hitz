@@ -5,15 +5,18 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[[bin]]
+name = "hitz"
+path = "src/main.rs"
+
 [lints]
 workspace = true
 
 [dependencies]
 hitz-api.workspace = true
-thiserror.workspace = true
-
-# Phase 5+ deps
-# clap.workspace = true
-# serde_json.workspace = true
-# tokio.workspace = true
-# anyhow.workspace = true
+hitz-hal.workspace = true
+hitz-vmm.workspace = true
+hitz-whp.workspace = true
+anyhow.workspace = true
+clap.workspace = true
+tracing-subscriber.workspace = true
