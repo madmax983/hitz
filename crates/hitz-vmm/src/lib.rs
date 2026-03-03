@@ -17,4 +17,4 @@ pub use boot_regs::{GDT_GPA, configure_regs, configure_sregs, write_gdt};
 pub use error::MemError;
 pub use memory::GuestMemory;
 pub use run_loop::{ExitReason, run_vcpu_loop};
-pub use vm::{VmError, VmRunResult, boot_and_run};
+pub use vm::{VmError, VmRunResult, boot_and_run, validate_config};

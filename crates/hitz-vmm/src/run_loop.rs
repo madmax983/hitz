@@ -5,10 +5,12 @@
 //! write them back before re-entering the guest. Without this, the guest
 //! infinite-loops on the faulting instruction.
 
+use std::io::Write;
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use hitz_devices::mmio_bus::MmioBus;
 use hitz_devices::serial::SerialDevice;
 use hitz_hal::{GuestMemAccess, HalError, IoPortExit, Vcpu, VcpuExit};
-use std::io::Write;
 
 use crate::mmio_decode;
 
@@ -28,6 +30,8 @@ pub enum ExitReason {
     Halt,
     /// Guest initiated shutdown (triple fault, etc.).
     Shutdown,
+    /// VM was stopped via the stop flag (user-initiated cancel).
+    Canceled,
     /// Unexpected exit that the run loop doesn't know how to handle.
     Unexpected(String),
 }
@@ -47,6 +51,7 @@ pub fn run_vcpu_loop<V: Vcpu, W: Write>(
     serial: &mut SerialDevice<W>,
     mmio_bus: &mut MmioBus,
     mem: &dyn GuestMemAccess,
+    stop_flag: Option<&AtomicBool>,
 ) -> Result<ExitReason, HalError> {
     let mut pending_irq: Option<u8> = None;
     let mut iterations: u64 = 0;
@@ -57,6 +62,12 @@ pub fn run_vcpu_loop<V: Vcpu, W: Write>(
             return Ok(ExitReason::Unexpected(
                 "iteration limit reached".to_string(),
             ));
+        }
+
+        if let Some(flag) = stop_flag
+            && flag.load(Ordering::Relaxed)
+        {
+            return Ok(ExitReason::Canceled);
         }
 
         let exit = vcpu.run()?;

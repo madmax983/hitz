@@ -106,7 +106,7 @@ fn run_vm(args: RunArgs) -> Result<ExitCode> {
     let serial_out = BufWriter::new(stdout().lock());
 
     let result =
-        hitz_vmm::boot_and_run(&hypervisor, &config, serial_out).context("VM boot failed")?;
+        hitz_vmm::boot_and_run(&hypervisor, &config, serial_out, None).context("VM boot failed")?;
 
     // Flush stdout before printing to stderr.
     let _ = stdout().flush();
@@ -116,7 +116,7 @@ fn run_vm(args: RunArgs) -> Result<ExitCode> {
     }
 
     match result.exit_reason {
-        ExitReason::Halt => Ok(ExitCode::SUCCESS),
+        ExitReason::Halt | ExitReason::Canceled => Ok(ExitCode::SUCCESS),
         ExitReason::Shutdown | ExitReason::Unexpected(_) => Ok(ExitCode::FAILURE),
     }
 }

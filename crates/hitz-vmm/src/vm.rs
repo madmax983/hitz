@@ -6,6 +6,7 @@
 use std::fs;
 use std::io::Write;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 
 use hitz_api::VmConfig;
 use hitz_boot::{
@@ -66,7 +67,7 @@ pub struct VmRunResult {
 }
 
 /// Validate a `VmConfig` before booting.
-fn validate_config(config: &VmConfig) -> Result<(), VmError> {
+pub fn validate_config(config: &VmConfig) -> Result<(), VmError> {
     if !config.kernel_path.exists() {
         return Err(VmError::Config(format!(
             "kernel not found: {}",
@@ -115,6 +116,7 @@ pub fn boot_and_run<H: Hypervisor, W: Write>(
     hypervisor: &H,
     config: &VmConfig,
     serial_out: W,
+    stop_flag: Option<&AtomicBool>,
 ) -> Result<VmRunResult, VmError> {
     // ── 1. Validate config ──
     validate_config(config)?;
@@ -201,8 +203,13 @@ pub fn boot_and_run<H: Hypervisor, W: Write>(
     }
 
     // ── 14. Run vCPU loop ──
-    let exit_reason =
-        run_loop::run_vcpu_loop(&mut vcpu, &mut serial, &mut mmio_bus, &*guest_mem_arc)?;
+    let exit_reason = run_loop::run_vcpu_loop(
+        &mut vcpu,
+        &mut serial,
+        &mut mmio_bus,
+        &*guest_mem_arc,
+        stop_flag,
+    )?;
 
     Ok(VmRunResult { exit_reason })
 }
