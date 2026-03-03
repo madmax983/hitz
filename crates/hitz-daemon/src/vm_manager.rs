@@ -441,4 +441,33 @@ mod tests {
         let err = mgr.stop_vm("vm1").unwrap_err();
         assert!(err.to_string().contains("Created"), "got: {err}");
     }
+
+    #[test]
+    fn serial_buf_available_after_start() {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("build runtime");
+
+        rt.block_on(async {
+            let mgr = make_manager();
+            mgr.create_vm("vm1".into(), make_config()).expect("create");
+
+            // Start will fail (FakeHypervisor can't create partition) but
+            // serial_buf should be created before boot_and_run is called.
+            let _ = mgr.start_vm("vm1");
+
+            // Give the spawned task a moment to start.
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+            // Serial reader should be available because start_vm sets it up
+            // before spawning the blocking task.
+            let reader = mgr.serial_reader("vm1");
+            assert!(
+                reader.is_ok(),
+                "serial reader should exist after start: {}",
+                reader.err().map_or_else(String::new, |e| e.to_string())
+            );
+        });
+    }
 }

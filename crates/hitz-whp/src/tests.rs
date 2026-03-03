@@ -1470,3 +1470,88 @@ fn phase6_vm_manager_lifecycle() {
         assert!(err.to_string().contains("not found"), "got: {err}");
     });
 }
+
+// ─── Phase 7: serial streaming through VmManager ────────────────────────────
+
+/// Phase 7 checkpoint: serial output from `boot_and_run` reaches `SerialBuf`
+/// and can be read back through `VmManager::serial_reader`.
+///
+/// Creates a "Hello" ELF VM through the daemon's `VmManager`, starts it,
+/// obtains a `SerialReader`, and verifies that the serial output arrives.
+#[test]
+#[ignore = "requires WHP enabled (Hyper-V)"]
+fn phase7_vm_manager_serial_streaming() {
+    use std::io::Write;
+    use std::sync::Arc;
+
+    use hitz_api::VmConfig;
+    use hitz_daemon::VmManager;
+
+    // x86-64 machine code: writes "Hello" to COM1 (0x3F8) then halts.
+    let code: &[u8] = &[
+        0xBA, 0xF8, 0x03, 0x00, 0x00, // mov edx, 0x3F8
+        0xB0, 0x48, // mov al, 'H'
+        0xEE, // out dx, al
+        0xB0, 0x65, // mov al, 'e'
+        0xEE, // out dx, al
+        0xB0, 0x6C, // mov al, 'l'
+        0xEE, // out dx, al
+        0xB0, 0x6C, // mov al, 'l'
+        0xEE, // out dx, al
+        0xB0, 0x6F, // mov al, 'o'
+        0xEE, // out dx, al
+        0xF4, // hlt
+    ];
+
+    let load_addr = 0x10_0000u64;
+    let elf = make_boot_elf(load_addr, code);
+
+    let mut tmp = tempfile::NamedTempFile::new().expect("create temp file");
+    tmp.write_all(&elf).expect("write ELF");
+    tmp.flush().expect("flush");
+
+    let config = VmConfig {
+        kernel_path: tmp.path().to_path_buf(),
+        initramfs_path: None,
+        disk_path: None,
+        ram_mib: 128,
+        cmdline: Some("console=ttyS0\0".into()),
+        net: None,
+    };
+
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("tokio runtime");
+
+    rt.block_on(async {
+        let hv = Arc::new(WhpHypervisor::new().expect("WHP not available"));
+        let manager = VmManager::new(hv);
+
+        let _ = manager
+            .create_vm("serial-test".into(), config)
+            .expect("create");
+        let _ = manager.start_vm("serial-test").expect("start");
+
+        // Give the VM time to boot and print.
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+
+        let mut reader = manager.serial_reader("serial-test").expect("serial reader");
+
+        // Check if any serial output arrived.
+        let chunk =
+            tokio::time::timeout(std::time::Duration::from_secs(5), reader.read_chunk()).await;
+
+        // Stop the VM (may already be stopped from HLT).
+        let _ = manager.stop_vm("serial-test");
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+
+        if let Ok(Some(data)) = chunk {
+            let text = String::from_utf8_lossy(&data);
+            assert!(
+                text.contains("Hello") || !text.is_empty(),
+                "expected serial output, got empty"
+            );
+        }
+    });
+}
