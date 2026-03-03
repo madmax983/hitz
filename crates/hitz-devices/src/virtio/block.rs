@@ -198,7 +198,7 @@ impl VirtioBackend for VirtioBlockDevice {
         0 // no special features for now
     }
 
-    fn process_queue(&mut self, queue: &mut VirtQueue, mem: &dyn GuestMemAccess) {
+    fn process_queue(&mut self, _queue_idx: u16, queue: &mut VirtQueue, mem: &dyn GuestMemAccess) {
         while let Some(mut chain) = queue.pop_chain(mem) {
             let head = chain.head_index();
             let written = self.process_request(&mut chain, mem);
@@ -419,7 +419,7 @@ mod tests {
         setup_request_chain(&mem, 0, VIRTIO_BLK_T_IN, 0, 32, true);
 
         // Process the queue.
-        dev.process_queue(&mut q, &mem);
+        dev.process_queue(0, &mut q, &mem);
 
         // Check the data buffer was written to guest memory.
         let result = mem.read_bytes(DATA_GPA, 32);
@@ -444,7 +444,7 @@ mod tests {
         // Set up a write request: type=OUT, sector=0, data_len=32.
         setup_request_chain(&mem, 0, VIRTIO_BLK_T_OUT, 0, 32, false);
 
-        dev.process_queue(&mut q, &mem);
+        dev.process_queue(0, &mut q, &mem);
 
         // Check status is OK.
         let status = mem.read_bytes(STATUS_GPA, 1);
@@ -467,7 +467,7 @@ mod tests {
         // Try to read sector 5 (out of bounds for a 1-sector disk).
         setup_request_chain(&mem, 0, VIRTIO_BLK_T_IN, 5, 512, true);
 
-        dev.process_queue(&mut q, &mem);
+        dev.process_queue(0, &mut q, &mem);
 
         // Check status is IOERR.
         let status = mem.read_bytes(STATUS_GPA, 1);
@@ -483,7 +483,7 @@ mod tests {
 
         setup_request_chain(&mem, 0, VIRTIO_BLK_T_OUT, 5, 512, false);
 
-        dev.process_queue(&mut q, &mem);
+        dev.process_queue(0, &mut q, &mem);
 
         let status = mem.read_bytes(STATUS_GPA, 1);
         assert_eq!(status[0], VIRTIO_BLK_S_IOERR);
@@ -505,7 +505,7 @@ mod tests {
 
         // Read sector 2.
         setup_request_chain(&mem, 0, VIRTIO_BLK_T_IN, 2, 512, true);
-        dev.process_queue(&mut q, &mem);
+        dev.process_queue(0, &mut q, &mem);
 
         let result = mem.read_bytes(DATA_GPA, 512);
         assert!(result.iter().all(|&b| b == 0xAB));

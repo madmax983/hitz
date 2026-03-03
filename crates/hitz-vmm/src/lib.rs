@@ -11,10 +11,12 @@ pub mod error;
 pub mod memory;
 pub mod mmio_decode;
 pub mod run_loop;
+pub mod serial_buf;
 pub mod vm;
 
 pub use boot_regs::{GDT_GPA, configure_regs, configure_sregs, write_gdt};
 pub use error::MemError;
 pub use memory::GuestMemory;
 pub use run_loop::{ExitReason, run_vcpu_loop};
+pub use serial_buf::{SerialBuf, SerialReader};
 pub use vm::{VmError, VmRunResult, boot_and_run, validate_config};

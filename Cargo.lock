@@ -353,6 +353,7 @@ dependencies = [
  "hitz-hal",
  "tempfile",
  "thiserror",
+ "tokio",
  "tracing",
  "windows",
 ]

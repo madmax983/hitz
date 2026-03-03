@@ -1334,6 +1334,7 @@ fn phase5_boot_and_run_hello() {
         disk_path: None,
         ram_mib: 128,
         cmdline: Some("console=ttyS0\0".into()),
+        net: None,
     };
 
     let hv = WhpHypervisor::new().expect("WHP not available");
@@ -1424,6 +1425,7 @@ fn phase6_vm_manager_lifecycle() {
         disk_path: None,
         ram_mib: 128,
         cmdline: Some("console=ttyS0\0".into()),
+        net: None,
     };
 
     let rt = tokio::runtime::Runtime::new().expect("tokio runtime");

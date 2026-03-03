@@ -20,6 +20,9 @@ hitz-devices.workspace = true
 # Phase 5
 hitz-api.workspace = true
 
+# Phase 7
+tokio.workspace = true
+
 [target.'cfg(windows)'.dependencies]
 windows = { workspace = true, features = ["Win32_System_Memory"] }
 

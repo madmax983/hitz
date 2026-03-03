@@ -12,6 +12,24 @@ pub const DEFAULT_CMDLINE: &str = "console=ttyS0 earlyprintk=serial";
 /// Default guest RAM in MiB (256 MiB).
 pub const DEFAULT_RAM_MIB: u32 = 256;
 
+/// Default host IP for guest networking.
+pub const DEFAULT_HOST_IP: &str = "192.168.100.1/24";
+/// Default guest IP for guest networking.
+pub const DEFAULT_GUEST_IP: &str = "192.168.100.2/24";
+
+/// Network configuration for a VM.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NetConfig {
+    /// Guest MAC address (e.g. "AA:BB:CC:DD:EE:FF"). Random if `None`.
+    pub mac: Option<String>,
+    /// Host-side IP address with prefix (e.g. "192.168.100.1/24").
+    pub host_ip: String,
+    /// Guest-side IP address with prefix (e.g. "192.168.100.2/24").
+    pub guest_ip: String,
+    /// `WinTun` adapter name. Defaults to "hitz-{vm_id}" if `None`.
+    pub adapter_name: Option<String>,
+}
+
 /// VM configuration — everything needed to boot a micro-VM.
 ///
 /// Serializable for the future daemon REST API (Phase 6).
@@ -27,6 +45,8 @@ pub struct VmConfig {
     pub ram_mib: u32,
     /// Custom kernel command line (default: [`DEFAULT_CMDLINE`]).
     pub cmdline: Option<String>,
+    /// Optional network configuration for virtio-net.
+    pub net: Option<NetConfig>,
 }
 
 impl VmConfig {
@@ -106,6 +126,7 @@ mod tests {
             disk_path: None,
             ram_mib: DEFAULT_RAM_MIB,
             cmdline: None,
+            net: None,
         };
         assert_eq!(cfg.effective_cmdline(), DEFAULT_CMDLINE);
     }
@@ -118,6 +139,7 @@ mod tests {
             disk_path: None,
             ram_mib: DEFAULT_RAM_MIB,
             cmdline: Some("root=/dev/vda rw".into()),
+            net: None,
         };
         assert_eq!(cfg.effective_cmdline(), "root=/dev/vda rw");
     }
@@ -135,6 +157,7 @@ mod tests {
             disk_path: Some(PathBuf::from("/images/root.img")),
             ram_mib: 512,
             cmdline: Some("console=ttyS0".into()),
+            net: None,
         };
         let json = serde_json::to_string(&cfg).expect("serialize");
         let restored: VmConfig = serde_json::from_str(&json).expect("deserialize");
@@ -154,6 +177,7 @@ mod tests {
             disk_path: None,
             ram_mib: DEFAULT_RAM_MIB,
             cmdline: None,
+            net: None,
         };
         let json = serde_json::to_string(&cfg).expect("serialize");
         let restored: VmConfig = serde_json::from_str(&json).expect("deserialize");
@@ -199,6 +223,7 @@ mod tests {
                 disk_path: Some(PathBuf::from("/images/root.img")),
                 ram_mib: 512,
                 cmdline: Some("console=ttyS0".into()),
+                net: None,
             },
             exit_reason: None,
         };
@@ -220,6 +245,7 @@ mod tests {
                 disk_path: None,
                 ram_mib: DEFAULT_RAM_MIB,
                 cmdline: None,
+                net: None,
             },
         };
         let json = serde_json::to_string(&req).expect("serialize");
@@ -246,5 +272,40 @@ mod tests {
         let json = serde_json::to_string(&err).expect("serialize");
         let restored: ApiError = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(restored.message, err.message);
+    }
+
+    #[test]
+    fn net_config_serde_roundtrip() {
+        let cfg = NetConfig {
+            mac: Some("AA:BB:CC:DD:EE:FF".into()),
+            host_ip: DEFAULT_HOST_IP.into(),
+            guest_ip: DEFAULT_GUEST_IP.into(),
+            adapter_name: Some("hitz-test".into()),
+        };
+        let json = serde_json::to_string(&cfg).expect("serialize");
+        let restored: NetConfig = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(restored.host_ip, cfg.host_ip);
+        assert_eq!(restored.guest_ip, cfg.guest_ip);
+        assert_eq!(restored.mac, cfg.mac);
+    }
+
+    #[test]
+    fn vm_config_with_net_serde() {
+        let cfg = VmConfig {
+            kernel_path: PathBuf::from("vmlinux"),
+            initramfs_path: None,
+            disk_path: None,
+            ram_mib: DEFAULT_RAM_MIB,
+            cmdline: None,
+            net: Some(NetConfig {
+                mac: None,
+                host_ip: DEFAULT_HOST_IP.into(),
+                guest_ip: DEFAULT_GUEST_IP.into(),
+                adapter_name: None,
+            }),
+        };
+        let json = serde_json::to_string(&cfg).expect("serialize");
+        let restored: VmConfig = serde_json::from_str(&json).expect("deserialize");
+        assert!(restored.net.is_some());
     }
 }

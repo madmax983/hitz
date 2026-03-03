@@ -79,6 +79,22 @@ struct RunArgs {
     /// Verbose output (banner + exit summary on stderr).
     #[arg(short, long)]
     verbose: bool,
+
+    /// Enable networking.
+    #[arg(long)]
+    net: bool,
+
+    /// Host-side IP address with prefix.
+    #[arg(long, default_value = hitz_api::DEFAULT_HOST_IP)]
+    host_ip: String,
+
+    /// Guest-side IP address with prefix.
+    #[arg(long, default_value = hitz_api::DEFAULT_GUEST_IP)]
+    guest_ip: String,
+
+    /// Guest MAC address.
+    #[arg(long)]
+    mac: Option<String>,
 }
 
 // ── Daemon ──
@@ -96,6 +112,10 @@ struct DaemonStartArgs {
     /// Named pipe path.
     #[arg(long, default_value = DEFAULT_PIPE)]
     pipe: String,
+
+    /// Optional TCP address to listen on (e.g. 127.0.0.1:8080).
+    #[arg(long)]
+    tcp_listen: Option<std::net::SocketAddr>,
 
     /// Verbose output.
     #[arg(short, long)]
@@ -150,6 +170,26 @@ struct VmCreateArgs {
     /// Named pipe path.
     #[arg(long, default_value = DEFAULT_PIPE)]
     pipe: String,
+
+    /// Connect to daemon via TCP instead of named pipe.
+    #[arg(long)]
+    tcp: Option<std::net::SocketAddr>,
+
+    /// Enable networking.
+    #[arg(long)]
+    net: bool,
+
+    /// Host-side IP address with prefix.
+    #[arg(long, default_value = hitz_api::DEFAULT_HOST_IP)]
+    host_ip: String,
+
+    /// Guest-side IP address with prefix.
+    #[arg(long, default_value = hitz_api::DEFAULT_GUEST_IP)]
+    guest_ip: String,
+
+    /// Guest MAC address.
+    #[arg(long)]
+    mac: Option<String>,
 }
 
 /// Arguments that take just a VM ID.
@@ -161,6 +201,10 @@ struct VmIdArgs {
     /// Named pipe path.
     #[arg(long, default_value = DEFAULT_PIPE)]
     pipe: String,
+
+    /// Connect to daemon via TCP instead of named pipe.
+    #[arg(long)]
+    tcp: Option<std::net::SocketAddr>,
 }
 
 /// Arguments for `vm list`.
@@ -169,6 +213,10 @@ struct VmListArgs {
     /// Named pipe path.
     #[arg(long, default_value = DEFAULT_PIPE)]
     pipe: String,
+
+    /// Connect to daemon via TCP instead of named pipe.
+    #[arg(long)]
+    tcp: Option<std::net::SocketAddr>,
 }
 
 // ── Main ──
@@ -224,12 +272,24 @@ fn run_vm(args: RunArgs) -> Result<ExitCode> {
         eprintln!("hitz: cmdline \"{}\"", args.cmdline);
     }
 
+    let net = if args.net {
+        Some(hitz_api::NetConfig {
+            mac: args.mac,
+            host_ip: args.host_ip,
+            guest_ip: args.guest_ip,
+            adapter_name: None,
+        })
+    } else {
+        None
+    };
+
     let config = VmConfig {
         kernel_path: args.kernel,
         initramfs_path: args.initramfs,
         disk_path: args.disk,
         ram_mib: args.ram,
         cmdline: Some(args.cmdline),
+        net,
     };
 
     let hypervisor = WhpHypervisor::new().context("failed to create WHP hypervisor")?;
@@ -273,6 +333,9 @@ fn run_daemon(args: &DaemonStartArgs) -> Result<()> {
     }
 
     eprintln!("hitz: daemon listening on {}", args.pipe);
+    if let Some(addr) = args.tcp_listen {
+        eprintln!("hitz: TCP listener on {addr}");
+    }
 
     let rt = tokio::runtime::Runtime::new().context("failed to create tokio runtime")?;
 
@@ -281,7 +344,7 @@ fn run_daemon(args: &DaemonStartArgs) -> Result<()> {
         let manager = hitz_daemon::VmManager::new(hv);
 
         tokio::select! {
-            result = hitz_daemon::run_server(&args.pipe, manager.clone()) => {
+            result = hitz_daemon::run_server(&args.pipe, args.tcp_listen, manager.clone()) => {
                 result.context("server error")?;
             }
             _ = tokio::signal::ctrl_c() => {
@@ -298,6 +361,7 @@ fn run_daemon(args: &DaemonStartArgs) -> Result<()> {
 // ── hitz vm * ──
 
 /// Execute a `vm` subcommand by talking to the daemon over the named pipe.
+#[allow(clippy::too_many_lines)]
 fn run_vm_command(cmd: VmCommand) -> Result<()> {
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -307,17 +371,29 @@ fn run_vm_command(cmd: VmCommand) -> Result<()> {
     rt.block_on(async {
         match cmd {
             VmCommand::Create(args) => {
+                let net = if args.net {
+                    Some(hitz_api::NetConfig {
+                        mac: args.mac,
+                        host_ip: args.host_ip,
+                        guest_ip: args.guest_ip,
+                        adapter_name: None,
+                    })
+                } else {
+                    None
+                };
                 let config = VmConfig {
                     kernel_path: args.kernel,
                     initramfs_path: args.initramfs,
                     disk_path: args.disk,
                     ram_mib: args.ram,
                     cmdline: Some(args.cmdline),
+                    net,
                 };
                 let body = serde_json::to_string(&CreateVmRequest { config })
                     .context("serialize request")?;
                 let (status, resp) = pipe_client::pipe_request(
                     &args.pipe,
+                    args.tcp,
                     Method::PUT,
                     &format!("/vms/{}", args.id),
                     Some(&body),
@@ -332,6 +408,7 @@ fn run_vm_command(cmd: VmCommand) -> Result<()> {
                 .context("serialize request")?;
                 let (status, resp) = pipe_client::pipe_request(
                     &args.pipe,
+                    args.tcp,
                     Method::POST,
                     &format!("/vms/{}/action", args.id),
                     Some(&body),
@@ -346,6 +423,7 @@ fn run_vm_command(cmd: VmCommand) -> Result<()> {
                 .context("serialize request")?;
                 let (status, resp) = pipe_client::pipe_request(
                     &args.pipe,
+                    args.tcp,
                     Method::POST,
                     &format!("/vms/{}/action", args.id),
                     Some(&body),
@@ -356,6 +434,7 @@ fn run_vm_command(cmd: VmCommand) -> Result<()> {
             VmCommand::Status(args) => {
                 let (status, resp) = pipe_client::pipe_request(
                     &args.pipe,
+                    args.tcp,
                     Method::GET,
                     &format!("/vms/{}", args.id),
                     None,
@@ -365,12 +444,14 @@ fn run_vm_command(cmd: VmCommand) -> Result<()> {
             }
             VmCommand::List(args) => {
                 let (status, resp) =
-                    pipe_client::pipe_request(&args.pipe, Method::GET, "/vms", None).await?;
+                    pipe_client::pipe_request(&args.pipe, args.tcp, Method::GET, "/vms", None)
+                        .await?;
                 println!("{status}: {resp}");
             }
             VmCommand::Delete(args) => {
                 let (status, resp) = pipe_client::pipe_request(
                     &args.pipe,
+                    args.tcp,
                     Method::DELETE,
                     &format!("/vms/{}", args.id),
                     None,

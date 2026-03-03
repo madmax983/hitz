@@ -226,6 +226,7 @@ mod tests {
             disk_path: None,
             ram_mib: 128,
             cmdline: None,
+            net: None,
         }
     }
 

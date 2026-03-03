@@ -17,6 +17,14 @@ pub trait MmioDevice: Send {
     ///
     /// Returns `Some(vector)` if the device wants to raise an interrupt.
     fn mmio_write(&mut self, offset: u64, data: &[u8], mem: &dyn GuestMemAccess) -> Option<u8>;
+
+    /// Poll for asynchronous I/O (e.g. network RX).
+    ///
+    /// Called on every run-loop iteration. Returns `Some(vector)` if the
+    /// device wrote data and needs to raise an interrupt.
+    fn poll_rx(&mut self) -> Option<u8> {
+        None
+    }
 }
 
 /// A registered device slot on the MMIO bus.
@@ -73,6 +81,19 @@ impl MmioBus {
             if gpa >= slot.base && gpa < slot.base + slot.size {
                 let offset = gpa - slot.base;
                 return slot.device.mmio_write(offset, data, mem);
+            }
+        }
+        None
+    }
+
+    /// Poll all devices for pending asynchronous I/O.
+    ///
+    /// Returns the first interrupt vector from a device that has data ready,
+    /// or `None` if no device needs attention.
+    pub fn poll_devices(&mut self) -> Option<u8> {
+        for slot in &mut self.slots {
+            if let Some(irq) = slot.device.poll_rx() {
+                return Some(irq);
             }
         }
         None

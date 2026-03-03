@@ -70,6 +70,14 @@ pub fn run_vcpu_loop<V: Vcpu, W: Write>(
             return Ok(ExitReason::Canceled);
         }
 
+        // Poll devices for async I/O (e.g. network RX).
+        if let Some(vector) = mmio_bus.poll_devices()
+            && vcpu.inject_interrupt(vector).is_err()
+        {
+            pending_irq = Some(vector);
+            vcpu.request_interrupt_window()?;
+        }
+
         let exit = vcpu.run()?;
 
         match exit {

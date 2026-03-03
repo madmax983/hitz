@@ -98,8 +98,29 @@ pub trait VirtioBackend: Send {
     /// Return the 64-bit device feature bits.
     fn device_features(&self) -> u64;
 
+    /// Number of virtqueues this device uses.
+    ///
+    /// Defaults to 1. Devices with multiple queues (e.g. net with RX + TX)
+    /// should override this.
+    fn queue_count(&self) -> usize {
+        1
+    }
+
     /// Process all pending requests on the given queue.
-    fn process_queue(&mut self, queue: &mut VirtQueue, mem: &dyn GuestMemAccess);
+    ///
+    /// `queue_idx` identifies which virtqueue is being processed (the value
+    /// the guest wrote to `QUEUE_NOTIFY`).
+    fn process_queue(&mut self, queue_idx: u16, queue: &mut VirtQueue, mem: &dyn GuestMemAccess);
+
+    /// Poll for asynchronous received data (e.g. network RX).
+    ///
+    /// Called on every run-loop iteration. The implementation should check
+    /// for pending data and, if available, write it into the RX queue
+    /// (conventionally queue 0). Returns `true` if data was written and
+    /// an interrupt should be raised.
+    fn poll_rx(&mut self, _rx_queue: &mut VirtQueue, _mem: &dyn GuestMemAccess) -> bool {
+        false
+    }
 
     /// Read from device-specific config space.
     ///
@@ -112,15 +133,41 @@ pub trait VirtioBackend: Send {
     fn write_config(&mut self, offset: u64, data: &[u8]);
 }
 
+/// Per-queue state tracked by the MMIO transport.
+///
+/// Each virtqueue has its own ring GPAs, size, and ready flag, all
+/// configured independently by the guest via `QUEUE_SEL` + register writes.
+struct QueueState {
+    /// The virtqueue itself.
+    queue: VirtQueue,
+    /// Queue descriptor table GPA, low 32 bits.
+    desc_low: u32,
+    /// Queue descriptor table GPA, high 32 bits.
+    desc_high: u32,
+    /// Queue available ring GPA, low 32 bits.
+    avail_low: u32,
+    /// Queue available ring GPA, high 32 bits.
+    avail_high: u32,
+    /// Queue used ring GPA, low 32 bits.
+    used_low: u32,
+    /// Queue used ring GPA, high 32 bits.
+    used_high: u32,
+    /// Actual queue size set by the guest.
+    num: u16,
+}
+
 /// Virtio MMIO transport wrapping a backend device.
 ///
 /// Implements [`MmioDevice`] and manages the MMIO register file,
-/// virtqueue configuration, and device status state machine.
+/// virtqueue configuration, and device status state machine. Supports
+/// multiple virtqueues as reported by [`VirtioBackend::queue_count`].
 pub struct VirtioMmioTransport<D: VirtioBackend> {
     /// The backend device.
     device: D,
-    /// The single virtqueue (most simple devices need only one).
-    queue: VirtQueue,
+    /// Per-queue state (one entry per virtqueue).
+    queues: Vec<QueueState>,
+    /// Currently selected queue index (via `QUEUE_SEL` register).
+    queue_sel: usize,
     /// Reference to guest memory for queue operations.
     mem: Arc<dyn GuestMemAccess>,
     /// Device status register (guest-driven state machine).
@@ -135,20 +182,6 @@ pub struct VirtioMmioTransport<D: VirtioBackend> {
     driver_features: u64,
     /// Which feature page the driver is writing.
     driver_features_sel: u32,
-    /// Queue descriptor table GPA, low 32 bits.
-    queue_desc_low: u32,
-    /// Queue descriptor table GPA, high 32 bits.
-    queue_desc_high: u32,
-    /// Queue available ring GPA, low 32 bits.
-    queue_avail_low: u32,
-    /// Queue available ring GPA, high 32 bits.
-    queue_avail_high: u32,
-    /// Queue used ring GPA, low 32 bits.
-    queue_used_low: u32,
-    /// Queue used ring GPA, high 32 bits.
-    queue_used_high: u32,
-    /// Actual queue size set by the guest.
-    queue_num: u16,
     /// Config space generation counter (bumped on config change).
     config_generation: u32,
 }
@@ -156,14 +189,31 @@ pub struct VirtioMmioTransport<D: VirtioBackend> {
 impl<D: VirtioBackend> VirtioMmioTransport<D> {
     /// Create a new MMIO transport for the given backend.
     ///
+    /// Allocates one [`QueueState`] per queue reported by
+    /// [`VirtioBackend::queue_count`].
+    ///
     /// * `device` -- the virtio backend (block, net, etc.)
     /// * `mem` -- shared reference to guest memory
     /// * `irq_vector` -- interrupt vector number for this device
     #[must_use]
     pub fn new(device: D, mem: Arc<dyn GuestMemAccess>, irq_vector: u8) -> Self {
+        let queue_count = device.queue_count();
+        let queues = (0..queue_count)
+            .map(|_| QueueState {
+                queue: VirtQueue::new(QUEUE_NUM_MAX),
+                desc_low: 0,
+                desc_high: 0,
+                avail_low: 0,
+                avail_high: 0,
+                used_low: 0,
+                used_high: 0,
+                num: QUEUE_NUM_MAX,
+            })
+            .collect();
         Self {
             device,
-            queue: VirtQueue::new(QUEUE_NUM_MAX),
+            queues,
+            queue_sel: 0,
             mem,
             status: 0,
             interrupt_status: 0,
@@ -171,32 +221,28 @@ impl<D: VirtioBackend> VirtioMmioTransport<D> {
             device_features_sel: 0,
             driver_features: 0,
             driver_features_sel: 0,
-            queue_desc_low: 0,
-            queue_desc_high: 0,
-            queue_avail_low: 0,
-            queue_avail_high: 0,
-            queue_used_low: 0,
-            queue_used_high: 0,
-            queue_num: QUEUE_NUM_MAX,
             config_generation: 0,
         }
     }
 
     /// Reset the transport and device to initial state.
-    const fn reset(&mut self) {
+    fn reset(&mut self) {
         self.status = 0;
         self.interrupt_status = 0;
         self.driver_features = 0;
         self.driver_features_sel = 0;
         self.device_features_sel = 0;
-        self.queue_desc_low = 0;
-        self.queue_desc_high = 0;
-        self.queue_avail_low = 0;
-        self.queue_avail_high = 0;
-        self.queue_used_low = 0;
-        self.queue_used_high = 0;
-        self.queue_num = QUEUE_NUM_MAX;
-        self.queue.reset();
+        self.queue_sel = 0;
+        for qs in &mut self.queues {
+            qs.queue.reset();
+            qs.desc_low = 0;
+            qs.desc_high = 0;
+            qs.avail_low = 0;
+            qs.avail_high = 0;
+            qs.used_low = 0;
+            qs.used_high = 0;
+            qs.num = QUEUE_NUM_MAX;
+        }
     }
 
     /// Read a 32-bit MMIO register.
@@ -223,7 +269,10 @@ impl<D: VirtioBackend> VirtioMmioTransport<D> {
                 }
             }
             MMIO_QUEUE_NUM_MAX => u32::from(QUEUE_NUM_MAX),
-            MMIO_QUEUE_READY => u32::from(self.queue.is_ready()),
+            MMIO_QUEUE_READY => self
+                .queues
+                .get(self.queue_sel)
+                .map_or(0, |qs| u32::from(qs.queue.is_ready())),
             MMIO_INTERRUPT_STATUS => self.interrupt_status,
             MMIO_STATUS => u32::from(self.status),
             MMIO_CONFIG_GENERATION => self.config_generation,
@@ -235,6 +284,7 @@ impl<D: VirtioBackend> VirtioMmioTransport<D> {
     }
 
     /// Write a 32-bit MMIO register. Returns `Some(irq)` if an interrupt should fire.
+    #[allow(clippy::too_many_lines)]
     fn write_reg(&mut self, offset: u64, value: u32) -> Option<u8> {
         match offset {
             MMIO_DEVICE_FEATURES_SEL => {
@@ -255,8 +305,11 @@ impl<D: VirtioBackend> VirtioMmioTransport<D> {
                 self.driver_features_sel = value;
             }
             MMIO_QUEUE_SEL => {
-                // We only have one queue (index 0). Ignore others.
-                if value != 0 {
+                #[allow(clippy::cast_possible_truncation)]
+                let sel = value as usize;
+                if sel < self.queues.len() {
+                    self.queue_sel = sel;
+                } else {
                     tracing::debug!(value, "guest selected non-existent queue");
                 }
             }
@@ -264,29 +317,35 @@ impl<D: VirtioBackend> VirtioMmioTransport<D> {
                 // Queue size fits in u16 (max 256). Higher bits are ignored per spec.
                 #[allow(clippy::cast_possible_truncation)]
                 let size = value as u16;
-                self.queue_num = size;
-                self.queue.set_size(size);
+                if let Some(qs) = self.queues.get_mut(self.queue_sel) {
+                    qs.num = size;
+                    qs.queue.set_size(size);
+                }
             }
             MMIO_QUEUE_READY => {
                 let ready = value != 0;
-                if ready {
-                    // Configure the queue GPAs before marking ready.
-                    let desc_gpa =
-                        u64::from(self.queue_desc_low) | (u64::from(self.queue_desc_high) << 32);
-                    let avail_gpa =
-                        u64::from(self.queue_avail_low) | (u64::from(self.queue_avail_high) << 32);
-                    let used_gpa =
-                        u64::from(self.queue_used_low) | (u64::from(self.queue_used_high) << 32);
-                    self.queue.configure(desc_gpa, avail_gpa, used_gpa);
+                if let Some(qs) = self.queues.get_mut(self.queue_sel) {
+                    if ready {
+                        // Configure the queue GPAs before marking ready.
+                        let desc_gpa = u64::from(qs.desc_low) | (u64::from(qs.desc_high) << 32);
+                        let avail_gpa = u64::from(qs.avail_low) | (u64::from(qs.avail_high) << 32);
+                        let used_gpa = u64::from(qs.used_low) | (u64::from(qs.used_high) << 32);
+                        qs.queue.configure(desc_gpa, avail_gpa, used_gpa);
+                    }
+                    qs.queue.set_ready(ready);
                 }
-                self.queue.set_ready(ready);
             }
             MMIO_QUEUE_NOTIFY => {
-                // Trigger queue processing.
-                self.device.process_queue(&mut self.queue, &*self.mem);
-                // Signal used ring update.
-                self.interrupt_status |= 1;
-                return Some(self.irq_vector);
+                // Value is the queue index the guest is notifying.
+                #[allow(clippy::cast_possible_truncation)]
+                let queue_idx = value as u16;
+                if let Some(qs) = self.queues.get_mut(usize::from(queue_idx)) {
+                    self.device
+                        .process_queue(queue_idx, &mut qs.queue, &*self.mem);
+                    // Signal used ring update.
+                    self.interrupt_status |= 1;
+                    return Some(self.irq_vector);
+                }
             }
             MMIO_INTERRUPT_ACK => {
                 self.interrupt_status &= !value;
@@ -302,12 +361,36 @@ impl<D: VirtioBackend> VirtioMmioTransport<D> {
                     self.status = val;
                 }
             }
-            MMIO_QUEUE_DESC_LOW => self.queue_desc_low = value,
-            MMIO_QUEUE_DESC_HIGH => self.queue_desc_high = value,
-            MMIO_QUEUE_AVAIL_LOW => self.queue_avail_low = value,
-            MMIO_QUEUE_AVAIL_HIGH => self.queue_avail_high = value,
-            MMIO_QUEUE_USED_LOW => self.queue_used_low = value,
-            MMIO_QUEUE_USED_HIGH => self.queue_used_high = value,
+            MMIO_QUEUE_DESC_LOW => {
+                if let Some(qs) = self.queues.get_mut(self.queue_sel) {
+                    qs.desc_low = value;
+                }
+            }
+            MMIO_QUEUE_DESC_HIGH => {
+                if let Some(qs) = self.queues.get_mut(self.queue_sel) {
+                    qs.desc_high = value;
+                }
+            }
+            MMIO_QUEUE_AVAIL_LOW => {
+                if let Some(qs) = self.queues.get_mut(self.queue_sel) {
+                    qs.avail_low = value;
+                }
+            }
+            MMIO_QUEUE_AVAIL_HIGH => {
+                if let Some(qs) = self.queues.get_mut(self.queue_sel) {
+                    qs.avail_high = value;
+                }
+            }
+            MMIO_QUEUE_USED_LOW => {
+                if let Some(qs) = self.queues.get_mut(self.queue_sel) {
+                    qs.used_low = value;
+                }
+            }
+            MMIO_QUEUE_USED_HIGH => {
+                if let Some(qs) = self.queues.get_mut(self.queue_sel) {
+                    qs.used_high = value;
+                }
+            }
             _ => {
                 tracing::debug!(offset, value, "unhandled MMIO write");
             }
@@ -344,6 +427,17 @@ impl<D: VirtioBackend> MmioDevice for VirtioMmioTransport<D> {
 
         self.write_reg(offset, value)
     }
+
+    fn poll_rx(&mut self) -> Option<u8> {
+        // RX queue is always queue 0 by virtio convention.
+        if let Some(qs) = self.queues.first_mut()
+            && self.device.poll_rx(&mut qs.queue, &*self.mem)
+        {
+            self.interrupt_status |= 1;
+            return Some(self.irq_vector);
+        }
+        None
+    }
 }
 
 #[cfg(test)]
@@ -378,7 +472,12 @@ mod tests {
             self.features
         }
 
-        fn process_queue(&mut self, _queue: &mut VirtQueue, _mem: &dyn GuestMemAccess) {
+        fn process_queue(
+            &mut self,
+            _queue_idx: u16,
+            _queue: &mut VirtQueue,
+            _mem: &dyn GuestMemAccess,
+        ) {
             self.process_count += 1;
         }
 
@@ -614,6 +713,6 @@ mod tests {
         // Mark ready.
         write_u32(&mut t, MMIO_QUEUE_READY, 1);
         assert_eq!(read_u32(&mut t, MMIO_QUEUE_READY), 1);
-        assert!(t.queue.is_ready());
+        assert!(t.queues[0].queue.is_ready());
     }
 }
