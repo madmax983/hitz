@@ -17,6 +17,14 @@ hitz-api.workspace = true
 hitz-hal.workspace = true
 hitz-vmm.workspace = true
 hitz-whp.workspace = true
+hitz-daemon.workspace = true
 anyhow.workspace = true
 clap.workspace = true
 tracing-subscriber.workspace = true
+tokio.workspace = true
+hyper = { workspace = true, features = ["client"] }
+http-body-util.workspace = true
+hyper-util.workspace = true
+serde_json.workspace = true
+bytes.workspace = true
+ctrlc.workspace = true
