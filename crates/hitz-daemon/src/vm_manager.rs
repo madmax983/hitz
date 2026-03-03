@@ -33,10 +33,21 @@ impl VmEntry {
 ///
 /// Generic over the hypervisor backend so the daemon library doesn't
 /// depend on a specific platform (WHP, KVM, etc.).
-#[derive(Clone)]
+///
+/// `Clone` is implemented manually so `H` does not need to be `Clone`
+/// (both fields are `Arc`-wrapped).
 pub struct VmManager<H> {
     hypervisor: Arc<H>,
     vms: Arc<Mutex<HashMap<String, VmEntry>>>,
+}
+
+impl<H> Clone for VmManager<H> {
+    fn clone(&self) -> Self {
+        Self {
+            hypervisor: self.hypervisor.clone(),
+            vms: self.vms.clone(),
+        }
+    }
 }
 
 impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
