@@ -20,6 +20,8 @@ hitz-api.workspace = true
 hitz-boot.workspace = true
 hitz-devices.workspace = true
 hitz-vmm.workspace = true
+hitz-daemon.workspace = true
+tokio.workspace = true
 tempfile = "3"
 windows = { workspace = true, features = [
     "Win32_System_Memory",
