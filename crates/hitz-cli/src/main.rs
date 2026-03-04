@@ -20,7 +20,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use hitz_api::{
-    ActionVmRequest, CreateVmRequest, DEFAULT_CMDLINE, DEFAULT_RAM_MIB, VmAction, VmConfig,
+    ActionVmRequest, CreateVmRequest, DEFAULT_CMDLINE, DEFAULT_CPUS, DEFAULT_RAM_MIB, VmAction,
+    VmConfig,
 };
 use hitz_vmm::ExitReason;
 use hitz_whp::WhpHypervisor;
@@ -71,6 +72,10 @@ struct RunArgs {
     /// Guest RAM in MiB.
     #[arg(long, default_value_t = DEFAULT_RAM_MIB)]
     ram: u32,
+
+    /// Number of virtual CPUs.
+    #[arg(long, default_value_t = DEFAULT_CPUS)]
+    cpus: u32,
 
     /// Kernel command line.
     #[arg(long, default_value = DEFAULT_CMDLINE)]
@@ -128,7 +133,7 @@ struct DaemonStartArgs {
 #[derive(Subcommand)]
 enum VmCommand {
     /// Create a VM with the given configuration.
-    Create(VmCreateArgs),
+    Create(Box<VmCreateArgs>),
     /// Start (boot) a previously created VM.
     Start(VmIdArgs),
     /// Stop a running VM.
@@ -164,6 +169,10 @@ struct VmCreateArgs {
     /// Guest RAM in MiB.
     #[arg(long, default_value_t = DEFAULT_RAM_MIB)]
     ram: u32,
+
+    /// Number of virtual CPUs.
+    #[arg(long, default_value_t = DEFAULT_CPUS)]
+    cpus: u32,
 
     /// Kernel command line.
     #[arg(long, default_value = DEFAULT_CMDLINE)]
@@ -271,6 +280,7 @@ fn run_vm(args: RunArgs) -> Result<ExitCode> {
             eprintln!("hitz: disk {}", disk.display());
         }
         eprintln!("hitz: RAM {} MiB", args.ram);
+        eprintln!("hitz: CPUs {}", args.cpus);
         eprintln!("hitz: cmdline \"{}\"", args.cmdline);
     }
 
@@ -290,7 +300,7 @@ fn run_vm(args: RunArgs) -> Result<ExitCode> {
         initramfs_path: args.initramfs,
         disk_path: args.disk,
         ram_mib: args.ram,
-        cpus: hitz_api::DEFAULT_CPUS,
+        cpus: args.cpus,
         cmdline: Some(args.cmdline),
         net,
     };
@@ -390,7 +400,7 @@ fn run_vm_command(cmd: VmCommand) -> Result<()> {
                     initramfs_path: args.initramfs,
                     disk_path: args.disk,
                     ram_mib: args.ram,
-                    cpus: hitz_api::DEFAULT_CPUS,
+                    cpus: args.cpus,
                     cmdline: Some(args.cmdline),
                     net,
                 };
