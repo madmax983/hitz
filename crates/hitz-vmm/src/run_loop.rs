@@ -6,6 +6,7 @@
 //! infinite-loops on the faulting instruction.
 
 use std::io::Write;
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use hitz_devices::mmio_bus::MmioBus;
@@ -24,7 +25,7 @@ const MAX_RUN_ITERATIONS: u64 = 100_000_000;
 const PIC_PORTS: [u16; 4] = [0x20, 0x21, 0xA0, 0xA1];
 
 /// Reason the run loop terminated.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExitReason {
     /// Guest executed HLT.
     Halt,
@@ -36,6 +37,17 @@ pub enum ExitReason {
     Unexpected(String),
 }
 
+/// Devices shared across all vCPU threads.
+///
+/// Each vCPU locks this only during I/O exits (microseconds per lock).
+/// Compute-bound guests experience zero contention.
+pub struct SharedDevices<W: Write> {
+    /// Serial console (COM1).
+    pub serial: SerialDevice<W>,
+    /// MMIO bus with virtio transports.
+    pub mmio_bus: MmioBus,
+}
+
 /// Run a vCPU in a loop, dispatching I/O and MMIO exits to devices.
 ///
 /// Returns when the guest halts, shuts down, or hits an unrecoverable exit.
@@ -43,15 +55,21 @@ pub enum ExitReason {
 /// # Arguments
 ///
 /// * `vcpu` — the virtual processor to run (must already have registers configured)
-/// * `serial` — the serial device handling COM1 I/O
-/// * `mmio_bus` — the MMIO bus with registered virtio devices
+/// * `devices` — shared device state (serial + MMIO bus) behind a mutex
 /// * `mem` — guest physical memory accessor for DMA operations
+/// * `stop_flag` — set to `true` by another thread to cancel the run loop
+///
+/// # Panics
+///
+/// Panics if the device mutex is poisoned (a vCPU thread panicked while
+/// holding the lock). This is intentional — a poisoned lock means the
+/// device state is inconsistent and recovery is not possible.
+#[allow(clippy::too_many_lines, clippy::expect_used)]
 pub fn run_vcpu_loop<V: Vcpu, W: Write>(
     vcpu: &mut V,
-    serial: &mut SerialDevice<W>,
-    mmio_bus: &mut MmioBus,
+    devices: &Mutex<SharedDevices<W>>,
     mem: &dyn GuestMemAccess,
-    stop_flag: Option<&AtomicBool>,
+    stop_flag: &AtomicBool,
 ) -> Result<ExitReason, HalError> {
     let mut pending_irq: Option<u8> = None;
     let mut iterations: u64 = 0;
@@ -64,25 +82,27 @@ pub fn run_vcpu_loop<V: Vcpu, W: Write>(
             ));
         }
 
-        if let Some(flag) = stop_flag
-            && flag.load(Ordering::Relaxed)
-        {
+        if stop_flag.load(Ordering::Relaxed) {
             return Ok(ExitReason::Canceled);
         }
 
         // Poll devices for async I/O (e.g. network RX).
-        if let Some(vector) = mmio_bus.poll_devices()
-            && vcpu.inject_interrupt(vector).is_err()
         {
-            pending_irq = Some(vector);
-            vcpu.request_interrupt_window()?;
+            let mut devs = devices.lock().expect("device lock poisoned");
+            if let Some(vector) = devs.mmio_bus.poll_devices()
+                && vcpu.inject_interrupt(vector).is_err()
+            {
+                pending_irq = Some(vector);
+                vcpu.request_interrupt_window()?;
+            }
         }
 
         let exit = vcpu.run()?;
 
         match exit {
             VcpuExit::IoPort(io) => {
-                handle_io_port(vcpu, serial, &io)?;
+                let mut devs = devices.lock().expect("device lock poisoned");
+                handle_io_port(vcpu, &mut devs.serial, &io)?;
             }
 
             VcpuExit::Halt => {
@@ -113,7 +133,11 @@ pub fn run_vcpu_loop<V: Vcpu, W: Write>(
                         let size = usize::from(decoded.size);
                         data[..size].copy_from_slice(&value.to_le_bytes()[..size]);
 
-                        let irq = mmio_bus.write(mmio.gpa.as_u64(), &data[..size], mem);
+                        // Lock → device write → unlock, then handle IRQ.
+                        let irq = {
+                            let mut devs = devices.lock().expect("device lock poisoned");
+                            devs.mmio_bus.write(mmio.gpa.as_u64(), &data[..size], mem)
+                        };
                         advance_rip(vcpu, instr_len)?;
                         if let Some(vector) = irq {
                             // Try to inject immediately. If the guest has IF=0
@@ -130,10 +154,13 @@ pub fn run_vcpu_loop<V: Vcpu, W: Write>(
                             }
                         }
                     } else {
-                        // Read: get data from device, write to destination register.
+                        // Read: lock → device read → unlock, then update registers.
                         let size = usize::from(decoded.size);
                         let mut data = [0u8; 8];
-                        mmio_bus.read(mmio.gpa.as_u64(), &mut data[..size]);
+                        {
+                            let mut devs = devices.lock().expect("device lock poisoned");
+                            devs.mmio_bus.read(mmio.gpa.as_u64(), &mut data[..size]);
+                        }
                         let value = u64::from_le_bytes(data);
 
                         let mut regs = vcpu.get_regs()?;

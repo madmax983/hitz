@@ -6,8 +6,8 @@
 use std::fmt::Write as _;
 use std::fs;
 use std::io::Write;
-use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
+use std::sync::{Arc, Mutex};
 
 use hitz_api::VmConfig;
 use hitz_boot::{
@@ -26,7 +26,7 @@ use hitz_net::ethernet;
 
 use crate::boot_regs;
 use crate::memory::GuestMemory;
-use crate::run_loop::{self, ExitReason};
+use crate::run_loop::{self, ExitReason, SharedDevices};
 
 /// Virtio-MMIO base address for the first device slot.
 const VIRTIO_MMIO_BASE: u64 = 0xD000_0000;
@@ -221,7 +221,7 @@ pub fn boot_and_run<H: Hypervisor, W: Write>(
     )?;
 
     // ── 12. Set up serial console ──
-    let mut serial = SerialDevice::new(serial_out);
+    let serial = SerialDevice::new(serial_out);
 
     // ── 13. Set up MMIO bus + optional virtio-blk ──
     let mut mmio_bus = MmioBus::new();
@@ -278,13 +278,14 @@ pub fn boot_and_run<H: Hypervisor, W: Write>(
     };
 
     // ── 14. Run vCPU loop ──
-    let exit_reason = run_loop::run_vcpu_loop(
-        &mut vcpu,
-        &mut serial,
-        &mut mmio_bus,
-        &*guest_mem_arc,
-        stop_flag,
-    )?;
+    let devices = Mutex::new(SharedDevices { serial, mmio_bus });
+
+    // Create a local stop flag if the caller didn't provide one.
+    let local_stop = AtomicBool::new(false);
+    let effective_stop = stop_flag.unwrap_or(&local_stop);
+
+    let exit_reason =
+        run_loop::run_vcpu_loop(&mut vcpu, &devices, &*guest_mem_arc, effective_stop)?;
 
     // Explicitly drop the net I/O handle after the run loop exits.
     // This signals the I/O thread to stop and joins it.

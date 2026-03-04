@@ -548,8 +548,12 @@ fn boot_elf_pipeline(code: &[u8]) -> (crate::WhpPartition, crate::WhpVcpu, hitz_
 #[test]
 #[ignore = "requires WHP enabled (Hyper-V)"]
 fn phase2_serial_output_from_elf() {
+    use std::sync::Mutex;
+    use std::sync::atomic::AtomicBool;
+
+    use hitz_devices::mmio_bus::MmioBus;
     use hitz_devices::serial::SerialDevice;
-    use hitz_vmm::run_loop::{ExitReason, run_vcpu_loop};
+    use hitz_vmm::run_loop::{ExitReason, SharedDevices, run_vcpu_loop};
 
     // x86-64 machine code that writes "Hello" to COM1 (0x3F8) then halts.
     //
@@ -581,15 +585,19 @@ fn phase2_serial_output_from_elf() {
     ];
 
     let (_partition, mut vcpu, guest_mem) = boot_elf_pipeline(code);
-    let mut serial = SerialDevice::new(Vec::new());
-    let mut mmio_bus = hitz_devices::mmio_bus::MmioBus::new();
+    let stop = AtomicBool::new(false);
+    let devices = Mutex::new(SharedDevices {
+        serial: SerialDevice::new(Vec::new()),
+        mmio_bus: MmioBus::new(),
+    });
 
-    let reason = run_vcpu_loop(&mut vcpu, &mut serial, &mut mmio_bus, &guest_mem, None)
-        .expect("run_vcpu_loop failed");
+    let reason =
+        run_vcpu_loop(&mut vcpu, &devices, &guest_mem, &stop).expect("run_vcpu_loop failed");
 
     assert_eq!(reason, ExitReason::Halt, "expected Halt exit");
+    let devs = devices.lock().expect("lock");
     assert_eq!(
-        serial.writer().as_slice(),
+        devs.serial.writer().as_slice(),
         b"Hello",
         "serial output mismatch"
     );
@@ -603,8 +611,12 @@ fn phase2_serial_output_from_elf() {
 #[test]
 #[ignore = "requires WHP enabled (Hyper-V)"]
 fn phase2_serial_in_reads_lsr() {
+    use std::sync::Mutex;
+    use std::sync::atomic::AtomicBool;
+
+    use hitz_devices::mmio_bus::MmioBus;
     use hitz_devices::serial::SerialDevice;
-    use hitz_vmm::run_loop::{ExitReason, run_vcpu_loop};
+    use hitz_vmm::run_loop::{ExitReason, SharedDevices, run_vcpu_loop};
 
     // x86-64 machine code:
     //   mov edx, 0x3FD        ; BA FD 03 00 00   — COM1 LSR
@@ -621,16 +633,20 @@ fn phase2_serial_in_reads_lsr() {
     ];
 
     let (_partition, mut vcpu, guest_mem) = boot_elf_pipeline(code);
-    let mut serial = SerialDevice::new(Vec::new());
-    let mut mmio_bus = hitz_devices::mmio_bus::MmioBus::new();
+    let stop = AtomicBool::new(false);
+    let devices = Mutex::new(SharedDevices {
+        serial: SerialDevice::new(Vec::new()),
+        mmio_bus: MmioBus::new(),
+    });
 
-    let reason = run_vcpu_loop(&mut vcpu, &mut serial, &mut mmio_bus, &guest_mem, None)
-        .expect("run_vcpu_loop failed");
+    let reason =
+        run_vcpu_loop(&mut vcpu, &devices, &guest_mem, &stop).expect("run_vcpu_loop failed");
 
     assert_eq!(reason, ExitReason::Halt, "expected Halt exit");
 
     // LSR default = THRE (0x20) | TEMT (0x40) = 0x60
-    let output = serial.writer();
+    let devs = devices.lock().expect("lock");
+    let output = devs.serial.writer();
     assert_eq!(output.len(), 1, "expected 1 byte of serial output");
     assert_eq!(
         output[0], 0x60,
@@ -717,13 +733,14 @@ fn write_idt_gate(guest_mem: &hitz_vmm::GuestMemory, vector: u8, handler_gpa: u6
 #[test]
 #[ignore = "requires WHP enabled (Hyper-V)"]
 fn phase3_virtio_mmio_magic_read() {
-    use std::sync::Arc;
+    use std::sync::atomic::AtomicBool;
+    use std::sync::{Arc, Mutex};
 
     use hitz_devices::mmio_bus::MmioBus;
     use hitz_devices::serial::SerialDevice;
     use hitz_devices::virtio::block::VirtioBlockDevice;
     use hitz_devices::virtio::mmio_transport::VirtioMmioTransport;
-    use hitz_vmm::run_loop::{ExitReason, run_vcpu_loop};
+    use hitz_vmm::run_loop::{ExitReason, SharedDevices, run_vcpu_loop};
 
     // x86-64 machine code:
     //   mov ebx, 0xD0000000     ; MMIO base (unmapped GPA)
@@ -765,17 +782,22 @@ fn phase3_virtio_mmio_magic_read() {
     let mut mmio_bus = MmioBus::new();
     mmio_bus.register(0xD000_0000, 0x1000, Box::new(transport));
 
-    let mut serial = SerialDevice::new(Vec::new());
+    let stop = AtomicBool::new(false);
+    let devices = Mutex::new(SharedDevices {
+        serial: SerialDevice::new(Vec::new()),
+        mmio_bus,
+    });
 
-    let reason = run_vcpu_loop(&mut vcpu, &mut serial, &mut mmio_bus, &*guest_mem, None)
-        .expect("run_vcpu_loop failed");
+    let reason =
+        run_vcpu_loop(&mut vcpu, &devices, &*guest_mem, &stop).expect("run_vcpu_loop failed");
 
     assert_eq!(reason, ExitReason::Halt, "expected Halt exit");
 
     // MagicValue = 0x74726976 in little-endian.
     // Guest outputs each byte via serial: 0x76('v'), 0x69('i'), 0x72('r'), 0x74('t').
+    let devs = devices.lock().expect("lock");
     assert_eq!(
-        serial.writer().as_slice(),
+        devs.serial.writer().as_slice(),
         b"virt",
         "serial output should be 'virt' (magic value bytes in LE)"
     );
@@ -805,13 +827,14 @@ fn phase3_virtio_mmio_magic_read() {
 #[test]
 #[ignore = "requires WHP enabled (Hyper-V)"]
 fn phase3_virtio_block_read() {
-    use std::sync::Arc;
+    use std::sync::atomic::AtomicBool;
+    use std::sync::{Arc, Mutex};
 
     use hitz_devices::mmio_bus::MmioBus;
     use hitz_devices::serial::SerialDevice;
     use hitz_devices::virtio::block::VirtioBlockDevice;
     use hitz_devices::virtio::mmio_transport::VirtioMmioTransport;
-    use hitz_vmm::run_loop::{ExitReason, run_vcpu_loop};
+    use hitz_vmm::run_loop::{ExitReason, SharedDevices, run_vcpu_loop};
 
     const IRQ_VECTOR: u8 = 5;
 
@@ -918,17 +941,22 @@ fn phase3_virtio_block_read() {
         .expect("write request header");
 
     // ── Run! ──
-    let mut serial = SerialDevice::new(Vec::new());
+    let stop = AtomicBool::new(false);
+    let devices = Mutex::new(SharedDevices {
+        serial: SerialDevice::new(Vec::new()),
+        mmio_bus,
+    });
 
-    let reason = run_vcpu_loop(&mut vcpu, &mut serial, &mut mmio_bus, &*guest_mem, None)
-        .expect("run_vcpu_loop failed");
+    let reason =
+        run_vcpu_loop(&mut vcpu, &devices, &*guest_mem, &stop).expect("run_vcpu_loop failed");
 
     assert_eq!(reason, ExitReason::Halt, "expected Halt exit");
 
     // Expected serial output:
     //   byte 0: status = 0 (VIRTIO_BLK_S_OK)
     //   bytes 1-4: first 4 bytes of disk data = "HITZ"
-    let output = serial.writer().as_slice();
+    let devs = devices.lock().expect("lock");
+    let output = devs.serial.writer().as_slice();
     assert!(
         output.len() >= 5,
         "expected at least 5 bytes of serial output, got {}",
@@ -960,13 +988,14 @@ fn phase3_virtio_block_read() {
 #[test]
 #[ignore = "requires WHP enabled (Hyper-V)"]
 fn phase4_apic_interrupt_delivery() {
-    use std::sync::Arc;
+    use std::sync::atomic::AtomicBool;
+    use std::sync::{Arc, Mutex};
 
     use hitz_devices::mmio_bus::MmioBus;
     use hitz_devices::serial::SerialDevice;
     use hitz_devices::virtio::block::VirtioBlockDevice;
     use hitz_devices::virtio::mmio_transport::VirtioMmioTransport;
-    use hitz_vmm::run_loop::{ExitReason, run_vcpu_loop};
+    use hitz_vmm::run_loop::{ExitReason, SharedDevices, run_vcpu_loop};
 
     const IRQ_VECTOR: u8 = 5;
 
@@ -1072,14 +1101,19 @@ fn phase4_apic_interrupt_delivery() {
         .expect("write request header");
 
     // ── Run ──
-    let mut serial = SerialDevice::new(Vec::new());
-    let reason = run_vcpu_loop(&mut vcpu, &mut serial, &mut mmio_bus, &*guest_mem, None)
-        .expect("run_vcpu_loop failed");
+    let stop = AtomicBool::new(false);
+    let devices = Mutex::new(SharedDevices {
+        serial: SerialDevice::new(Vec::new()),
+        mmio_bus,
+    });
+    let reason =
+        run_vcpu_loop(&mut vcpu, &devices, &*guest_mem, &stop).expect("run_vcpu_loop failed");
 
     assert_eq!(reason, ExitReason::Halt, "expected Halt exit");
 
     // Expected serial: "I" (IRQ handler) + "D" (done) + 0x00 (status OK)
-    let output = serial.writer().as_slice();
+    let devs = devices.lock().expect("lock");
+    let output = devs.serial.writer().as_slice();
     assert!(
         output.len() >= 3,
         "expected at least 3 bytes of serial output, got {} bytes: {output:?}",
@@ -1141,7 +1175,8 @@ fn phase4_apic_interrupt_delivery() {
 #[test]
 #[ignore = "requires WHP + vmlinux + initramfs (set HITZ_VMLINUX + HITZ_INITRAMFS)"]
 fn phase4_boot_real_linux() {
-    use std::sync::Arc;
+    use std::sync::atomic::AtomicBool;
+    use std::sync::{Arc, Mutex};
 
     use hitz_boot::{
         BOOT_PARAMS_GPA, CMDLINE_GPA, build_boot_params, build_page_tables, load_elf,
@@ -1149,7 +1184,7 @@ fn phase4_boot_real_linux() {
     };
     use hitz_devices::mmio_bus::MmioBus;
     use hitz_devices::serial::SerialDevice;
-    use hitz_vmm::run_loop::run_vcpu_loop;
+    use hitz_vmm::run_loop::{SharedDevices, run_vcpu_loop};
     use hitz_vmm::{GuestMemory, boot_regs};
 
     // ── 1. Read env vars (skip if not set) ──
@@ -1263,15 +1298,19 @@ fn phase4_boot_real_linux() {
 
     // ── 11. Set up devices ──
     let guest_mem = Arc::new(guest_mem);
-    let mut serial = SerialDevice::new(Vec::new());
-    let mut mmio_bus = MmioBus::new();
+    let stop = AtomicBool::new(false);
+    let devices = Mutex::new(SharedDevices {
+        serial: SerialDevice::new(Vec::new()),
+        mmio_bus: MmioBus::new(),
+    });
 
     // ── 12. Run! ──
-    let reason = run_vcpu_loop(&mut vcpu, &mut serial, &mut mmio_bus, &*guest_mem, None)
-        .expect("run_vcpu_loop failed");
+    let reason =
+        run_vcpu_loop(&mut vcpu, &devices, &*guest_mem, &stop).expect("run_vcpu_loop failed");
 
     // ── 13. Check results ──
-    let output = String::from_utf8_lossy(serial.writer().as_slice());
+    let devs = devices.lock().expect("lock");
+    let output = String::from_utf8_lossy(devs.serial.writer().as_slice());
     let output_len = output.len();
     let preview_end = output_len.min(4000);
     eprintln!(
