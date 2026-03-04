@@ -132,7 +132,12 @@ const PAD3_SIZE: usize = 0x1000 - (0x2D0 + 128 * size_of::<BootE820Entry>());
 #[repr(C, packed)]
 #[derive(Clone, Copy)]
 pub struct BootParams {
-    _pad0: [u8; 0x1E8],
+    _pad0a: [u8; 0x070],
+    /// Physical address of the ACPI RSDP table (offset 0x070).
+    /// Set by the bootloader so the kernel can find ACPI tables without
+    /// scanning the BIOS memory area. 0 = kernel uses default discovery.
+    pub acpi_rsdp_addr: u64,
+    _pad0b: [u8; 0x170],
     /// Number of populated E820 entries (offset 0x1E8).
     pub e820_entries: u8,
     _pad1: [u8; 8],
@@ -150,7 +155,9 @@ const _: () = assert!(size_of::<BootParams>() == 4096);
 impl Default for BootParams {
     fn default() -> Self {
         Self {
-            _pad0: [0; 0x1E8],
+            _pad0a: [0; 0x070],
+            acpi_rsdp_addr: 0,
+            _pad0b: [0; 0x170],
             e820_entries: 0,
             _pad1: [0; 8],
             hdr: SetupHeader::default(),
@@ -255,6 +262,14 @@ pub fn set_initramfs_params(bp: &mut BootParams, gpa: Gpa, size: u64) -> Result<
     bp.hdr.ramdisk_image = gpa_val as u32;
     bp.hdr.ramdisk_size = size as u32;
     Ok(())
+}
+
+/// Set the ACPI RSDP address in `boot_params`.
+///
+/// When non-zero, the kernel uses this address instead of scanning
+/// the BIOS area for the RSDP signature.
+pub const fn set_acpi_rsdp(bp: &mut BootParams, rsdp_gpa: u64) {
+    bp.acpi_rsdp_addr = rsdp_gpa;
 }
 
 // ---- Tests ----------------------------------------------------------------
@@ -378,6 +393,29 @@ mod tests {
         assert!(
             err.to_string().contains("32-bit limit"),
             "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn set_acpi_rsdp_works() {
+        let mut bp = BootParams::default();
+        let val = { bp.acpi_rsdp_addr };
+        assert_eq!(val, 0);
+        set_acpi_rsdp(&mut bp, 0x000E_0000);
+        let val = { bp.acpi_rsdp_addr };
+        assert_eq!(val, 0x000E_0000);
+    }
+
+    #[test]
+    fn acpi_rsdp_addr_offset() {
+        // Verify the field is at the correct offset (0x070) within the struct.
+        let bp = BootParams::default();
+        let base = core::ptr::addr_of!(bp) as usize;
+        let field = core::ptr::addr_of!(bp.acpi_rsdp_addr) as usize;
+        assert_eq!(
+            field - base,
+            0x070,
+            "acpi_rsdp_addr must be at offset 0x070"
         );
     }
 }
