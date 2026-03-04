@@ -1383,7 +1383,13 @@ fn phase5_boot_and_run_hello() {
     let buffer: Arc<Mutex<Vec<u8>>> = Arc::new(Mutex::new(Vec::new()));
     let writer = SharedWriter(Arc::clone(&buffer));
 
-    let result = hitz_vmm::boot_and_run(&hv, &config, writer, None).expect("boot_and_run failed");
+    let result = hitz_vmm::boot_and_run(
+        &hv,
+        &config,
+        writer,
+        std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+    )
+    .expect("boot_and_run failed");
 
     assert_eq!(
         result.exit_reason,

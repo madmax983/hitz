@@ -125,7 +125,7 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
         // Fire-and-forget: the spawned task updates VM state on completion.
         drop(tokio::task::spawn(async move {
             let result = tokio::task::spawn_blocking(move || {
-                hitz_vmm::boot_and_run(&*hv, &config, serial_buf, Some(&*stop_flag))
+                hitz_vmm::boot_and_run(&*hv, &config, serial_buf, stop_flag)
             })
             .await;
 

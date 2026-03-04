@@ -6,13 +6,13 @@
 use std::fmt::Write as _;
 use std::fs;
 use std::io::Write;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use hitz_api::VmConfig;
 use hitz_boot::{
-    BOOT_PARAMS_GPA, CMDLINE_GPA, build_boot_params, build_page_tables, load_elf, load_initramfs,
-    set_initramfs_params,
+    BOOT_PARAMS_GPA, CMDLINE_GPA, RSDP_GPA, build_boot_params, build_madt, build_page_tables,
+    build_rsdp, build_xsdt, load_elf, load_initramfs, set_acpi_rsdp, set_initramfs_params,
 };
 use hitz_devices::mmio_bus::MmioBus;
 use hitz_devices::serial::SerialDevice;
@@ -101,6 +101,12 @@ pub fn validate_config(config: &VmConfig) -> Result<(), VmError> {
             config.ram_mib
         )));
     }
+    if config.cpus == 0 || config.cpus > 255 {
+        return Err(VmError::Config(format!(
+            "cpus must be 1..=255, got {}",
+            config.cpus
+        )));
+    }
     Ok(())
 }
 
@@ -116,12 +122,22 @@ pub fn validate_config(config: &VmConfig) -> Result<(), VmError> {
 /// 7. Runs the vCPU loop until the guest exits
 ///
 /// Serial output goes to `serial_out` (e.g. stdout, `Vec<u8>` for tests).
-#[allow(clippy::cast_possible_truncation, clippy::too_many_lines)]
-pub fn boot_and_run<H: Hypervisor, W: Write>(
+///
+/// # Panics
+///
+/// Panics if a vCPU thread cannot be spawned (OS resource exhaustion) or
+/// if the `first_exit` mutex is poisoned (a vCPU thread panicked).
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::too_many_lines,
+    clippy::needless_pass_by_value,
+    clippy::expect_used
+)]
+pub fn boot_and_run<H: Hypervisor, W: Write + Send + 'static>(
     hypervisor: &H,
     config: &VmConfig,
     serial_out: W,
-    stop_flag: Option<&AtomicBool>,
+    stop_flag: Arc<AtomicBool>,
 ) -> Result<VmRunResult, VmError> {
     // ── 1. Validate config ──
     validate_config(config)?;
@@ -166,6 +182,23 @@ pub fn boot_and_run<H: Hypervisor, W: Write>(
     // ── 7. Write boot_params to guest memory ──
     guest_mem.write_obj(Gpa::new(BOOT_PARAMS_GPA), &boot_params)?;
 
+    // ── 7b. Write ACPI tables for SMP ──
+    if config.cpus > 1 {
+        let rsdp = build_rsdp();
+        guest_mem.write_slice(Gpa::new(RSDP_GPA), &rsdp)?;
+
+        let xsdt = build_xsdt();
+        guest_mem.write_slice(Gpa::new(hitz_boot::XSDT_GPA), &xsdt)?;
+
+        let madt = build_madt(config.cpus)?;
+        guest_mem.write_slice(Gpa::new(hitz_boot::MADT_GPA), &madt)?;
+
+        set_acpi_rsdp(&mut boot_params, RSDP_GPA);
+
+        // Re-write boot_params with the RSDP pointer set.
+        guest_mem.write_obj(Gpa::new(BOOT_PARAMS_GPA), &boot_params)?;
+    }
+
     // ── 8. Write command line ──
     let mut cmdline = config.effective_cmdline().to_string();
 
@@ -205,20 +238,28 @@ pub fn boot_and_run<H: Hypervisor, W: Write>(
 
     // ── 10. Create partition + map memory ──
     let partition_cfg = PartitionConfig {
-        vcpu_count: 1,
+        vcpu_count: config.cpus,
         memory_size: MemSizeMiB::new(u64::from(config.ram_mib)),
     };
     let mut partition = hypervisor.create_partition(&partition_cfg)?;
     guest_mem.map_to_partition(&mut partition, MemFlags::READ_WRITE_EXEC)?;
 
-    // ── 11. Create vCPU + configure registers ──
-    let mut vcpu = partition.create_vcpu(VcpuId::new(0))?;
-    boot_regs::configure_sregs(&mut vcpu, pml4_gpa)?;
-    boot_regs::configure_regs(
-        &mut vcpu,
-        load_result.entry_point,
-        Gpa::new(BOOT_PARAMS_GPA),
-    )?;
+    // ── 11. Create vCPUs ──
+    let mut vcpus = Vec::with_capacity(config.cpus as usize);
+    for i in 0..config.cpus {
+        let mut vcpu = partition.create_vcpu(VcpuId::new(i))?;
+        if i == 0 {
+            // BSP: configure for kernel entry.
+            boot_regs::configure_sregs(&mut vcpu, pml4_gpa)?;
+            boot_regs::configure_regs(
+                &mut vcpu,
+                load_result.entry_point,
+                Gpa::new(BOOT_PARAMS_GPA),
+            )?;
+        }
+        // APs (i > 0): WHP xAPIC emulation starts them in wait-for-SIPI state.
+        vcpus.push(vcpu);
+    }
 
     // ── 12. Set up serial console ──
     let serial = SerialDevice::new(serial_out);
@@ -277,21 +318,72 @@ pub fn boot_and_run<H: Hypervisor, W: Write>(
         None
     };
 
-    // ── 14. Run vCPU loop ──
-    let devices = Mutex::new(SharedDevices { serial, mmio_bus });
+    // ── 14. Run vCPU threads ──
+    let devices = Arc::new(Mutex::new(SharedDevices { serial, mmio_bus }));
 
-    // Create a local stop flag if the caller didn't provide one.
-    let local_stop = AtomicBool::new(false);
-    let effective_stop = stop_flag.unwrap_or(&local_stop);
+    if vcpus.len() == 1 {
+        // Single vCPU: run on the current thread (no spawn overhead).
+        let exit_reason =
+            run_loop::run_vcpu_loop(&mut vcpus[0], &devices, &*guest_mem_arc, &stop_flag)?;
+        drop(net_io_handle);
+        return Ok(VmRunResult { exit_reason });
+    }
 
-    let exit_reason =
-        run_loop::run_vcpu_loop(&mut vcpu, &devices, &*guest_mem_arc, effective_stop)?;
+    // Multi-vCPU: spawn a thread per vCPU.
+    let first_exit: Arc<Mutex<Option<ExitReason>>> = Arc::new(Mutex::new(None));
 
-    // Explicitly drop the net I/O handle after the run loop exits.
-    // This signals the I/O thread to stop and joins it.
+    let handles: Vec<_> = vcpus
+        .into_iter()
+        .enumerate()
+        .map(|(idx, mut vcpu)| {
+            let devs = devices.clone();
+            let mem = guest_mem_arc.clone();
+            let first = first_exit.clone();
+            let stop = stop_flag.clone();
+
+            std::thread::Builder::new()
+                .name(format!("vcpu-{idx}"))
+                .spawn(move || {
+                    let result = run_loop::run_vcpu_loop(&mut vcpu, &devs, &*mem, &stop);
+
+                    match &result {
+                        Ok(ExitReason::Halt | ExitReason::Shutdown | ExitReason::Unexpected(_))
+                        | Err(_) => {
+                            let mut guard = first.lock().expect("first_exit lock");
+                            if guard.is_none()
+                                && let Ok(ref reason) = result
+                            {
+                                *guard = Some(reason.clone());
+                            }
+                            drop(guard);
+                            stop.store(true, Ordering::Relaxed);
+                        }
+                        Ok(ExitReason::Canceled) => {
+                            // Another vCPU already triggered stop.
+                        }
+                    }
+
+                    result
+                })
+                .expect("spawn vcpu thread")
+        })
+        .collect();
+
+    // Join all threads.
+    let mut final_reason = ExitReason::Canceled;
+    for handle in handles {
+        let _ = handle.join();
+    }
+
+    let captured_reason = first_exit.lock().expect("first_exit lock").take();
+    if let Some(reason) = captured_reason {
+        final_reason = reason;
+    }
+
     drop(net_io_handle);
-
-    Ok(VmRunResult { exit_reason })
+    Ok(VmRunResult {
+        exit_reason: final_reason,
+    })
 }
 
 #[cfg(test)]
@@ -353,6 +445,30 @@ mod tests {
         let err = validate_config(&cfg).unwrap_err();
         assert!(
             err.to_string().contains("at least 2 MiB"),
+            "unexpected: {err}"
+        );
+    }
+
+    #[test]
+    fn validate_config_cpus_zero() {
+        let tmp = tempfile::NamedTempFile::new().expect("create temp file");
+        let mut cfg = valid_config(tmp.path().to_path_buf());
+        cfg.cpus = 0;
+        let err = validate_config(&cfg).unwrap_err();
+        assert!(
+            err.to_string().contains("cpus must be"),
+            "unexpected: {err}"
+        );
+    }
+
+    #[test]
+    fn validate_config_cpus_too_many() {
+        let tmp = tempfile::NamedTempFile::new().expect("create temp file");
+        let mut cfg = valid_config(tmp.path().to_path_buf());
+        cfg.cpus = 256;
+        let err = validate_config(&cfg).unwrap_err();
+        assert!(
+            err.to_string().contains("cpus must be"),
             "unexpected: {err}"
         );
     }

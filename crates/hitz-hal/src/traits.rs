@@ -38,7 +38,7 @@ pub trait Hypervisor: Send + Sync {
 /// that may access them.
 pub trait Partition: Send + Sync {
     /// The vCPU type produced by this partition.
-    type Vcpu: Vcpu;
+    type Vcpu: Vcpu + 'static;
 
     /// Map a region of host memory into the guest physical address space.
     ///

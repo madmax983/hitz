@@ -305,10 +305,11 @@ fn run_vm(args: RunArgs) -> Result<ExitCode> {
     })
     .context("failed to set Ctrl+C handler")?;
 
-    // BufWriter avoids per-byte lock on stdout (serial writes one byte at a time).
-    let serial_out = BufWriter::new(stdout().lock());
+    // BufWriter avoids per-byte syscall on stdout (serial writes one byte at a time).
+    // Use `Stdout` (not `StdoutLock`) since it must be `Send` for multi-vCPU threads.
+    let serial_out = BufWriter::new(stdout());
 
-    let result = hitz_vmm::boot_and_run(&hypervisor, &config, serial_out, Some(&stop_flag))
+    let result = hitz_vmm::boot_and_run(&hypervisor, &config, serial_out, stop_flag)
         .context("VM boot failed")?;
 
     // Flush stdout before printing to stderr.
