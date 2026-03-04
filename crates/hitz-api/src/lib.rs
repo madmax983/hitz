@@ -12,6 +12,9 @@ pub const DEFAULT_CMDLINE: &str = "console=ttyS0 earlyprintk=serial";
 /// Default guest RAM in MiB (256 MiB).
 pub const DEFAULT_RAM_MIB: u32 = 256;
 
+/// Default number of virtual CPUs.
+pub const DEFAULT_CPUS: u32 = 1;
+
 /// Default host IP for guest networking.
 pub const DEFAULT_HOST_IP: &str = "192.168.100.1/24";
 /// Default guest IP for guest networking.
@@ -30,6 +33,10 @@ pub struct NetConfig {
     pub adapter_name: Option<String>,
 }
 
+const fn default_cpus() -> u32 {
+    DEFAULT_CPUS
+}
+
 /// VM configuration — everything needed to boot a micro-VM.
 ///
 /// Serializable for the future daemon REST API (Phase 6).
@@ -43,6 +50,9 @@ pub struct VmConfig {
     pub disk_path: Option<PathBuf>,
     /// Guest RAM in MiB (default: 256).
     pub ram_mib: u32,
+    /// Number of virtual CPUs (default: 1).
+    #[serde(default = "default_cpus")]
+    pub cpus: u32,
     /// Custom kernel command line (default: [`DEFAULT_CMDLINE`]).
     pub cmdline: Option<String>,
     /// Optional network configuration for virtio-net.
@@ -125,6 +135,7 @@ mod tests {
             initramfs_path: None,
             disk_path: None,
             ram_mib: DEFAULT_RAM_MIB,
+            cpus: 1,
             cmdline: None,
             net: None,
         };
@@ -138,6 +149,7 @@ mod tests {
             initramfs_path: None,
             disk_path: None,
             ram_mib: DEFAULT_RAM_MIB,
+            cpus: 1,
             cmdline: Some("root=/dev/vda rw".into()),
             net: None,
         };
@@ -156,6 +168,7 @@ mod tests {
             initramfs_path: Some(PathBuf::from("/boot/init.cpio")),
             disk_path: Some(PathBuf::from("/images/root.img")),
             ram_mib: 512,
+            cpus: 1,
             cmdline: Some("console=ttyS0".into()),
             net: None,
         };
@@ -176,6 +189,7 @@ mod tests {
             initramfs_path: None,
             disk_path: None,
             ram_mib: DEFAULT_RAM_MIB,
+            cpus: 1,
             cmdline: None,
             net: None,
         };
@@ -222,6 +236,7 @@ mod tests {
                 initramfs_path: None,
                 disk_path: Some(PathBuf::from("/images/root.img")),
                 ram_mib: 512,
+                cpus: 1,
                 cmdline: Some("console=ttyS0".into()),
                 net: None,
             },
@@ -244,6 +259,7 @@ mod tests {
                 initramfs_path: None,
                 disk_path: None,
                 ram_mib: DEFAULT_RAM_MIB,
+                cpus: 1,
                 cmdline: None,
                 net: None,
             },
@@ -296,6 +312,7 @@ mod tests {
             initramfs_path: None,
             disk_path: None,
             ram_mib: DEFAULT_RAM_MIB,
+            cpus: 1,
             cmdline: None,
             net: Some(NetConfig {
                 mac: None,
@@ -307,5 +324,28 @@ mod tests {
         let json = serde_json::to_string(&cfg).expect("serialize");
         let restored: VmConfig = serde_json::from_str(&json).expect("deserialize");
         assert!(restored.net.is_some());
+    }
+
+    #[test]
+    fn serde_cpus_default() {
+        let json = r#"{"kernel_path":"vmlinux","initramfs_path":null,"disk_path":null,"ram_mib":256,"cmdline":null,"net":null}"#;
+        let cfg: VmConfig = serde_json::from_str(json).expect("deserialize");
+        assert_eq!(cfg.cpus, DEFAULT_CPUS);
+    }
+
+    #[test]
+    fn serde_cpus_explicit() {
+        let cfg = VmConfig {
+            kernel_path: PathBuf::from("vmlinux"),
+            initramfs_path: None,
+            disk_path: None,
+            ram_mib: DEFAULT_RAM_MIB,
+            cmdline: None,
+            net: None,
+            cpus: 4,
+        };
+        let json = serde_json::to_string(&cfg).expect("serialize");
+        let restored: VmConfig = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(restored.cpus, 4);
     }
 }

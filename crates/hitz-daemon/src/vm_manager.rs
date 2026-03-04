@@ -374,6 +374,7 @@ mod tests {
             initramfs_path: None,
             disk_path: None,
             ram_mib: 128,
+            cpus: 1,
             cmdline: None,
             net: None,
         }

@@ -290,6 +290,7 @@ fn run_vm(args: RunArgs) -> Result<ExitCode> {
         initramfs_path: args.initramfs,
         disk_path: args.disk,
         ram_mib: args.ram,
+        cpus: hitz_api::DEFAULT_CPUS,
         cmdline: Some(args.cmdline),
         net,
     };
@@ -388,6 +389,7 @@ fn run_vm_command(cmd: VmCommand) -> Result<()> {
                     initramfs_path: args.initramfs,
                     disk_path: args.disk,
                     ram_mib: args.ram,
+                    cpus: hitz_api::DEFAULT_CPUS,
                     cmdline: Some(args.cmdline),
                     net,
                 };

@@ -1333,6 +1333,7 @@ fn phase5_boot_and_run_hello() {
         initramfs_path: None,
         disk_path: None,
         ram_mib: 128,
+        cpus: 1,
         cmdline: Some("console=ttyS0\0".into()),
         net: None,
     };
@@ -1424,6 +1425,7 @@ fn phase6_vm_manager_lifecycle() {
         initramfs_path: None,
         disk_path: None,
         ram_mib: 128,
+        cpus: 1,
         cmdline: Some("console=ttyS0\0".into()),
         net: None,
     };
@@ -1515,6 +1517,7 @@ fn phase7_vm_manager_serial_streaming() {
         initramfs_path: None,
         disk_path: None,
         ram_mib: 128,
+        cpus: 1,
         cmdline: Some("console=ttyS0\0".into()),
         net: None,
     };
