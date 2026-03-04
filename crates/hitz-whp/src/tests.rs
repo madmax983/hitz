@@ -1518,6 +1518,146 @@ fn phase6_vm_manager_lifecycle() {
     });
 }
 
+// ─── Phase 8: SMP integration tests ──────────────────────────────────────────
+
+/// Phase 8 checkpoint: Boot hello ELF with 2 vCPUs.
+///
+/// APs stay in wait-for-SIPI since this simple ELF doesn't do SMP init
+/// (no ACPI tables pointing to AP trampoline). Validates that the
+/// multi-thread machinery works without crashing.
+#[test]
+#[ignore = "requires WHP enabled (Hyper-V)"]
+fn phase8_smp_2vcpu_hello() {
+    use std::io::Write;
+    use std::sync::atomic::AtomicBool;
+    use std::sync::{Arc, Mutex};
+
+    use hitz_api::VmConfig;
+    use hitz_vmm::ExitReason;
+
+    // x86-64 machine code: writes "Hello" to COM1 (0x3F8) then halts.
+    let code: &[u8] = &[
+        0xBA, 0xF8, 0x03, 0x00, 0x00, // mov edx, 0x3F8
+        0xB0, 0x48, // mov al, 'H'
+        0xEE, // out dx, al
+        0xB0, 0x65, // mov al, 'e'
+        0xEE, // out dx, al
+        0xB0, 0x6C, // mov al, 'l'
+        0xEE, // out dx, al
+        0xB0, 0x6C, // mov al, 'l'
+        0xEE, // out dx, al
+        0xB0, 0x6F, // mov al, 'o'
+        0xEE, // out dx, al
+        0xF4, // hlt
+    ];
+
+    let load_addr = 0x10_0000u64;
+    let elf = make_boot_elf(load_addr, code);
+
+    // Write ELF to a temp file so boot_and_run can read it by path.
+    let mut tmp = tempfile::NamedTempFile::new().expect("create temp file");
+    tmp.write_all(&elf).expect("write ELF to temp file");
+    tmp.flush().expect("flush temp file");
+
+    let config = VmConfig {
+        kernel_path: tmp.path().to_path_buf(),
+        initramfs_path: None,
+        disk_path: None,
+        ram_mib: 128,
+        cpus: 2,
+        cmdline: Some("console=ttyS0\0".into()),
+        net: None,
+    };
+
+    let hv = WhpHypervisor::new().expect("WHP not available");
+
+    // SharedWriter: captures serial output via Arc<Mutex<Vec<u8>>>.
+    let buffer: Arc<Mutex<Vec<u8>>> = Arc::new(Mutex::new(Vec::new()));
+    let writer = SharedWriter(Arc::clone(&buffer));
+
+    let result = hitz_vmm::boot_and_run(&hv, &config, writer, Arc::new(AtomicBool::new(false)))
+        .expect("boot_and_run should succeed");
+
+    assert_eq!(
+        result.exit_reason,
+        ExitReason::Halt,
+        "expected Halt exit, got {:?}",
+        result.exit_reason
+    );
+
+    let output = buffer.lock().expect("lock buffer");
+    let serial_output = String::from_utf8_lossy(&output);
+    assert!(
+        serial_output.contains("Hello"),
+        "expected Hello in serial output, got: {serial_output}"
+    );
+}
+
+/// Phase 8 checkpoint: Boot real Linux with 2 CPUs, verify SMP bringup in
+/// serial output.
+///
+/// Requires: `HITZ_KERNEL_PATH` env var pointing to a vmlinux binary.
+/// Optional: `HITZ_INITRAMFS_PATH` for an initramfs.
+///
+/// Run:
+/// ```bash
+/// HITZ_KERNEL_PATH=path/to/vmlinux HITZ_INITRAMFS_PATH=path/to/initramfs.cpio \
+///   cargo test -p hitz-whp -- --ignored phase8_smp_linux_boot --test-threads=1
+/// ```
+#[test]
+#[ignore = "requires WHP + vmlinux (set HITZ_KERNEL_PATH, optionally HITZ_INITRAMFS_PATH)"]
+fn phase8_smp_linux_boot() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::{Arc, Mutex};
+
+    let kernel_path = match std::env::var("HITZ_KERNEL_PATH") {
+        Ok(p) => std::path::PathBuf::from(p),
+        Err(_) => {
+            eprintln!("HITZ_KERNEL_PATH not set, skipping phase8_smp_linux_boot");
+            return;
+        }
+    };
+    let initramfs_path = std::env::var("HITZ_INITRAMFS_PATH")
+        .ok()
+        .map(std::path::PathBuf::from);
+
+    let config = hitz_api::VmConfig {
+        kernel_path,
+        initramfs_path,
+        disk_path: None,
+        ram_mib: 256,
+        cpus: 2,
+        cmdline: Some("console=ttyS0 earlyprintk=serial nokaslr\0".into()),
+        net: None,
+    };
+
+    let hv = WhpHypervisor::new().expect("WHP not available");
+
+    // SharedWriter: captures serial output via Arc<Mutex<Vec<u8>>>.
+    let buffer: Arc<Mutex<Vec<u8>>> = Arc::new(Mutex::new(Vec::new()));
+    let writer = SharedWriter(Arc::clone(&buffer));
+
+    let stop = Arc::new(AtomicBool::new(false));
+
+    // Give the kernel 10 seconds to boot, then signal stop.
+    let stop_clone = Arc::clone(&stop);
+    let timer = std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_secs(10));
+        stop_clone.store(true, Ordering::Relaxed);
+    });
+
+    let _result = hitz_vmm::boot_and_run(&hv, &config, writer, stop);
+
+    timer.join().unwrap();
+
+    let output = buffer.lock().expect("lock buffer");
+    let serial_output = String::from_utf8_lossy(&output);
+    assert!(
+        serial_output.contains("2 CPUs") || serial_output.contains("Processors"),
+        "expected SMP boot messages in serial output.\nGot:\n{serial_output}"
+    );
+}
+
 // ─── Phase 7: serial streaming through VmManager ────────────────────────────
 
 /// Phase 7 checkpoint: serial output from `boot_and_run` reaches `SerialBuf`
