@@ -338,6 +338,10 @@ fn run_vm(args: RunArgs) -> Result<ExitCode> {
 // ── hitz daemon start ──
 
 /// Run the daemon in the foreground.
+///
+/// Starts the named pipe (and optional TCP) listener, then waits for Ctrl+C.
+/// On signal: broadcasts shutdown to the listener loops, calls
+/// `stop_all_and_wait` to drain running VMs (up to 5 s), then returns.
 fn run_daemon(args: &DaemonStartArgs) -> Result<()> {
     if args.verbose {
         tracing_subscriber::fmt()
@@ -356,18 +360,28 @@ fn run_daemon(args: &DaemonStartArgs) -> Result<()> {
     rt.block_on(async {
         let hv = Arc::new(WhpHypervisor::new().context("WHP not available")?);
         let manager = hitz_daemon::VmManager::new(hv);
+        let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
 
-        tokio::select! {
-            result = hitz_daemon::run_server(&args.pipe, args.tcp_listen, manager.clone()) => {
-                result.context("server error")?;
-            }
-            _ = tokio::signal::ctrl_c() => {
-                eprintln!("\nhitz: shutting down...");
-                manager.stop_all();
-                // Brief wait for VM tasks to finish.
-                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-            }
-        }
+        let server_mgr = manager.clone();
+        let pipe = args.pipe.clone();
+        let tcp = args.tcp_listen;
+        let server_handle = tokio::spawn(async move {
+            hitz_daemon::run_server(&pipe, tcp, server_mgr, shutdown_rx).await
+        });
+
+        tokio::signal::ctrl_c()
+            .await
+            .context("failed to listen for Ctrl+C")?;
+        eprintln!("\nhitz: shutting down...");
+
+        // Signal listeners to stop accepting new connections.
+        let _ = shutdown_tx.send(true);
+        // Gracefully stop all running VMs (cancel + join, 5 s timeout).
+        manager.stop_all_and_wait(std::time::Duration::from_secs(5)).await;
+        // Wait for the server task to exit cleanly.
+        let _ = server_handle.await;
+
+        eprintln!("hitz: shutdown complete");
         Ok(())
     })
 }
