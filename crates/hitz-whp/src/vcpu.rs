@@ -44,7 +44,40 @@ impl Drop for WhpVcpu {
     }
 }
 
+/// Cancel handle for a WHP virtual processor.
+///
+/// Holds the partition handle and vCPU index needed to call
+/// `WHvCancelRunVirtualProcessor` from any thread. Created via
+/// [`Vcpu::cancel_handle`].
+#[derive(Clone)]
+pub struct WhpCancelHandle {
+    partition: Arc<PartitionInner>,
+    index: u32,
+}
+
+// SAFETY: `PartitionInner.handle` is a Windows HANDLE (isize).
+// WHP documents WHvCancelRunVirtualProcessor as safe to call from any
+// thread while the partition exists. Arc ensures the partition outlives
+// any outstanding handle.
+unsafe impl Send for WhpCancelHandle {}
+unsafe impl Sync for WhpCancelHandle {}
+
 impl Vcpu for WhpVcpu {
+    type CancelHandle = WhpCancelHandle;
+
+    fn cancel_handle(&self) -> Self::CancelHandle {
+        WhpCancelHandle {
+            partition: Arc::clone(&self.partition),
+            index: self.index,
+        }
+    }
+
+    fn cancel_via(handle: &Self::CancelHandle) -> Result<(), HalError> {
+        // SAFETY: partition handle is valid (Arc keeps it alive), flags must be 0.
+        unsafe { WHvCancelRunVirtualProcessor(handle.partition.handle, handle.index, 0) }
+            .map_err(|e| HalError::VcpuCancel(format!("WHvCancelRunVirtualProcessor: {e}")))
+    }
+
     fn run(&mut self) -> Result<VcpuExit, HalError> {
         let mut exit_ctx: WHV_RUN_VP_EXIT_CONTEXT = unsafe { core::mem::zeroed() };
 
@@ -63,12 +96,6 @@ impl Vcpu for WhpVcpu {
         .map_err(|e| HalError::VcpuRun(format!("WHvRunVirtualProcessor: {e}")))?;
 
         convert::exit_context_to_hal(&exit_ctx)
-    }
-
-    fn cancel(&self) -> Result<(), HalError> {
-        // SAFETY: partition handle is valid, flags must be 0.
-        unsafe { WHvCancelRunVirtualProcessor(self.partition.handle, self.index, 0) }
-            .map_err(|e| HalError::VcpuCancel(format!("WHvCancelRunVirtualProcessor: {e}")))
     }
 
     fn get_regs(&self) -> Result<StandardRegs, HalError> {
