@@ -1743,3 +1743,159 @@ fn phase7_vm_manager_serial_streaming() {
         }
     });
 }
+
+// ─── Phase 9: graceful shutdown integration tests ────────────────────────────
+
+/// Phase 9: boot_and_run exits cleanly when stop_flag is set externally.
+///
+/// Boots the "Hello" ELF, sets the stop flag after 200ms. The internal
+/// cancel-watchdog thread detects the flag and calls `cancel_via()` on
+/// the vCPU, forcing it out of `vcpu.run()`. Verifies `boot_and_run`
+/// returns within a reasonable time with Halt or Canceled exit reason.
+#[test]
+#[ignore = "requires WHP enabled (Hyper-V)"]
+fn phase9_cancel_via_stop_flag() {
+    use std::io::Write;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::{Arc, Mutex};
+
+    use hitz_api::VmConfig;
+    use hitz_vmm::ExitReason;
+
+    // x86-64: write "Hello" to COM1 (0x3F8) then HLT — same code as Phase 5.
+    let code: &[u8] = &[
+        0xBA, 0xF8, 0x03, 0x00, 0x00, // mov edx, 0x3F8
+        0xB0, 0x48, // mov al, 'H'
+        0xEE, // out dx, al
+        0xB0, 0x65, // mov al, 'e'
+        0xEE, // out dx, al
+        0xB0, 0x6C, // mov al, 'l'
+        0xEE, // out dx, al
+        0xB0, 0x6C, // mov al, 'l'
+        0xEE, // out dx, al
+        0xB0, 0x6F, // mov al, 'o'
+        0xEE, // out dx, al
+        0xF4, // hlt
+    ];
+
+    let load_addr = 0x10_0000u64;
+    let elf = make_boot_elf(load_addr, code);
+
+    let mut tmp = tempfile::NamedTempFile::new().expect("create temp file");
+    tmp.write_all(&elf).expect("write ELF");
+    tmp.flush().expect("flush");
+
+    let config = VmConfig {
+        kernel_path: tmp.path().to_path_buf(),
+        initramfs_path: None,
+        disk_path: None,
+        ram_mib: 128,
+        cpus: 1,
+        cmdline: Some("console=ttyS0\0".into()),
+        net: None,
+    };
+
+    let hv = WhpHypervisor::new().expect("WHP not available");
+    let stop_flag = Arc::new(AtomicBool::new(false));
+    let flag = stop_flag.clone();
+
+    // Set stop_flag after 200ms. The ELF runs so fast it typically HLTs
+    // before this fires, so we accept either Halt or Canceled.
+    let _timer = std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        flag.store(true, Ordering::Relaxed);
+    });
+
+    let buffer: Arc<Mutex<Vec<u8>>> = Arc::new(Mutex::new(Vec::new()));
+    let writer = SharedWriter(Arc::clone(&buffer));
+
+    let result = hitz_vmm::boot_and_run(&hv, &config, writer, stop_flag)
+        .expect("boot_and_run should succeed");
+
+    assert!(
+        matches!(result.exit_reason, ExitReason::Halt | ExitReason::Canceled),
+        "expected Halt or Canceled, got {:?}",
+        result.exit_reason
+    );
+
+    // Serial output should be "Hello" regardless of exit path.
+    let output = buffer.lock().expect("lock buffer");
+    assert_eq!(
+        output.as_slice(),
+        b"Hello",
+        "serial output mismatch: got {:?}",
+        String::from_utf8_lossy(&output)
+    );
+}
+
+/// Phase 9: multi-vCPU boot_and_run exits cleanly on external cancel.
+///
+/// Same "Hi" ELF with 2 vCPUs. BSP runs and HLTs; AP starts in
+/// wait-for-SIPI state. Setting stop_flag triggers the cancel-watchdog
+/// to cancel both vCPUs. Verifies all threads exit within 2 seconds.
+#[test]
+#[ignore = "requires WHP enabled (Hyper-V)"]
+fn phase9_multi_vcpu_cancel() {
+    use std::io::Write;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::{Arc, Mutex};
+
+    use hitz_api::VmConfig;
+    use hitz_vmm::ExitReason;
+
+    let code: &[u8] = &[
+        0xBA, 0xF8, 0x03, 0x00, 0x00, // mov edx, 0x3F8
+        0xB0, 0x48, // mov al, 'H'
+        0xEE, // out dx, al
+        0xB0, 0x69, // mov al, 'i'
+        0xEE, // out dx, al
+        0xF4, // hlt
+    ];
+
+    let load_addr = 0x10_0000u64;
+    let elf = make_boot_elf(load_addr, code);
+
+    let mut tmp = tempfile::NamedTempFile::new().expect("create temp file");
+    tmp.write_all(&elf).expect("write ELF");
+    tmp.flush().expect("flush");
+
+    let config = VmConfig {
+        kernel_path: tmp.path().to_path_buf(),
+        initramfs_path: None,
+        disk_path: None,
+        ram_mib: 128,
+        cpus: 2,
+        cmdline: Some("console=ttyS0\0".into()),
+        net: None,
+    };
+
+    let hv = WhpHypervisor::new().expect("WHP not available");
+    let stop_flag = Arc::new(AtomicBool::new(false));
+    let flag = stop_flag.clone();
+
+    // Set stop_flag after 500ms to give the BSP time to HLT.
+    let _timer = std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        flag.store(true, Ordering::Relaxed);
+    });
+
+    let buffer: Arc<Mutex<Vec<u8>>> = Arc::new(Mutex::new(Vec::new()));
+    let writer = SharedWriter(Arc::clone(&buffer));
+
+    let start = std::time::Instant::now();
+    let result = hitz_vmm::boot_and_run(&hv, &config, writer, stop_flag)
+        .expect("boot_and_run should succeed");
+    let elapsed = start.elapsed();
+
+    assert!(
+        matches!(result.exit_reason, ExitReason::Halt | ExitReason::Canceled),
+        "expected Halt or Canceled, got {:?}",
+        result.exit_reason
+    );
+
+    // Should complete well within 2 seconds (500ms delay + watchdog + thread join).
+    assert!(
+        elapsed < std::time::Duration::from_secs(2),
+        "boot_and_run took too long: {elapsed:?}"
+    );
+}
