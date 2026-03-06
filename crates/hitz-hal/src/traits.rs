@@ -71,22 +71,37 @@ pub trait Partition: Send + Sync {
 ///
 /// Each vCPU runs on its own OS thread. The `run` method blocks until
 /// the guest exits (I/O, MMIO, HLT, etc.).
+///
+/// # Cancellation
+///
+/// Call [`cancel_handle`][Vcpu::cancel_handle] *before* moving the vCPU into
+/// a thread. Share the handle via `Arc<Self::CancelHandle>` or by cloning,
+/// then call [`cancel_via`][Vcpu::cancel_via] from any thread to interrupt a
+/// blocked `run` call.
 pub trait Vcpu: Send {
     /// Opaque handle that can cancel a running vCPU from any thread.
+    ///
+    /// Must be extracted before the vCPU is moved into a thread.
+    /// Safe to clone and share across threads via `Arc` or direct clone.
     type CancelHandle: Send + Sync + Clone;
 
     /// Enter the guest and run until an exit occurs.
     fn run(&mut self) -> Result<VcpuExit, HalError>;
 
-    /// Extract a cancel handle from this vCPU.
+    /// Extract a cancel handle for this vCPU.
     ///
-    /// Call this before moving the vCPU into a thread. The handle can
-    /// be cloned and shared freely.
+    /// Call this *before* moving the vCPU into a thread. The returned
+    /// handle can be cloned and shared freely across threads.
     fn cancel_handle(&self) -> Self::CancelHandle;
 
     /// Cancel a running vCPU using a previously extracted handle.
     ///
-    /// This causes `run` to return `VcpuExit::Canceled`.
+    /// Forces `run` to return `VcpuExit::Canceled`. Safe to call from
+    /// any thread. Returns `Ok(())` if the cancel was delivered (the
+    /// vCPU may not have exited yet).
+    ///
+    /// Returns `Err` if the underlying hypervisor call fails (e.g. the
+    /// partition has already been destroyed).
     fn cancel_via(handle: &Self::CancelHandle) -> Result<(), HalError>;
 
     /// Cancel a running vCPU from another thread.
