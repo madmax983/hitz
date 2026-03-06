@@ -72,13 +72,29 @@ pub trait Partition: Send + Sync {
 /// Each vCPU runs on its own OS thread. The `run` method blocks until
 /// the guest exits (I/O, MMIO, HLT, etc.).
 pub trait Vcpu: Send {
+    /// Opaque handle that can cancel a running vCPU from any thread.
+    type CancelHandle: Send + Sync + Clone;
+
     /// Enter the guest and run until an exit occurs.
     fn run(&mut self) -> Result<VcpuExit, HalError>;
+
+    /// Extract a cancel handle from this vCPU.
+    ///
+    /// Call this before moving the vCPU into a thread. The handle can
+    /// be cloned and shared freely.
+    fn cancel_handle(&self) -> Self::CancelHandle;
+
+    /// Cancel a running vCPU using a previously extracted handle.
+    ///
+    /// This causes `run` to return `VcpuExit::Canceled`.
+    fn cancel_via(handle: &Self::CancelHandle) -> Result<(), HalError>;
 
     /// Cancel a running vCPU from another thread.
     ///
     /// This causes `run` to return `VcpuExit::Canceled`.
-    fn cancel(&self) -> Result<(), HalError>;
+    fn cancel(&self) -> Result<(), HalError> {
+        Self::cancel_via(&self.cancel_handle())
+    }
 
     /// Read the general-purpose registers.
     fn get_regs(&self) -> Result<StandardRegs, HalError>;
