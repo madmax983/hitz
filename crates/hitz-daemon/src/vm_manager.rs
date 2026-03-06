@@ -3,6 +3,9 @@
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
+
+use tokio::sync::mpsc as tokio_mpsc;
 
 use hitz_api::{VmConfig, VmInfo, VmState};
 use hitz_hal::Hypervisor;
@@ -36,17 +39,26 @@ impl VmEntry {
 /// depend on a specific platform (WHP, KVM, etc.).
 ///
 /// `Clone` is implemented manually so `H` does not need to be `Clone`
-/// (both fields are `Arc`-wrapped).
+/// (all fields are `Arc`-wrapped).
 pub struct VmManager<H> {
     hypervisor: Arc<H>,
     vms: Arc<Mutex<HashMap<String, VmEntry>>>,
+    /// Sender half of the VM-completion channel.  Each spawned VM task sends
+    /// its ID here after `boot_and_run` returns so `stop_all_and_wait` can
+    /// drain them.
+    completion_tx: tokio_mpsc::UnboundedSender<String>,
+    /// Receiver half, wrapped in a tokio `Mutex` so it can be shared across
+    /// `Clone`d managers without requiring `&mut self`.
+    completion_rx: Arc<tokio::sync::Mutex<tokio_mpsc::UnboundedReceiver<String>>>,
 }
 
 impl<H> Clone for VmManager<H> {
     fn clone(&self) -> Self {
         Self {
-            hypervisor: self.hypervisor.clone(),
-            vms: self.vms.clone(),
+            hypervisor: Arc::clone(&self.hypervisor),
+            vms: Arc::clone(&self.vms),
+            completion_tx: self.completion_tx.clone(),
+            completion_rx: Arc::clone(&self.completion_rx),
         }
     }
 }
@@ -54,9 +66,12 @@ impl<H> Clone for VmManager<H> {
 impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
     /// Create a new manager with the given hypervisor backend.
     pub fn new(hypervisor: Arc<H>) -> Self {
+        let (tx, rx) = tokio_mpsc::unbounded_channel();
         Self {
             hypervisor,
             vms: Arc::new(Mutex::new(HashMap::new())),
+            completion_tx: tx,
+            completion_rx: Arc::new(tokio::sync::Mutex::new(rx)),
         }
     }
 
@@ -121,8 +136,10 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
         let hv = self.hypervisor.clone();
         let vms = self.vms.clone();
         let vm_id = id.to_string();
+        let completion_tx = self.completion_tx.clone();
 
-        // Fire-and-forget: the spawned task updates VM state on completion.
+        // Fire-and-forget: the spawned task updates VM state on completion
+        // and signals the completion channel so `stop_all_and_wait` can drain.
         drop(tokio::task::spawn(async move {
             let result = tokio::task::spawn_blocking(move || {
                 hitz_vmm::boot_and_run(&*hv, &config, serial_buf, stop_flag)
@@ -158,6 +175,9 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
                     buf.close();
                 }
             }
+
+            // Notify stop_all_and_wait that this VM has finished.
+            let _ = completion_tx.send(vm_id);
         }));
 
         Ok(info)
@@ -262,7 +282,14 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
         Ok(())
     }
 
-    /// Stop all running VMs. Used for daemon shutdown.
+    /// Stop all running VMs (fire-and-forget, does not wait for them to finish).
+    ///
+    /// Sets the stop flag on every running VM, which signals the cancel-watchdog
+    /// threads to cancel the vCPU run loops. Returns immediately without waiting
+    /// for the VMs to reach a terminal state. Use [`stop_all_and_wait`] if you
+    /// need to block until all VMs have stopped.
+    ///
+    /// [`stop_all_and_wait`]: VmManager::stop_all_and_wait
     pub fn stop_all(&self) {
         if let Ok(vms) = self.vms.lock() {
             for entry in vms.values() {
@@ -270,6 +297,56 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
                     && let Some(ref flag) = entry.stop_flag
                 {
                     flag.store(true, Ordering::Relaxed);
+                }
+            }
+        }
+    }
+
+    /// Stop all running VMs and wait for them to finish.
+    ///
+    /// Sets stop flags for all running VMs (triggering their internal
+    /// cancel-watchdog threads), then waits on the completion channel
+    /// until all VMs report done or `timeout` expires.
+    ///
+    /// If the timeout elapses before all VMs stop, a warning is logged and
+    /// the method returns — it does not forcibly kill any remaining VMs.
+    pub async fn stop_all_and_wait(&self, timeout: Duration) {
+        let running_count = {
+            let Ok(vms) = self.vms.lock() else { return };
+            let mut count = 0usize;
+            for entry in vms.values() {
+                if entry.state == VmState::Running {
+                    if let Some(ref flag) = entry.stop_flag {
+                        flag.store(true, Ordering::Relaxed);
+                    }
+                    count += 1;
+                }
+            }
+            count
+        };
+
+        if running_count == 0 {
+            return;
+        }
+
+        tracing::info!(running_count, "waiting for VMs to stop");
+
+        let deadline = tokio::time::Instant::now() + timeout;
+        let mut rx = self.completion_rx.lock().await;
+        let mut stopped = 0usize;
+
+        while stopped < running_count {
+            match tokio::time::timeout_at(deadline, rx.recv()).await {
+                Ok(Some(_vm_id)) => {
+                    stopped += 1;
+                }
+                Ok(None) => break, // channel closed — no more senders
+                Err(_elapsed) => {
+                    tracing::warn!(
+                        remaining = running_count - stopped,
+                        "timeout waiting for VMs to stop"
+                    );
+                    break;
                 }
             }
         }
@@ -334,12 +411,18 @@ mod tests {
     struct FakeVcpu;
 
     impl hitz_hal::Vcpu for FakeVcpu {
+        type CancelHandle = ();
+
+        fn cancel_handle(&self) -> Self::CancelHandle {}
+
+        fn cancel_via(_handle: &Self::CancelHandle) -> Result<(), hitz_hal::HalError> {
+            Ok(())
+        }
+
         fn run(&mut self) -> Result<hitz_hal::VcpuExit, hitz_hal::HalError> {
             Ok(hitz_hal::VcpuExit::Halt)
         }
-        fn cancel(&self) -> Result<(), hitz_hal::HalError> {
-            Ok(())
-        }
+
         fn get_regs(&self) -> Result<hitz_hal::StandardRegs, hitz_hal::HalError> {
             Ok(hitz_hal::StandardRegs::default())
         }
