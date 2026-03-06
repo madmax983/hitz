@@ -7,7 +7,9 @@ use std::fmt::Write as _;
 use std::fs;
 use std::io::Write;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use hitz_api::VmConfig;
 use hitz_boot::{
@@ -20,7 +22,8 @@ use hitz_devices::virtio::block::VirtioBlockDevice;
 use hitz_devices::virtio::mmio_transport::VirtioMmioTransport;
 use hitz_devices::virtio::net::VirtioNetDevice;
 use hitz_hal::{
-    Gpa, GuestMemAccess, Hypervisor, MemFlags, MemSizeMiB, Partition, PartitionConfig, VcpuId,
+    Gpa, GuestMemAccess, Hypervisor, MemFlags, MemSizeMiB, Partition, PartitionConfig, Vcpu,
+    VcpuId,
 };
 use hitz_net::ethernet;
 
@@ -110,6 +113,16 @@ pub fn validate_config(config: &VmConfig) -> Result<(), VmError> {
     Ok(())
 }
 
+/// Cancel all vCPUs using pre-extracted cancel handles.
+///
+/// Called by the watchdog thread when the stop flag fires, and by each
+/// vCPU thread on terminal exit to unblock sibling vCPUs.
+fn cancel_all_vcpus<V: Vcpu>(handles: &[V::CancelHandle]) {
+    for h in handles {
+        let _ = V::cancel_via(h);
+    }
+}
+
 /// Boot a Linux kernel and run the VM to completion.
 ///
 /// This is the main entry point for the VMM. It:
@@ -125,8 +138,8 @@ pub fn validate_config(config: &VmConfig) -> Result<(), VmError> {
 ///
 /// # Panics
 ///
-/// Panics if a vCPU thread cannot be spawned (OS resource exhaustion) or
-/// if the `first_exit` mutex is poisoned (a vCPU thread panicked).
+/// Panics if a vCPU thread or the watchdog thread cannot be spawned
+/// (OS resource exhaustion).
 #[allow(
     clippy::cast_possible_truncation,
     clippy::too_many_lines,
@@ -322,62 +335,138 @@ pub fn boot_and_run<H: Hypervisor, W: Write + Send + 'static>(
     let devices = Arc::new(Mutex::new(SharedDevices { serial, mmio_bus }));
 
     if vcpus.len() == 1 {
-        // Single vCPU: run on the current thread (no spawn overhead).
+        // Watchdog cancels the vCPU if stop_flag fires while guest is halted.
+        let cancel_handle = vcpus[0].cancel_handle();
+        let stop_clone = Arc::clone(&stop_flag);
+        let watchdog = std::thread::Builder::new()
+            .name("cancel-watchdog".into())
+            .spawn(move || {
+                while !stop_clone.load(Ordering::Relaxed) {
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+                let _ = <<H::Partition as Partition>::Vcpu as Vcpu>::cancel_via(&cancel_handle);
+            })
+            .expect("spawn watchdog thread");
+
         let exit_reason =
             run_loop::run_vcpu_loop(&mut vcpus[0], &devices, &*guest_mem_arc, &stop_flag)?;
+
+        // Ensure watchdog exits (set flag so it doesn't spin forever on normal exit).
+        stop_flag.store(true, Ordering::Relaxed);
+        let _ = watchdog.join();
         drop(net_io_handle);
         return Ok(VmRunResult { exit_reason });
     }
 
     // Multi-vCPU: spawn a thread per vCPU.
-    let first_exit: Arc<Mutex<Option<ExitReason>>> = Arc::new(Mutex::new(None));
+    let cancel_handles: Vec<_> = vcpus.iter().map(Vcpu::cancel_handle).collect();
+    let shared_handles = Arc::new(cancel_handles);
+    let (exit_tx, exit_rx) = mpsc::channel::<Result<ExitReason, hitz_hal::HalError>>();
+    let num_vcpus = vcpus.len();
+
+    // Watchdog: ensures cancel fires even if ALL vCPUs are blocked in run().
+    let watchdog = {
+        let stop_clone = Arc::clone(&stop_flag);
+        let handles_clone = Arc::clone(&shared_handles);
+        std::thread::Builder::new()
+            .name("cancel-watchdog".into())
+            .spawn(move || {
+                while !stop_clone.load(Ordering::Relaxed) {
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+                cancel_all_vcpus::<<H::Partition as Partition>::Vcpu>(&handles_clone);
+            })
+            .expect("spawn watchdog thread")
+    };
 
     let handles: Vec<_> = vcpus
         .into_iter()
         .enumerate()
         .map(|(idx, mut vcpu)| {
-            let devs = devices.clone();
-            let mem = guest_mem_arc.clone();
-            let first = first_exit.clone();
-            let stop = stop_flag.clone();
+            let devs = Arc::clone(&devices);
+            let mem = Arc::clone(&guest_mem_arc);
+            let stop = Arc::clone(&stop_flag);
+            let cancel_handles = Arc::clone(&shared_handles);
+            let tx = exit_tx.clone();
 
             std::thread::Builder::new()
                 .name(format!("vcpu-{idx}"))
                 .spawn(move || {
-                    let result = run_loop::run_vcpu_loop(&mut vcpu, &devs, &*mem, &stop);
+                    let result =
+                        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                            run_loop::run_vcpu_loop(&mut vcpu, &devs, &*mem, &stop)
+                        }));
 
+                    // On terminal exit or panic, stop and cancel all sibling vCPUs.
                     match &result {
-                        Ok(ExitReason::Halt | ExitReason::Shutdown | ExitReason::Unexpected(_))
+                        Ok(Ok(ExitReason::Halt | ExitReason::Shutdown | ExitReason::Unexpected(_)) | Err(_))
                         | Err(_) => {
-                            let mut guard = first.lock().expect("first_exit lock");
-                            if guard.is_none()
-                                && let Ok(ref reason) = result
-                            {
-                                *guard = Some(reason.clone());
-                            }
-                            drop(guard);
                             stop.store(true, Ordering::Relaxed);
+                            cancel_all_vcpus::<<H::Partition as Partition>::Vcpu>(
+                                &cancel_handles,
+                            );
                         }
-                        Ok(ExitReason::Canceled) => {
-                            // Another vCPU already triggered stop.
+                        Ok(Ok(ExitReason::Canceled)) => {
+                            // Another vCPU already triggered stop; nothing to do.
                         }
                     }
 
-                    result
+                    // Convert panic payload into an ExitReason.
+                    let exit = match result {
+                        Ok(r) => r,
+                        Err(payload) => {
+                            let msg = payload.downcast_ref::<&str>().map_or_else(
+                                || {
+                                    payload
+                                        .downcast_ref::<String>()
+                                        .map_or_else(|| "unknown panic".to_string(), Clone::clone)
+                                },
+                                |s| (*s).to_string(),
+                            );
+                            Ok(ExitReason::Unexpected(format!("vCPU {idx} panicked: {msg}")))
+                        }
+                    };
+
+                    let _ = tx.send(exit);
                 })
                 .expect("spawn vcpu thread")
         })
         .collect();
 
-    // Join all threads.
+    // Drop sender so the receiver knows when all threads are done.
+    drop(exit_tx);
+
+    // Collect results with a 3-second timeout per vCPU.
+    let deadline = Instant::now() + Duration::from_secs(3);
     let mut final_reason = ExitReason::Canceled;
-    for handle in handles {
-        let _ = handle.join();
+
+    for _ in 0..num_vcpus {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        match exit_rx.recv_timeout(remaining) {
+            Ok(Ok(reason)) => {
+                if final_reason == ExitReason::Canceled {
+                    final_reason = reason;
+                }
+            }
+            Ok(Err(e)) => {
+                if final_reason == ExitReason::Canceled {
+                    final_reason = ExitReason::Unexpected(format!("vCPU error: {e}"));
+                }
+            }
+            Err(_) => {
+                tracing::warn!("vCPU thread timed out during shutdown");
+                break;
+            }
+        }
     }
 
-    let captured_reason = first_exit.lock().expect("first_exit lock").take();
-    if let Some(reason) = captured_reason {
-        final_reason = reason;
+    // Signal watchdog to stop (in case it's still polling).
+    stop_flag.store(true, Ordering::Relaxed);
+    let _ = watchdog.join();
+
+    // Join vCPU threads — should be near-instant since they sent results already.
+    for handle in handles {
+        let _ = handle.join();
     }
 
     drop(net_io_handle);
