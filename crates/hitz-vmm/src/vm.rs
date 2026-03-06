@@ -22,8 +22,7 @@ use hitz_devices::virtio::block::VirtioBlockDevice;
 use hitz_devices::virtio::mmio_transport::VirtioMmioTransport;
 use hitz_devices::virtio::net::VirtioNetDevice;
 use hitz_hal::{
-    Gpa, GuestMemAccess, Hypervisor, MemFlags, MemSizeMiB, Partition, PartitionConfig, Vcpu,
-    VcpuId,
+    Gpa, GuestMemAccess, Hypervisor, MemFlags, MemSizeMiB, Partition, PartitionConfig, Vcpu, VcpuId,
 };
 use hitz_net::ethernet;
 
@@ -392,19 +391,19 @@ pub fn boot_and_run<H: Hypervisor, W: Write + Send + 'static>(
             std::thread::Builder::new()
                 .name(format!("vcpu-{idx}"))
                 .spawn(move || {
-                    let result =
-                        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                            run_loop::run_vcpu_loop(&mut vcpu, &devs, &*mem, &stop)
-                        }));
+                    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        run_loop::run_vcpu_loop(&mut vcpu, &devs, &*mem, &stop)
+                    }));
 
                     // On terminal exit or panic, stop and cancel all sibling vCPUs.
                     match &result {
-                        Ok(Ok(ExitReason::Halt | ExitReason::Shutdown | ExitReason::Unexpected(_)) | Err(_))
+                        Ok(
+                            Ok(ExitReason::Halt | ExitReason::Shutdown | ExitReason::Unexpected(_))
+                            | Err(_),
+                        )
                         | Err(_) => {
                             stop.store(true, Ordering::Relaxed);
-                            cancel_all_vcpus::<<H::Partition as Partition>::Vcpu>(
-                                &cancel_handles,
-                            );
+                            cancel_all_vcpus::<<H::Partition as Partition>::Vcpu>(&cancel_handles);
                         }
                         Ok(Ok(ExitReason::Canceled)) => {
                             // Another vCPU already triggered stop; nothing to do.
@@ -423,7 +422,9 @@ pub fn boot_and_run<H: Hypervisor, W: Write + Send + 'static>(
                                 },
                                 |s| (*s).to_string(),
                             );
-                            Ok(ExitReason::Unexpected(format!("vCPU {idx} panicked: {msg}")))
+                            Ok(ExitReason::Unexpected(format!(
+                                "vCPU {idx} panicked: {msg}"
+                            )))
                         }
                     };
 

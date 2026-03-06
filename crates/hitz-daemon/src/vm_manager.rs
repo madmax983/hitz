@@ -152,13 +152,13 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
             {
                 match result {
                     Ok(Ok(run_result)) => match run_result.exit_reason {
-                        ExitReason::Halt | ExitReason::Canceled => {
+                        ExitReason::Halt | ExitReason::Shutdown | ExitReason::Canceled => {
                             entry.state = VmState::Stopped;
                             entry.exit_reason = Some(format!("{:?}", run_result.exit_reason));
                         }
-                        reason => {
+                        ExitReason::Unexpected(ref reason) => {
                             entry.state = VmState::Failed;
-                            entry.exit_reason = Some(format!("{reason:?}"));
+                            entry.exit_reason = Some(reason.clone());
                         }
                     },
                     Ok(Err(e)) => {

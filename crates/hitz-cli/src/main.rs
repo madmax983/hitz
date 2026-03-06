@@ -377,7 +377,9 @@ fn run_daemon(args: &DaemonStartArgs) -> Result<()> {
         // Signal listeners to stop accepting new connections.
         let _ = shutdown_tx.send(true);
         // Gracefully stop all running VMs (cancel + join, 5 s timeout).
-        manager.stop_all_and_wait(std::time::Duration::from_secs(5)).await;
+        manager
+            .stop_all_and_wait(std::time::Duration::from_secs(5))
+            .await;
         // Wait for the server task to exit cleanly.
         let _ = server_handle.await;
 
