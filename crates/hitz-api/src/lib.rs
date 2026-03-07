@@ -33,6 +33,16 @@ pub struct NetConfig {
     pub adapter_name: Option<String>,
 }
 
+/// A single TCP port forward rule: `host_port` on the host forwards to
+/// `guest_port` inside the VM.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PortForward {
+    /// Port to listen on the host (e.g. `2222`).
+    pub host_port: u16,
+    /// Port to connect to in the guest (e.g. `22`).
+    pub guest_port: u16,
+}
+
 const fn default_cpus() -> u32 {
     DEFAULT_CPUS
 }
@@ -57,6 +67,12 @@ pub struct VmConfig {
     pub cmdline: Option<String>,
     /// Optional network configuration for virtio-net.
     pub net: Option<NetConfig>,
+    /// TCP port forwards. Empty = no forwarding.
+    ///
+    /// Each rule opens a `TcpListener` on `0.0.0.0:host_port` and proxies
+    /// connections to `guest_ip:guest_port`. Ignored if `net` is `None`.
+    #[serde(default)]
+    pub ports: Vec<PortForward>,
 }
 
 impl VmConfig {
@@ -138,6 +154,7 @@ mod tests {
             cpus: 1,
             cmdline: None,
             net: None,
+            ports: vec![],
         };
         assert_eq!(cfg.effective_cmdline(), DEFAULT_CMDLINE);
     }
@@ -152,6 +169,7 @@ mod tests {
             cpus: 1,
             cmdline: Some("root=/dev/vda rw".into()),
             net: None,
+            ports: vec![],
         };
         assert_eq!(cfg.effective_cmdline(), "root=/dev/vda rw");
     }
@@ -171,6 +189,7 @@ mod tests {
             cpus: 1,
             cmdline: Some("console=ttyS0".into()),
             net: None,
+            ports: vec![],
         };
         let json = serde_json::to_string(&cfg).expect("serialize");
         let restored: VmConfig = serde_json::from_str(&json).expect("deserialize");
@@ -192,6 +211,7 @@ mod tests {
             cpus: 1,
             cmdline: None,
             net: None,
+            ports: vec![],
         };
         let json = serde_json::to_string(&cfg).expect("serialize");
         let restored: VmConfig = serde_json::from_str(&json).expect("deserialize");
@@ -239,6 +259,7 @@ mod tests {
                 cpus: 1,
                 cmdline: Some("console=ttyS0".into()),
                 net: None,
+                ports: vec![],
             },
             exit_reason: None,
         };
@@ -262,6 +283,7 @@ mod tests {
                 cpus: 1,
                 cmdline: None,
                 net: None,
+                ports: vec![],
             },
         };
         let json = serde_json::to_string(&req).expect("serialize");
@@ -320,6 +342,7 @@ mod tests {
                 guest_ip: DEFAULT_GUEST_IP.into(),
                 adapter_name: None,
             }),
+            ports: vec![],
         };
         let json = serde_json::to_string(&cfg).expect("serialize");
         let restored: VmConfig = serde_json::from_str(&json).expect("deserialize");
@@ -343,9 +366,55 @@ mod tests {
             cmdline: None,
             net: None,
             cpus: 4,
+            ports: vec![],
         };
         let json = serde_json::to_string(&cfg).expect("serialize");
         let restored: VmConfig = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(restored.cpus, 4);
+    }
+
+    #[test]
+    fn port_forward_serde_roundtrip() {
+        let pf = PortForward {
+            host_port: 2222,
+            guest_port: 22,
+        };
+        let json = serde_json::to_string(&pf).expect("serialize");
+        let restored: PortForward = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(restored, pf);
+    }
+
+    #[test]
+    fn vm_config_ports_serde_default() {
+        // Old config JSON without a "ports" field should deserialize to empty vec.
+        let json = r#"{"kernel_path":"vmlinux","initramfs_path":null,"disk_path":null,"ram_mib":256,"cmdline":null,"net":null}"#;
+        let cfg: VmConfig = serde_json::from_str(json).expect("deserialize");
+        assert!(cfg.ports.is_empty());
+    }
+
+    #[test]
+    fn vm_config_ports_roundtrip() {
+        let cfg = VmConfig {
+            kernel_path: "vmlinux".into(),
+            initramfs_path: None,
+            disk_path: None,
+            ram_mib: 256,
+            cpus: 1,
+            cmdline: None,
+            net: None,
+            ports: vec![
+                PortForward {
+                    host_port: 2222,
+                    guest_port: 22,
+                },
+                PortForward {
+                    host_port: 8080,
+                    guest_port: 80,
+                },
+            ],
+        };
+        let json = serde_json::to_string(&cfg).expect("serialize");
+        let restored: VmConfig = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(restored.ports, cfg.ports);
     }
 }

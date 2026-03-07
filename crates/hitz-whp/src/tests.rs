@@ -1375,6 +1375,7 @@ fn phase5_boot_and_run_hello() {
         cpus: 1,
         cmdline: Some("console=ttyS0\0".into()),
         net: None,
+        ports: vec![],
     };
 
     let hv = WhpHypervisor::new().expect("WHP not available");
@@ -1473,6 +1474,7 @@ fn phase6_vm_manager_lifecycle() {
         cpus: 1,
         cmdline: Some("console=ttyS0\0".into()),
         net: None,
+        ports: vec![],
     };
 
     let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
@@ -1567,6 +1569,7 @@ fn phase8_smp_2vcpu_hello() {
         cpus: 2,
         cmdline: Some("console=ttyS0\0".into()),
         net: None,
+        ports: vec![],
     };
 
     let hv = WhpHypervisor::new().expect("WHP not available");
@@ -1629,6 +1632,7 @@ fn phase8_smp_linux_boot() {
         cpus: 2,
         cmdline: Some("console=ttyS0 earlyprintk=serial nokaslr\0".into()),
         net: None,
+        ports: vec![],
     };
 
     let hv = WhpHypervisor::new().expect("WHP not available");
@@ -1705,6 +1709,7 @@ fn phase7_vm_manager_serial_streaming() {
         cpus: 1,
         cmdline: Some("console=ttyS0\0".into()),
         net: None,
+        ports: vec![],
     };
 
     let rt = tokio::runtime::Builder::new_current_thread()
@@ -1793,6 +1798,7 @@ fn phase9_cancel_via_stop_flag() {
         cpus: 1,
         cmdline: Some("console=ttyS0\0".into()),
         net: None,
+        ports: vec![],
     };
 
     let hv = WhpHypervisor::new().expect("WHP not available");
@@ -1867,6 +1873,7 @@ fn phase9_multi_vcpu_cancel() {
         cpus: 2,
         cmdline: Some("console=ttyS0\0".into()),
         net: None,
+        ports: vec![],
     };
 
     let hv = WhpHypervisor::new().expect("WHP not available");

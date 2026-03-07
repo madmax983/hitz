@@ -303,6 +303,7 @@ fn run_vm(args: RunArgs) -> Result<ExitCode> {
         cpus: args.cpus,
         cmdline: Some(args.cmdline),
         net,
+        ports: vec![],
     };
 
     let hypervisor = WhpHypervisor::new().context("failed to create WHP hypervisor")?;
@@ -419,6 +420,7 @@ fn run_vm_command(cmd: VmCommand) -> Result<()> {
                     cpus: args.cpus,
                     cmdline: Some(args.cmdline),
                     net,
+                    ports: vec![],
                 };
                 let body = serde_json::to_string(&CreateVmRequest { config })
                     .context("serialize request")?;

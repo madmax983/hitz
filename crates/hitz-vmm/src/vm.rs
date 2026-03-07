@@ -490,6 +490,7 @@ mod tests {
             cpus: 1,
             cmdline: None,
             net: None,
+            ports: vec![],
         }
     }
 
