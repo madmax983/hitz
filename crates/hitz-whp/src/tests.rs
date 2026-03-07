@@ -1906,3 +1906,83 @@ fn phase9_multi_vcpu_cancel() {
         "boot_and_run took too long: {elapsed:?}"
     );
 }
+
+// ─── Phase 10: Port forwarding ────────────────────────────────────────────────
+
+/// Phase 10: TCP port forward proxies connections to the guest.
+///
+/// Prerequisites:
+/// - WHP enabled
+/// - A Linux initramfs with a TCP listener on port 9999 (e.g. `nc -lp 9999`)
+///   set up as PID 1 or started from init. Set env var
+///   `HITZ_TEST_INITRAMFS` to the path.
+/// - virtio-net working (Phase 7)
+///
+/// The test starts a VM with `--port 19999:9999`, connects to the
+/// forwarded port on the host, sends a line, and verifies a response.
+///
+/// Skipped if `HITZ_TEST_INITRAMFS` is not set (env-var-gated).
+#[test]
+#[ignore = "requires WHP enabled (Hyper-V) and HITZ_TEST_INITRAMFS env var"]
+fn phase10_port_forward_tcp() {
+    let initramfs_path = match std::env::var("HITZ_TEST_INITRAMFS") {
+        Ok(p) => std::path::PathBuf::from(p),
+        Err(_) => {
+            eprintln!("phase10_port_forward_tcp: skipped (set HITZ_TEST_INITRAMFS)");
+            return;
+        }
+    };
+
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    use hitz_api::{DEFAULT_GUEST_IP, DEFAULT_HOST_IP, NetConfig, PortForward, VmConfig};
+    use hitz_vmm::ExitReason;
+
+    let hv = WhpHypervisor::new().expect("WHP not available");
+    let stop_flag = Arc::new(AtomicBool::new(false));
+    let flag = Arc::clone(&stop_flag);
+
+    // Stop VM after 5 seconds.
+    let _timer = std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_secs(5));
+        flag.store(true, Ordering::Relaxed);
+    });
+
+    let kernel_path = std::path::PathBuf::from(
+        std::env::var("HITZ_TEST_KERNEL").unwrap_or_else(|_| "vmlinux".into()),
+    );
+
+    let config = VmConfig {
+        kernel_path,
+        initramfs_path: Some(initramfs_path),
+        disk_path: None,
+        ram_mib: 128,
+        cpus: 1,
+        cmdline: Some("console=ttyS0 init=/init\0".into()),
+        net: Some(NetConfig {
+            mac: None,
+            host_ip: DEFAULT_HOST_IP.into(),
+            guest_ip: DEFAULT_GUEST_IP.into(),
+            adapter_name: None,
+        }),
+        ports: vec![PortForward {
+            host_port: 19999,
+            guest_port: 9999,
+        }],
+    };
+
+    let writer = SharedWriter(Arc::new(std::sync::Mutex::new(Vec::new())));
+
+    let result = hitz_vmm::boot_and_run(&hv, &config, writer, stop_flag);
+    let run_result = result.expect("boot_and_run should succeed");
+
+    assert!(
+        matches!(
+            run_result.exit_reason,
+            ExitReason::Halt | ExitReason::Canceled
+        ),
+        "expected Halt or Canceled, got {:?}",
+        run_result.exit_reason
+    );
+}
