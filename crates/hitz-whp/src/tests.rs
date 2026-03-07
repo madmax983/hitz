@@ -1918,8 +1918,9 @@ fn phase9_multi_vcpu_cancel() {
 ///   `HITZ_TEST_INITRAMFS` to the path.
 /// - virtio-net working (Phase 7)
 ///
-/// The test starts a VM with `--port 19999:9999`, connects to the
-/// forwarded port on the host, sends a line, and verifies a response.
+/// Boots a VM with `ports: [19999:9999]` and verifies it exits cleanly.
+/// Full TCP connect + echo assertion is a TODO — a guest initramfs with
+/// a TCP listener on port 9999 would be required.
 ///
 /// Skipped if `HITZ_TEST_INITRAMFS` is not set (env-var-gated).
 #[test]
@@ -1957,7 +1958,7 @@ fn phase10_port_forward_tcp() {
         kernel_path,
         initramfs_path: Some(initramfs_path),
         disk_path: None,
-        ram_mib: 128,
+        ram_mib: 256,
         cpus: 1,
         cmdline: Some("console=ttyS0 init=/init\0".into()),
         net: Some(NetConfig {
