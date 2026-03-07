@@ -1,6 +1,7 @@
 //! TCP port forward manager — one listener task per rule.
 
 use std::net::Ipv4Addr;
+use std::sync::Arc;
 
 use hitz_api::PortForward;
 use tokio::task::JoinHandle;
@@ -10,9 +11,11 @@ use tokio::task::JoinHandle;
 /// Each rule spawns a tokio task that accepts connections on `0.0.0.0:host_port`
 /// and relays them to `guest_ip:guest_port` via [`tokio::io::copy_bidirectional`].
 ///
-/// Dropping this manager aborts all listener tasks.
+/// Dropping this manager aborts all listener tasks and makes a best-effort
+/// attempt to abort any in-flight relay connections.
 pub struct PortForwardManager {
     handles: Vec<JoinHandle<()>>,
+    relay_handles: Arc<tokio::sync::Mutex<Vec<JoinHandle<()>>>>,
 }
 
 impl PortForwardManager {
@@ -22,6 +25,8 @@ impl PortForwardManager {
     /// prevent the VM from starting.
     pub async fn start(guest_ip: Ipv4Addr, rules: &[PortForward]) -> Self {
         let mut handles = Vec::with_capacity(rules.len());
+        let relay_handles: Arc<tokio::sync::Mutex<Vec<JoinHandle<()>>>> =
+            Arc::new(tokio::sync::Mutex::new(Vec::new()));
 
         for rule in rules {
             let host_addr = std::net::SocketAddr::from(([0, 0, 0, 0], rule.host_port));
@@ -45,11 +50,12 @@ impl PortForwardManager {
                 rule.guest_port
             );
 
+            let relay_handles_clone = Arc::clone(&relay_handles);
             let handle = tokio::spawn(async move {
                 loop {
                     match listener.accept().await {
                         Ok((mut inbound, _peer)) => {
-                            let _conn_handle = tokio::spawn(async move {
+                            let relay = tokio::spawn(async move {
                                 match tokio::net::TcpStream::connect(guest_addr).await {
                                     Ok(mut outbound) => {
                                         let _ = tokio::io::copy_bidirectional(
@@ -65,10 +71,10 @@ impl PortForwardManager {
                                     }
                                 }
                             });
+                            relay_handles_clone.lock().await.push(relay);
                         }
                         Err(e) => {
-                            tracing::debug!("port forward accept error: {e}");
-                            break;
+                            tracing::warn!("port forward accept error, retrying: {e}");
                         }
                     }
                 }
@@ -77,7 +83,10 @@ impl PortForwardManager {
             handles.push(handle);
         }
 
-        Self { handles }
+        Self {
+            handles,
+            relay_handles,
+        }
     }
 }
 
@@ -85,6 +94,12 @@ impl Drop for PortForwardManager {
     fn drop(&mut self) {
         for handle in &self.handles {
             handle.abort();
+        }
+        // Best-effort: abort relay tasks if the lock is immediately available.
+        if let Ok(mut relays) = self.relay_handles.try_lock() {
+            for handle in relays.drain(..) {
+                handle.abort();
+            }
         }
     }
 }
@@ -181,7 +196,7 @@ mod tests {
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
 
         // Now we should be able to rebind that port.
-        let _listener = tokio::net::TcpListener::bind(format!("127.0.0.1:{host_port}"))
+        let _listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{host_port}"))
             .await
             .expect("port should be free after manager dropped");
     }
