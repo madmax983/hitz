@@ -21,7 +21,7 @@ pub const DEFAULT_HOST_IP: &str = "192.168.100.1/24";
 pub const DEFAULT_GUEST_IP: &str = "192.168.100.2/24";
 
 /// Network configuration for a VM.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NetConfig {
     /// Guest MAC address (e.g. "AA:BB:CC:DD:EE:FF"). Random if `None`.
     pub mac: Option<String>,
@@ -50,7 +50,7 @@ const fn default_cpus() -> u32 {
 /// VM configuration — everything needed to boot a micro-VM.
 ///
 /// Serializable for the future daemon REST API (Phase 6).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct VmConfig {
     /// Path to the kernel ELF binary (vmlinux).
     pub kernel_path: PathBuf,
@@ -398,7 +398,7 @@ mod tests {
             kernel_path: "vmlinux".into(),
             initramfs_path: None,
             disk_path: None,
-            ram_mib: 256,
+            ram_mib: DEFAULT_RAM_MIB,
             cpus: 1,
             cmdline: None,
             net: None,
@@ -415,6 +415,6 @@ mod tests {
         };
         let json = serde_json::to_string(&cfg).expect("serialize");
         let restored: VmConfig = serde_json::from_str(&json).expect("deserialize");
-        assert_eq!(restored.ports, cfg.ports);
+        assert_eq!(restored, cfg);
     }
 }
