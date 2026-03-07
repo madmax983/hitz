@@ -30,6 +30,21 @@ use hyper::Method;
 /// Default named pipe path for the daemon.
 const DEFAULT_PIPE: &str = r"\\.\pipe\hitz";
 
+/// Parse a `HOST:GUEST` port forward string into a [`hitz_api::PortForward`].
+fn parse_port_forward(s: &str) -> Result<hitz_api::PortForward, String> {
+    let (host, guest) = s
+        .split_once(':')
+        .ok_or_else(|| format!("expected HOST:GUEST (e.g. 2222:22), got {s:?}"))?;
+    Ok(hitz_api::PortForward {
+        host_port: host
+            .parse()
+            .map_err(|_| format!("invalid host port {host:?}: must be 0-65535"))?,
+        guest_port: guest
+            .parse()
+            .map_err(|_| format!("invalid guest port {guest:?}: must be 0-65535"))?,
+    })
+}
+
 /// Hitz — Hyper-V micro-VM manager for Windows.
 #[derive(Parser)]
 #[command(name = "hitz", version, about)]
@@ -100,6 +115,10 @@ struct RunArgs {
     /// Guest MAC address.
     #[arg(long)]
     mac: Option<String>,
+
+    /// TCP port forwards HOST:GUEST (e.g. `--port 2222:22`). Repeatable.
+    #[arg(long = "port", value_name = "HOST:GUEST", value_parser = parse_port_forward)]
+    ports: Vec<hitz_api::PortForward>,
 }
 
 // ── Daemon ──
@@ -201,6 +220,10 @@ struct VmCreateArgs {
     /// Guest MAC address.
     #[arg(long)]
     mac: Option<String>,
+
+    /// TCP port forwards HOST:GUEST (e.g. `--port 2222:22`). Repeatable.
+    #[arg(long = "port", value_name = "HOST:GUEST", value_parser = parse_port_forward)]
+    ports: Vec<hitz_api::PortForward>,
 }
 
 /// Arguments that take just a VM ID.
@@ -303,7 +326,7 @@ fn run_vm(args: RunArgs) -> Result<ExitCode> {
         cpus: args.cpus,
         cmdline: Some(args.cmdline),
         net,
-        ports: vec![],
+        ports: args.ports,
     };
 
     let hypervisor = WhpHypervisor::new().context("failed to create WHP hypervisor")?;
@@ -420,7 +443,7 @@ fn run_vm_command(cmd: VmCommand) -> Result<()> {
                     cpus: args.cpus,
                     cmdline: Some(args.cmdline),
                     net,
-                    ports: vec![],
+                    ports: args.ports,
                 };
                 let body = serde_json::to_string(&CreateVmRequest { config })
                     .context("serialize request")?;
@@ -473,7 +496,28 @@ fn run_vm_command(cmd: VmCommand) -> Result<()> {
                     None,
                 )
                 .await?;
-                println!("{status}: {resp}");
+                if status.is_success() {
+                    if let Ok(info) = serde_json::from_str::<hitz_api::VmInfo>(&resp) {
+                        println!("ID:    {}", info.id);
+                        println!("State: {:?}", info.state);
+                        if !info.config.ports.is_empty() {
+                            let ports: Vec<String> = info
+                                .config
+                                .ports
+                                .iter()
+                                .map(|p| format!("0.0.0.0:{} -> {}", p.host_port, p.guest_port))
+                                .collect();
+                            println!("Ports: {}", ports.join(", "));
+                        }
+                        if let Some(reason) = &info.exit_reason {
+                            println!("Exit:  {reason}");
+                        }
+                    } else {
+                        println!("{status}: {resp}");
+                    }
+                } else {
+                    println!("{status}: {resp}");
+                }
             }
             VmCommand::List(args) => {
                 let (status, resp) =
@@ -534,4 +578,31 @@ fn run_vm_command(cmd: VmCommand) -> Result<()> {
         }
         Ok(())
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_port_forward_valid() {
+        let pf = parse_port_forward("2222:22").expect("valid");
+        assert_eq!(pf.host_port, 2222);
+        assert_eq!(pf.guest_port, 22);
+    }
+
+    #[test]
+    fn parse_port_forward_missing_colon() {
+        assert!(parse_port_forward("2222").is_err());
+    }
+
+    #[test]
+    fn parse_port_forward_bad_host() {
+        assert!(parse_port_forward("abc:22").is_err());
+    }
+
+    #[test]
+    fn parse_port_forward_bad_guest() {
+        assert!(parse_port_forward("2222:xyz").is_err());
+    }
 }
