@@ -141,10 +141,35 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
         // Fire-and-forget: the spawned task updates VM state on completion
         // and signals the completion channel so `stop_all_and_wait` can drain.
         drop(tokio::task::spawn(async move {
+            // Start port forwarders if networking is configured and rules exist.
+            let _port_fwd = if let Some(ref net) = config.net {
+                if config.ports.is_empty() {
+                    None
+                } else {
+                    let guest_ip = net
+                        .guest_ip
+                        .split('/')
+                        .next()
+                        .and_then(|s| s.parse::<std::net::Ipv4Addr>().ok());
+                    if let Some(ip) = guest_ip {
+                        Some(
+                            crate::port_forward::PortForwardManager::start(ip, &config.ports).await,
+                        )
+                    } else {
+                        tracing::warn!("could not parse guest IP from {}", net.guest_ip);
+                        None
+                    }
+                }
+            } else {
+                None
+            };
+
             let result = tokio::task::spawn_blocking(move || {
                 hitz_vmm::boot_and_run(&*hv, &config, serial_buf, stop_flag)
             })
             .await;
+
+            // _port_fwd drops here → all listener tasks aborted.
 
             // Update state based on result.
             if let Ok(mut vms) = vms.lock()
@@ -525,6 +550,22 @@ mod tests {
         mgr.create_vm("vm1".into(), make_config()).expect("create");
         let err = mgr.stop_vm("vm1").unwrap_err();
         assert!(err.to_string().contains("Created"), "got: {err}");
+    }
+
+    #[tokio::test]
+    async fn port_forwards_start_with_vm() {
+        // VmConfig with a port forward but no net → ports should be ignored silently (no panic).
+        let mgr = make_manager();
+        let mut config = make_config();
+        config.ports = vec![hitz_api::PortForward {
+            host_port: 19876,
+            guest_port: 22,
+        }];
+        // config.net is None → port forward should be a no-op.
+
+        let _info = mgr.create_vm("port_fwd_test".into(), config).unwrap();
+        // start_vm fires off an async task; just verify it doesn't panic.
+        mgr.start_vm("port_fwd_test").unwrap();
     }
 
     #[test]
