@@ -307,6 +307,13 @@ fn run_vm(args: RunArgs) -> Result<ExitCode> {
         eprintln!("hitz: cmdline \"{}\"", args.cmdline);
     }
 
+    if !args.ports.is_empty() {
+        eprintln!(
+            "hitz: warning: --port flags are not supported in standalone mode (use daemon: \
+             `hitz daemon start` + `hitz vm create --port ...`)"
+        );
+    }
+
     let net = if args.net {
         Some(hitz_api::NetConfig {
             mac: args.mac,
