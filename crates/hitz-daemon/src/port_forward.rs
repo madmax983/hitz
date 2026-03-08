@@ -4,6 +4,8 @@ use std::net::Ipv4Addr;
 use std::sync::Arc;
 
 use hitz_api::PortForward;
+use opentelemetry::KeyValue;
+use opentelemetry::global;
 use tokio::task::JoinHandle;
 
 /// Manages TCP port forward listeners for a single VM.
@@ -28,6 +30,16 @@ impl PortForwardManager {
         let relay_handles: Arc<tokio::sync::Mutex<Vec<JoinHandle<()>>>> =
             Arc::new(tokio::sync::Mutex::new(Vec::new()));
 
+        let meter = global::meter("hitz");
+        let connections_total = meter
+            .u64_counter("hitz.portfwd.connections_total")
+            .with_description("Total TCP connections accepted by port forwarders")
+            .build();
+        let relays_active = meter
+            .i64_up_down_counter("hitz.portfwd.relays_active")
+            .with_description("Currently active port-forward relay connections")
+            .build();
+
         for rule in rules {
             let host_addr = std::net::SocketAddr::from(([0, 0, 0, 0], rule.host_port));
             let guest_addr = std::net::SocketAddr::from((guest_ip, rule.guest_port));
@@ -51,10 +63,20 @@ impl PortForwardManager {
             );
 
             let relay_handles_clone = Arc::clone(&relay_handles);
+            let connections_total_l = connections_total.clone();
+            let relays_active_l = relays_active.clone();
+            let host_port_str = rule.host_port.to_string();
             let handle = tokio::spawn(async move {
                 loop {
                     match listener.accept().await {
                         Ok((mut inbound, _peer)) => {
+                            connections_total_l
+                                .add(1, &[KeyValue::new("host_port", host_port_str.clone())]);
+                            relays_active_l
+                                .add(1, &[KeyValue::new("host_port", host_port_str.clone())]);
+
+                            let relays_active_r = relays_active_l.clone();
+                            let host_port_r = host_port_str.clone();
                             let relay = tokio::spawn(async move {
                                 match tokio::net::TcpStream::connect(guest_addr).await {
                                     Ok(mut outbound) => {
@@ -70,6 +92,8 @@ impl PortForwardManager {
                                         );
                                     }
                                 }
+                                // Relay complete — decrement active counter.
+                                relays_active_r.add(-1, &[KeyValue::new("host_port", host_port_r)]);
                             });
                             relay_handles_clone.lock().await.push(relay);
                         }
@@ -175,6 +199,20 @@ mod tests {
         };
         let mgr = PortForwardManager::start(Ipv4Addr::LOCALHOST, &[rule]).await;
         assert!(mgr.handles.is_empty(), "should have skipped the bad bind");
+    }
+
+    #[tokio::test]
+    async fn metrics_do_not_panic_without_provider() {
+        // No OTel provider registered — all metric calls must be no-ops.
+        // PortForwardManager::start must not panic when creating meter objects.
+        let rule = PortForward {
+            host_port: free_port().await,
+            guest_port: 9998,
+        };
+        let mgr = PortForwardManager::start(Ipv4Addr::LOCALHOST, &[rule]).await;
+        // Give listener a moment to start, then drop.
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        drop(mgr);
     }
 
     #[tokio::test]
