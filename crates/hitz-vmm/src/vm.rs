@@ -491,6 +491,8 @@ mod tests {
             cmdline: None,
             net: None,
             ports: vec![],
+            guest_cid: hitz_api::DEFAULT_GUEST_CID,
+            guest_agent: hitz_api::GuestAgentMode::Auto,
         }
     }
 

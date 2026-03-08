@@ -20,6 +20,15 @@ pub const DEFAULT_HOST_IP: &str = "192.168.100.1/24";
 /// Default guest IP for guest networking.
 pub const DEFAULT_GUEST_IP: &str = "192.168.100.2/24";
 
+/// Default guest CID for virtio-vsock (host=2, first guest=3).
+pub const DEFAULT_GUEST_CID: u32 = 3;
+
+/// Metrics port on which the guest agent listens and the host connects.
+pub const VSOCK_METRICS_PORT: u32 = 52355;
+
+/// Host CID as defined by the virtio-vsock spec.
+pub const VMADDR_CID_HOST: u32 = 2;
+
 /// Network configuration for a VM.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NetConfig {
@@ -43,8 +52,136 @@ pub struct PortForward {
     pub guest_port: u16,
 }
 
+// ── Guest agent mode ─────────────────────────────────────────────────────────
+
+/// Controls whether and which guest metrics agent is injected into the initramfs.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(tag = "mode", rename_all = "lowercase")]
+pub enum GuestAgentMode {
+    /// Automatically inject the built-in agent (default).
+    #[default]
+    Auto,
+    /// Inject a user-supplied agent binary instead of the built-in one.
+    Custom(PathBuf),
+    /// Do not inject any agent.
+    Disabled,
+}
+
+// ── Metrics wire protocol ────────────────────────────────────────────────────
+
+/// On-demand metrics request sent from host to guest over vsock.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum MetricsRequest {
+    /// Request a full resource snapshot.
+    Snapshot,
+}
+
+// ── Metrics snapshot ─────────────────────────────────────────────────────────
+
+/// Full guest resource snapshot, serialized with `MessagePack` over vsock.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MetricsSnapshot {
+    /// Unix timestamp in milliseconds.
+    pub timestamp_ms: u64,
+    /// CPU utilisation metrics.
+    pub cpu: CpuMetrics,
+    /// Memory utilisation metrics.
+    pub memory: MemoryMetrics,
+    /// Per-disk I/O metrics.
+    pub disks: Vec<DiskMetrics>,
+    /// Per-network-interface metrics.
+    pub networks: Vec<NetMetrics>,
+    /// Top processes by CPU usage (up to 10).
+    pub processes: Vec<ProcMetrics>,
+}
+
+/// CPU utilisation metrics.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CpuMetrics {
+    /// Overall CPU utilisation percentage (0.0–100.0).
+    pub total_pct: f32,
+    /// Per-core utilisation percentages.
+    pub per_core: Vec<f32>,
+    /// Load averages: 1-minute, 5-minute, 15-minute.
+    pub load_avg: [f32; 3],
+}
+
+/// Memory utilisation metrics (all in bytes).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemoryMetrics {
+    /// Total physical memory.
+    pub total_bytes: u64,
+    /// Memory in use.
+    pub used_bytes: u64,
+    /// Free (unallocated) memory.
+    pub free_bytes: u64,
+    /// Memory used for I/O buffers.
+    pub buffers_bytes: u64,
+    /// Memory used for page cache.
+    pub cached_bytes: u64,
+    /// Total swap space.
+    pub swap_total: u64,
+    /// Swap space currently in use.
+    pub swap_used: u64,
+}
+
+/// Per-disk I/O metrics.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DiskMetrics {
+    /// Device name (e.g. "vda").
+    pub name: String,
+    /// Total completed read operations.
+    pub reads_total: u64,
+    /// Total completed write operations.
+    pub writes_total: u64,
+    /// Total bytes read.
+    pub read_bytes: u64,
+    /// Total bytes written.
+    pub write_bytes: u64,
+}
+
+/// Per-network-interface metrics.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NetMetrics {
+    /// Interface name (e.g. "eth0").
+    pub interface: String,
+    /// Total bytes received.
+    pub rx_bytes: u64,
+    /// Total bytes transmitted.
+    pub tx_bytes: u64,
+    /// Total packets received.
+    pub rx_packets: u64,
+    /// Total packets transmitted.
+    pub tx_packets: u64,
+    /// Total receive errors.
+    pub rx_errors: u64,
+    /// Total transmit errors.
+    pub tx_errors: u64,
+}
+
+/// Per-process metrics.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProcMetrics {
+    /// Process ID.
+    pub pid: u32,
+    /// Process name.
+    pub name: String,
+    /// CPU utilisation percentage.
+    pub cpu_pct: f32,
+    /// Resident set size in bytes.
+    pub rss_bytes: u64,
+    /// Process state character (e.g. 'R', 'S', 'Z').
+    pub state: char,
+}
+
+// ── VmConfig helpers ──────────────────────────────────────────────────────────
+
 const fn default_cpus() -> u32 {
     DEFAULT_CPUS
+}
+
+const fn default_guest_cid() -> u32 {
+    DEFAULT_GUEST_CID
 }
 
 /// VM configuration — everything needed to boot a micro-VM.
@@ -73,6 +210,12 @@ pub struct VmConfig {
     /// connections to `guest_ip:guest_port`. Ignored if `net` is `None`.
     #[serde(default)]
     pub ports: Vec<PortForward>,
+    /// Virtio-vsock guest CID. Must be unique per running VM. Default: 3.
+    #[serde(default = "default_guest_cid")]
+    pub guest_cid: u32,
+    /// Guest metrics agent injection mode.
+    #[serde(default)]
+    pub guest_agent: GuestAgentMode,
 }
 
 impl VmConfig {
@@ -144,9 +287,10 @@ pub struct ApiError {
 mod tests {
     use super::*;
 
-    #[test]
-    fn effective_cmdline_default() {
-        let cfg = VmConfig {
+    // ── Helper to build a minimal VmConfig ───────────────────────────────────
+
+    fn minimal_config() -> VmConfig {
+        VmConfig {
             kernel_path: PathBuf::from("vmlinux"),
             initramfs_path: None,
             disk_path: None,
@@ -155,21 +299,75 @@ mod tests {
             cmdline: None,
             net: None,
             ports: vec![],
+            guest_cid: DEFAULT_GUEST_CID,
+            guest_agent: GuestAgentMode::Auto,
+        }
+    }
+
+    // ── Phase 12 new tests ────────────────────────────────────────────────────
+
+    #[test]
+    fn metrics_snapshot_msgpack_roundtrip() {
+        let snap = MetricsSnapshot {
+            timestamp_ms: 1_700_000_000_000,
+            cpu: CpuMetrics {
+                total_pct: 12.5,
+                per_core: vec![10.0, 15.0],
+                load_avg: [0.5, 0.4, 0.3],
+            },
+            memory: MemoryMetrics {
+                total_bytes: 256 * 1024 * 1024,
+                used_bytes: 100 * 1024 * 1024,
+                free_bytes: 156 * 1024 * 1024,
+                buffers_bytes: 10 * 1024 * 1024,
+                cached_bytes: 30 * 1024 * 1024,
+                swap_total: 0,
+                swap_used: 0,
+            },
+            disks: vec![],
+            networks: vec![],
+            processes: vec![],
         };
+        let encoded = rmp_serde::to_vec(&snap).expect("encode");
+        let decoded: MetricsSnapshot = rmp_serde::from_slice(&encoded).expect("decode");
+        assert!((decoded.cpu.total_pct - 12.5).abs() < f32::EPSILON);
+        assert_eq!(decoded.memory.total_bytes, 256 * 1024 * 1024);
+    }
+
+    #[test]
+    fn guest_agent_mode_default_is_auto() {
+        let mode: GuestAgentMode = GuestAgentMode::default();
+        assert!(matches!(mode, GuestAgentMode::Auto));
+    }
+
+    #[test]
+    fn vm_config_guest_agent_serde_default() {
+        // Old configs without guest_agent field should deserialize as Auto.
+        let json = r#"{"kernel_path":"/k","ram_mib":256,"cpus":1}"#;
+        let cfg: VmConfig = serde_json::from_str(json).expect("deserialize");
+        assert!(matches!(cfg.guest_agent, GuestAgentMode::Auto));
+    }
+
+    #[test]
+    fn vm_config_guest_cid_serde_default() {
+        let json = r#"{"kernel_path":"/k","ram_mib":256,"cpus":1}"#;
+        let cfg: VmConfig = serde_json::from_str(json).expect("deserialize");
+        assert_eq!(cfg.guest_cid, DEFAULT_GUEST_CID);
+    }
+
+    // ── Existing tests (updated for new VmConfig fields) ─────────────────────
+
+    #[test]
+    fn effective_cmdline_default() {
+        let cfg = minimal_config();
         assert_eq!(cfg.effective_cmdline(), DEFAULT_CMDLINE);
     }
 
     #[test]
     fn effective_cmdline_custom() {
         let cfg = VmConfig {
-            kernel_path: PathBuf::from("vmlinux"),
-            initramfs_path: None,
-            disk_path: None,
-            ram_mib: DEFAULT_RAM_MIB,
-            cpus: 1,
             cmdline: Some("root=/dev/vda rw".into()),
-            net: None,
-            ports: vec![],
+            ..minimal_config()
         };
         assert_eq!(cfg.effective_cmdline(), "root=/dev/vda rw");
     }
@@ -190,6 +388,8 @@ mod tests {
             cmdline: Some("console=ttyS0".into()),
             net: None,
             ports: vec![],
+            guest_cid: DEFAULT_GUEST_CID,
+            guest_agent: GuestAgentMode::Auto,
         };
         let json = serde_json::to_string(&cfg).expect("serialize");
         let restored: VmConfig = serde_json::from_str(&json).expect("deserialize");
@@ -203,16 +403,7 @@ mod tests {
 
     #[test]
     fn serde_roundtrip_minimal() {
-        let cfg = VmConfig {
-            kernel_path: PathBuf::from("vmlinux"),
-            initramfs_path: None,
-            disk_path: None,
-            ram_mib: DEFAULT_RAM_MIB,
-            cpus: 1,
-            cmdline: None,
-            net: None,
-            ports: vec![],
-        };
+        let cfg = minimal_config();
         let json = serde_json::to_string(&cfg).expect("serialize");
         let restored: VmConfig = serde_json::from_str(&json).expect("deserialize");
 
@@ -260,6 +451,8 @@ mod tests {
                 cmdline: Some("console=ttyS0".into()),
                 net: None,
                 ports: vec![],
+                guest_cid: DEFAULT_GUEST_CID,
+                guest_agent: GuestAgentMode::Auto,
             },
             exit_reason: None,
         };
@@ -275,16 +468,7 @@ mod tests {
     #[test]
     fn create_vm_request_serde() {
         let req = CreateVmRequest {
-            config: VmConfig {
-                kernel_path: PathBuf::from("vmlinux"),
-                initramfs_path: None,
-                disk_path: None,
-                ram_mib: DEFAULT_RAM_MIB,
-                cpus: 1,
-                cmdline: None,
-                net: None,
-                ports: vec![],
-            },
+            config: minimal_config(),
         };
         let json = serde_json::to_string(&req).expect("serialize");
         let restored: CreateVmRequest = serde_json::from_str(&json).expect("deserialize");
@@ -330,19 +514,13 @@ mod tests {
     #[test]
     fn vm_config_with_net_serde() {
         let cfg = VmConfig {
-            kernel_path: PathBuf::from("vmlinux"),
-            initramfs_path: None,
-            disk_path: None,
-            ram_mib: DEFAULT_RAM_MIB,
-            cpus: 1,
-            cmdline: None,
             net: Some(NetConfig {
                 mac: None,
                 host_ip: DEFAULT_HOST_IP.into(),
                 guest_ip: DEFAULT_GUEST_IP.into(),
                 adapter_name: None,
             }),
-            ports: vec![],
+            ..minimal_config()
         };
         let json = serde_json::to_string(&cfg).expect("serialize");
         let restored: VmConfig = serde_json::from_str(&json).expect("deserialize");
@@ -359,14 +537,8 @@ mod tests {
     #[test]
     fn serde_cpus_explicit() {
         let cfg = VmConfig {
-            kernel_path: PathBuf::from("vmlinux"),
-            initramfs_path: None,
-            disk_path: None,
-            ram_mib: DEFAULT_RAM_MIB,
-            cmdline: None,
-            net: None,
             cpus: 4,
-            ports: vec![],
+            ..minimal_config()
         };
         let json = serde_json::to_string(&cfg).expect("serialize");
         let restored: VmConfig = serde_json::from_str(&json).expect("deserialize");
@@ -395,13 +567,6 @@ mod tests {
     #[test]
     fn vm_config_ports_roundtrip() {
         let cfg = VmConfig {
-            kernel_path: "vmlinux".into(),
-            initramfs_path: None,
-            disk_path: None,
-            ram_mib: DEFAULT_RAM_MIB,
-            cpus: 1,
-            cmdline: None,
-            net: None,
             ports: vec![
                 PortForward {
                     host_port: 2222,
@@ -412,6 +577,7 @@ mod tests {
                     guest_port: 80,
                 },
             ],
+            ..minimal_config()
         };
         let json = serde_json::to_string(&cfg).expect("serialize");
         let restored: VmConfig = serde_json::from_str(&json).expect("deserialize");

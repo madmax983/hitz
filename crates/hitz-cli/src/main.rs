@@ -20,8 +20,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use hitz_api::{
-    ActionVmRequest, CreateVmRequest, DEFAULT_CMDLINE, DEFAULT_CPUS, DEFAULT_RAM_MIB, VmAction,
-    VmConfig,
+    ActionVmRequest, CreateVmRequest, DEFAULT_CMDLINE, DEFAULT_CPUS, DEFAULT_GUEST_CID,
+    DEFAULT_RAM_MIB, GuestAgentMode, VmAction, VmConfig,
 };
 use hitz_daemon::TelemetryGuard;
 use hitz_vmm::ExitReason;
@@ -350,6 +350,8 @@ fn run_vm(args: RunArgs) -> Result<ExitCode> {
         cmdline: Some(args.cmdline),
         net,
         ports: args.ports,
+        guest_cid: DEFAULT_GUEST_CID,
+        guest_agent: GuestAgentMode::Auto,
     };
 
     let hypervisor = WhpHypervisor::new().context("failed to create WHP hypervisor")?;
@@ -501,6 +503,8 @@ fn run_vm_command(cmd: VmCommand) -> Result<()> {
                     cmdline: Some(args.cmdline),
                     net,
                     ports: args.ports,
+                    guest_cid: DEFAULT_GUEST_CID,
+                    guest_agent: GuestAgentMode::Auto,
                 };
                 let body = serde_json::to_string(&CreateVmRequest { config })
                     .context("serialize request")?;

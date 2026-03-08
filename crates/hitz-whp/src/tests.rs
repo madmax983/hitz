@@ -1376,6 +1376,8 @@ fn phase5_boot_and_run_hello() {
         cmdline: Some("console=ttyS0\0".into()),
         net: None,
         ports: vec![],
+        guest_cid: hitz_api::DEFAULT_GUEST_CID,
+        guest_agent: hitz_api::GuestAgentMode::Auto,
     };
 
     let hv = WhpHypervisor::new().expect("WHP not available");
@@ -1475,6 +1477,8 @@ fn phase6_vm_manager_lifecycle() {
         cmdline: Some("console=ttyS0\0".into()),
         net: None,
         ports: vec![],
+        guest_cid: hitz_api::DEFAULT_GUEST_CID,
+        guest_agent: hitz_api::GuestAgentMode::Auto,
     };
 
     let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
@@ -1570,6 +1574,8 @@ fn phase8_smp_2vcpu_hello() {
         cmdline: Some("console=ttyS0\0".into()),
         net: None,
         ports: vec![],
+        guest_cid: hitz_api::DEFAULT_GUEST_CID,
+        guest_agent: hitz_api::GuestAgentMode::Auto,
     };
 
     let hv = WhpHypervisor::new().expect("WHP not available");
@@ -1633,6 +1639,8 @@ fn phase8_smp_linux_boot() {
         cmdline: Some("console=ttyS0 earlyprintk=serial nokaslr\0".into()),
         net: None,
         ports: vec![],
+        guest_cid: hitz_api::DEFAULT_GUEST_CID,
+        guest_agent: hitz_api::GuestAgentMode::Auto,
     };
 
     let hv = WhpHypervisor::new().expect("WHP not available");
@@ -1710,6 +1718,8 @@ fn phase7_vm_manager_serial_streaming() {
         cmdline: Some("console=ttyS0\0".into()),
         net: None,
         ports: vec![],
+        guest_cid: hitz_api::DEFAULT_GUEST_CID,
+        guest_agent: hitz_api::GuestAgentMode::Auto,
     };
 
     let rt = tokio::runtime::Builder::new_current_thread()
@@ -1799,6 +1809,8 @@ fn phase9_cancel_via_stop_flag() {
         cmdline: Some("console=ttyS0\0".into()),
         net: None,
         ports: vec![],
+        guest_cid: hitz_api::DEFAULT_GUEST_CID,
+        guest_agent: hitz_api::GuestAgentMode::Auto,
     };
 
     let hv = WhpHypervisor::new().expect("WHP not available");
@@ -1874,6 +1886,8 @@ fn phase9_multi_vcpu_cancel() {
         cmdline: Some("console=ttyS0\0".into()),
         net: None,
         ports: vec![],
+        guest_cid: hitz_api::DEFAULT_GUEST_CID,
+        guest_agent: hitz_api::GuestAgentMode::Auto,
     };
 
     let hv = WhpHypervisor::new().expect("WHP not available");
@@ -1971,6 +1985,8 @@ fn phase10_port_forward_tcp() {
             host_port: 19999,
             guest_port: 9999,
         }],
+        guest_cid: hitz_api::DEFAULT_GUEST_CID,
+        guest_agent: hitz_api::GuestAgentMode::Auto,
     };
 
     let writer = SharedWriter(Arc::new(std::sync::Mutex::new(Vec::new())));
