@@ -7,6 +7,7 @@
 #![allow(unsafe_code)]
 
 pub mod boot_regs;
+pub mod cpio;
 pub mod error;
 pub mod memory;
 pub mod mmio_decode;
@@ -16,6 +17,7 @@ pub mod vm;
 pub mod vsock_io;
 
 pub use boot_regs::{GDT_GPA, configure_regs, configure_sregs, write_gdt};
+pub use cpio::CpioBuilder;
 pub use error::MemError;
 pub use memory::GuestMemory;
 pub use run_loop::{ExitReason, SharedDevices, run_vcpu_loop};
