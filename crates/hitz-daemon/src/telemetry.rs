@@ -61,6 +61,8 @@ impl TelemetryGuard {
             .with_batch_exporter(span_exporter)
             .build();
 
+        opentelemetry::global::set_tracer_provider(tracer_provider.clone());
+
         // ── Meter provider ───────────────────────────────────────────────────
         let metric_exporter = match MetricExporter::builder()
             .with_tonic()
@@ -82,7 +84,6 @@ impl TelemetryGuard {
             .build();
 
         opentelemetry::global::set_meter_provider(meter_provider.clone());
-        opentelemetry::global::set_tracer_provider(tracer_provider.clone());
 
         tracing::info!(%endpoint, "OTel OTLP exporter initialised");
 
