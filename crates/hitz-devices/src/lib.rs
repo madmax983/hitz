@@ -5,3 +5,5 @@
 pub mod mmio_bus;
 pub mod serial;
 pub mod virtio;
+
+pub use virtio::vsock::VirtioVsockDevice;
