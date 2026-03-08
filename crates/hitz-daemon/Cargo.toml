@@ -21,6 +21,11 @@ hyper.workspace = true
 http-body-util.workspace = true
 hyper-util.workspace = true
 bytes.workspace = true
+opentelemetry.workspace          = true
+opentelemetry_sdk.workspace      = true
+opentelemetry-otlp.workspace     = true
+tracing-opentelemetry.workspace  = true
+tracing-subscriber.workspace     = true
 
 [dev-dependencies]
 tempfile = "3"

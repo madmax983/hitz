@@ -76,4 +76,10 @@ uuid = { version = "1", features = ["v4", "serde"] }
 bytes = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-opentelemetry = "0.32"
 ctrlc = "3"
+
+# External - observability (OTel)
+opentelemetry          = "0.31"
+opentelemetry_sdk      = { version = "0.31", features = ["rt-tokio"] }
+opentelemetry-otlp     = { version = "0.31", features = ["grpc-tonic"] }
