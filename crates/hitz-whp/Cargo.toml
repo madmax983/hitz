@@ -22,6 +22,7 @@ hitz-devices.workspace = true
 hitz-vmm.workspace = true
 hitz-daemon.workspace = true
 tokio.workspace = true
+opentelemetry.workspace = true
 tempfile = "3"
 windows = { workspace = true, features = [
     "Win32_System_Memory",
