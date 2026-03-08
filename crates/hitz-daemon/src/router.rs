@@ -15,6 +15,7 @@ use http_body_util::combinators::BoxBody;
 use http_body_util::{BodyExt, Full};
 use hyper::body::{Body, Frame};
 use hyper::{Method, Request, Response, StatusCode, body::Incoming};
+use tracing::Instrument as _;
 
 use crate::error::DaemonError;
 use crate::vm_manager::VmManager;
@@ -56,23 +57,38 @@ where
     let method = req.method().clone();
     let path = req.uri().path().to_string();
 
-    let result = match (method.clone(), path.as_str()) {
-        (Method::GET, "/vms") => handle_list(manager),
-        _ if path.starts_with("/vms/") => {
-            let segments: Vec<&str> = path.splitn(4, '/').collect();
-            // segments: ["", "vms", "{id}", "action"?]
-            match segments.get(2) {
-                Some(id) if !id.is_empty() => {
-                    let suffix = segments.get(3).copied();
-                    route_vm(req, &method, id, suffix, manager).await
-                }
-                _ => Ok(error_response(StatusCode::BAD_REQUEST, "missing VM ID")),
-            }
-        }
-        _ => Ok(error_response(StatusCode::NOT_FOUND, "not found")),
-    };
+    let span = tracing::info_span!(
+        "daemon.request",
+        http.method = %method,
+        http.route = %path,
+        http.status_code = tracing::field::Empty,
+    );
 
-    Ok(result.unwrap_or_else(|e| daemon_error_response(&e)))
+    let result = async {
+        match (method.clone(), path.as_str()) {
+            (Method::GET, "/vms") => handle_list(manager),
+            _ if path.starts_with("/vms/") => {
+                let segments: Vec<&str> = path.splitn(4, '/').collect();
+                // segments: ["", "vms", "{id}", "action"?]
+                match segments.get(2) {
+                    Some(id) if !id.is_empty() => {
+                        let suffix = segments.get(3).copied();
+                        route_vm(req, &method, id, suffix, manager).await
+                    }
+                    _ => Ok(error_response(StatusCode::BAD_REQUEST, "missing VM ID")),
+                }
+            }
+            _ => Ok(error_response(StatusCode::NOT_FOUND, "not found")),
+        }
+    }
+    .instrument(span.clone())
+    .await;
+
+    let response = result.unwrap_or_else(|e| daemon_error_response(&e));
+
+    let _ = span.record("http.status_code", response.status().as_u16());
+
+    Ok(response)
 }
 
 async fn route_vm<H>(
@@ -236,4 +252,17 @@ fn daemon_error_response(err: &DaemonError) -> Response<BoxBody<Bytes, Infallibl
         _ => StatusCode::INTERNAL_SERVER_ERROR,
     };
     error_response(status, &err.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    /// Compile guard: the route() function's span instrumentation must not
+    /// break its infallible return type, and must compile with tracing imports.
+    #[tokio::test]
+    async fn route_span_compiles() {
+        // This test just verifies the file compiles with span instrumentation.
+        // We can't call route() without a real VmManager, so we test the
+        // imports compile by referencing the span name as a constant.
+        let _ = "daemon.request";
+    }
 }
