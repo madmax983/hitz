@@ -551,6 +551,7 @@ dependencies = [
  "hitz-devices",
  "hitz-hal",
  "hitz-vmm",
+ "opentelemetry",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
