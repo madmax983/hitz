@@ -12,6 +12,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use hitz_devices::mmio_bus::MmioBus;
 use hitz_devices::serial::SerialDevice;
 use hitz_hal::{GuestMemAccess, HalError, IoPortExit, Vcpu, VcpuExit};
+use opentelemetry::KeyValue;
+use opentelemetry::metrics::Counter;
 
 use crate::mmio_decode;
 
@@ -48,6 +50,13 @@ pub struct SharedDevices<W: Write> {
     pub mmio_bus: MmioBus,
 }
 
+/// Increment the exit counter with the given reason label.
+///
+/// Extracted so each match arm stays a single call site.
+fn record_exit(counter: &Counter<u64>, reason: &'static str) {
+    counter.add(1, &[KeyValue::new("exit_reason", reason)]);
+}
+
 /// Run a vCPU in a loop, dispatching I/O and MMIO exits to devices.
 ///
 /// Returns when the guest halts, shuts down, or hits an unrecoverable exit.
@@ -74,15 +83,23 @@ pub fn run_vcpu_loop<V: Vcpu, W: Write>(
     let mut pending_irq: Option<u8> = None;
     let mut iterations: u64 = 0;
 
+    // Create once; all calls are no-ops when no SDK is registered.
+    let exit_counter = opentelemetry::global::meter("hitz")
+        .u64_counter("hitz.vcpu.exits")
+        .with_description("Number of vCPU exits, labeled by exit reason")
+        .build();
+
     loop {
         iterations += 1;
         if iterations > MAX_RUN_ITERATIONS {
+            record_exit(&exit_counter, "Unexpected");
             return Ok(ExitReason::Unexpected(
                 "iteration limit reached".to_string(),
             ));
         }
 
         if stop_flag.load(Ordering::Relaxed) {
+            record_exit(&exit_counter, "Canceled");
             return Ok(ExitReason::Canceled);
         }
 
@@ -101,18 +118,22 @@ pub fn run_vcpu_loop<V: Vcpu, W: Write>(
 
         match exit {
             VcpuExit::IoPort(io) => {
+                record_exit(&exit_counter, "IoPort");
                 let mut devs = devices.lock().expect("device lock poisoned");
                 handle_io_port(vcpu, &mut devs.serial, &io)?;
             }
 
             VcpuExit::Halt => {
+                record_exit(&exit_counter, "Halt");
                 return Ok(ExitReason::Halt);
             }
             VcpuExit::Shutdown => {
+                record_exit(&exit_counter, "Shutdown");
                 return Ok(ExitReason::Shutdown);
             }
 
             VcpuExit::Mmio(mmio) => {
+                record_exit(&exit_counter, "Mmio");
                 let decoded = mmio_decode::decode_mmio_instruction(
                     &mmio.instruction_bytes[..usize::from(mmio.instruction_byte_count)],
                 );
@@ -180,6 +201,7 @@ pub fn run_vcpu_loop<V: Vcpu, W: Write>(
             }
 
             VcpuExit::InterruptWindow => {
+                record_exit(&exit_counter, "InterruptWindow");
                 // Guest is now interruptible. WHP auto-clears the
                 // deliverability notification after this exit fires.
                 if let Some(vector) = pending_irq.take() {
@@ -189,6 +211,7 @@ pub fn run_vcpu_loop<V: Vcpu, W: Write>(
             }
 
             VcpuExit::Canceled => {
+                record_exit(&exit_counter, "Canceled");
                 // vCPU run was canceled (e.g. by another thread).
                 // If we have a pending IRQ, re-request the interrupt window
                 // so we get notified once the guest becomes interruptible.
@@ -198,6 +221,7 @@ pub fn run_vcpu_loop<V: Vcpu, W: Write>(
             }
 
             VcpuExit::Unknown(code) => {
+                record_exit(&exit_counter, "Unexpected");
                 return Ok(ExitReason::Unexpected(format!(
                     "unknown vCPU exit reason: {code:#x}"
                 )));
@@ -259,4 +283,23 @@ fn advance_rip_with_rax<V: Vcpu>(
     regs.rip += u64::from(instruction_len);
     regs.rax = rax;
     vcpu.set_regs(&regs)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Regression guard: the exit counter must not panic when the global meter
+    /// is the default no-op meter (no provider registered).
+    #[test]
+    fn exit_counter_noop_does_not_panic() {
+        // No OTel provider registered in test context → all calls are no-ops.
+        let meter = opentelemetry::global::meter("hitz");
+        let counter = meter
+            .u64_counter("hitz.vcpu.exits")
+            .with_description("vCPU exit events")
+            .build();
+        counter.add(1, &[KeyValue::new("exit_reason", "Halt")]);
+        // If we reach here without panic, the test passes.
+    }
 }
