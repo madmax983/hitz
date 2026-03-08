@@ -56,7 +56,7 @@ pub struct PortForward {
 
 /// Controls whether and which guest metrics agent is injected into the initramfs.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
-#[serde(tag = "mode", rename_all = "lowercase")]
+#[serde(tag = "mode", content = "path", rename_all = "lowercase")]
 pub enum GuestAgentMode {
     /// Automatically inject the built-in agent (default).
     #[default]
@@ -70,7 +70,7 @@ pub enum GuestAgentMode {
 // ── Metrics wire protocol ────────────────────────────────────────────────────
 
 /// On-demand metrics request sent from host to guest over vsock.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MetricsRequest {
     /// Request a full resource snapshot.
     Snapshot,
@@ -79,7 +79,7 @@ pub enum MetricsRequest {
 // ── Metrics snapshot ─────────────────────────────────────────────────────────
 
 /// Full guest resource snapshot, serialized with `MessagePack` over vsock.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MetricsSnapshot {
     /// Unix timestamp in milliseconds.
     pub timestamp_ms: u64,
@@ -96,7 +96,7 @@ pub struct MetricsSnapshot {
 }
 
 /// CPU utilisation metrics.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CpuMetrics {
     /// Overall CPU utilisation percentage (0.0–100.0).
     pub total_pct: f32,
@@ -107,7 +107,7 @@ pub struct CpuMetrics {
 }
 
 /// Memory utilisation metrics (all in bytes).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MemoryMetrics {
     /// Total physical memory.
     pub total_bytes: u64,
@@ -126,7 +126,7 @@ pub struct MemoryMetrics {
 }
 
 /// Per-disk I/O metrics.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DiskMetrics {
     /// Device name (e.g. "vda").
     pub name: String,
@@ -141,7 +141,7 @@ pub struct DiskMetrics {
 }
 
 /// Per-network-interface metrics.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NetMetrics {
     /// Interface name (e.g. "eth0").
     pub interface: String,
@@ -160,7 +160,7 @@ pub struct NetMetrics {
 }
 
 /// Per-process metrics.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ProcMetrics {
     /// Process ID.
     pub pid: u32,
@@ -338,6 +338,14 @@ mod tests {
     fn guest_agent_mode_default_is_auto() {
         let mode: GuestAgentMode = GuestAgentMode::default();
         assert!(matches!(mode, GuestAgentMode::Auto));
+    }
+
+    #[test]
+    fn guest_agent_mode_custom_serde_roundtrip() {
+        let mode = GuestAgentMode::Custom(std::path::PathBuf::from("/usr/local/bin/my-agent"));
+        let json = serde_json::to_string(&mode).expect("serialize");
+        let decoded: GuestAgentMode = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(decoded, mode);
     }
 
     #[test]
