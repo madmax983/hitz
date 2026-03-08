@@ -1391,6 +1391,7 @@ fn phase5_boot_and_run_hello() {
         &config,
         writer,
         std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        hitz_vmm::BootExtras::none(),
     )
     .expect("boot_and_run failed");
 
@@ -1584,8 +1585,14 @@ fn phase8_smp_2vcpu_hello() {
     let buffer: Arc<Mutex<Vec<u8>>> = Arc::new(Mutex::new(Vec::new()));
     let writer = SharedWriter(Arc::clone(&buffer));
 
-    let result = hitz_vmm::boot_and_run(&hv, &config, writer, Arc::new(AtomicBool::new(false)))
-        .expect("boot_and_run should succeed");
+    let result = hitz_vmm::boot_and_run(
+        &hv,
+        &config,
+        writer,
+        Arc::new(AtomicBool::new(false)),
+        hitz_vmm::BootExtras::none(),
+    )
+    .expect("boot_and_run should succeed");
 
     assert_eq!(
         result.exit_reason,
@@ -1658,7 +1665,7 @@ fn phase8_smp_linux_boot() {
         stop_clone.store(true, Ordering::Relaxed);
     });
 
-    let _result = hitz_vmm::boot_and_run(&hv, &config, writer, stop);
+    let _result = hitz_vmm::boot_and_run(&hv, &config, writer, stop, hitz_vmm::BootExtras::none());
 
     timer.join().unwrap();
 
@@ -1827,8 +1834,14 @@ fn phase9_cancel_via_stop_flag() {
     let buffer: Arc<Mutex<Vec<u8>>> = Arc::new(Mutex::new(Vec::new()));
     let writer = SharedWriter(Arc::clone(&buffer));
 
-    let result = hitz_vmm::boot_and_run(&hv, &config, writer, stop_flag)
-        .expect("boot_and_run should succeed");
+    let result = hitz_vmm::boot_and_run(
+        &hv,
+        &config,
+        writer,
+        stop_flag,
+        hitz_vmm::BootExtras::none(),
+    )
+    .expect("boot_and_run should succeed");
 
     assert!(
         matches!(result.exit_reason, ExitReason::Halt | ExitReason::Canceled),
@@ -1904,8 +1917,14 @@ fn phase9_multi_vcpu_cancel() {
     let writer = SharedWriter(Arc::clone(&buffer));
 
     let start = std::time::Instant::now();
-    let result = hitz_vmm::boot_and_run(&hv, &config, writer, stop_flag)
-        .expect("boot_and_run should succeed");
+    let result = hitz_vmm::boot_and_run(
+        &hv,
+        &config,
+        writer,
+        stop_flag,
+        hitz_vmm::BootExtras::none(),
+    )
+    .expect("boot_and_run should succeed");
     let elapsed = start.elapsed();
 
     assert!(
@@ -1991,7 +2010,13 @@ fn phase10_port_forward_tcp() {
 
     let writer = SharedWriter(Arc::new(std::sync::Mutex::new(Vec::new())));
 
-    let result = hitz_vmm::boot_and_run(&hv, &config, writer, stop_flag);
+    let result = hitz_vmm::boot_and_run(
+        &hv,
+        &config,
+        writer,
+        stop_flag,
+        hitz_vmm::BootExtras::none(),
+    );
     let run_result = result.expect("boot_and_run should succeed");
 
     assert!(

@@ -199,6 +199,28 @@ impl VirtioVsockDevice {
         (device, tx_receiver, rx_sender)
     }
 
+    /// Create a vsock device from pre-existing channel endpoints.
+    ///
+    /// Use this when the host-side async runtime has already created the
+    /// channel pairs and holds the opposite ends. This avoids the need to
+    /// extract channels after `spawn_blocking` has taken ownership.
+    ///
+    /// - `rx_receiver`: device reads from this to inject host→guest packets
+    /// - `tx_sender`: device writes to this to forward guest→host packets
+    #[must_use]
+    pub fn with_channels(
+        guest_cid: u32,
+        rx_receiver: Receiver<VsockPacket>,
+        tx_sender: Sender<VsockPacket>,
+    ) -> Self {
+        Self {
+            guest_cid: u64::from(guest_cid),
+            tx_sender,
+            rx_receiver,
+            rx_pending: VecDeque::new(),
+        }
+    }
+
     /// Process the TX virtqueue: read all pending guest→host packets and
     /// forward them to the host via `tx_sender`.
     fn process_tx(&self, queue: &mut VirtQueue, mem: &dyn hitz_hal::GuestMemAccess) {
@@ -220,10 +242,7 @@ impl VirtioVsockDevice {
                 && let Some(hdr) = VsockHdr::from_bytes(&raw)
             {
                 let payload_end = VSOCK_HDR_SIZE + hdr.len as usize;
-                let payload = raw
-                    .get(VSOCK_HDR_SIZE..payload_end)
-                    .unwrap_or(&[])
-                    .to_vec();
+                let payload = raw.get(VSOCK_HDR_SIZE..payload_end).unwrap_or(&[]).to_vec();
                 // Non-blocking send; if channel is closed, drop packet.
                 let _ = self.tx_sender.try_send((hdr, payload));
             }

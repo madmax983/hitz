@@ -534,6 +534,7 @@ dependencies = [
 name = "hitz-vmm"
 version = "0.1.0"
 dependencies = [
+ "crossbeam-channel",
  "hitz-api",
  "hitz-boot",
  "hitz-devices",

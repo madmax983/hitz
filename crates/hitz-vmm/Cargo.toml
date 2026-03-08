@@ -24,6 +24,9 @@ hitz-api.workspace = true
 tokio.workspace = true
 hitz-net.workspace = true
 
+# Phase 12 — vsock channel types in BootExtras / VsockIoHandle
+crossbeam-channel.workspace = true
+
 # Phase 11 — thin OTel API only (no SDK)
 opentelemetry.workspace = true
 

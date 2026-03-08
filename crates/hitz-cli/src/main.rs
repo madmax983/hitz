@@ -368,8 +368,14 @@ fn run_vm(args: RunArgs) -> Result<ExitCode> {
     // Use `Stdout` (not `StdoutLock`) since it must be `Send` for multi-vCPU threads.
     let serial_out = BufWriter::new(stdout());
 
-    let result = hitz_vmm::boot_and_run(&hypervisor, &config, serial_out, stop_flag)
-        .context("VM boot failed")?;
+    let result = hitz_vmm::boot_and_run(
+        &hypervisor,
+        &config,
+        serial_out,
+        stop_flag,
+        hitz_vmm::BootExtras::none(),
+    )
+    .context("VM boot failed")?;
 
     // Flush stdout before printing to stderr.
     let _ = stdout().flush();

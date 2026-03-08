@@ -13,10 +13,12 @@ pub mod mmio_decode;
 pub mod run_loop;
 pub mod serial_buf;
 pub mod vm;
+pub mod vsock_io;
 
 pub use boot_regs::{GDT_GPA, configure_regs, configure_sregs, write_gdt};
 pub use error::MemError;
 pub use memory::GuestMemory;
 pub use run_loop::{ExitReason, SharedDevices, run_vcpu_loop};
 pub use serial_buf::{SerialBuf, SerialReader};
-pub use vm::{VmError, VmRunResult, boot_and_run, validate_config};
+pub use vm::{BootExtras, VmError, VmRunResult, boot_and_run, validate_config};
+pub use vsock_io::VsockIoHandle;

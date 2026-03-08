@@ -203,7 +203,13 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
             };
 
             let result = tokio::task::spawn_blocking(move || {
-                hitz_vmm::boot_and_run(&*hv, &config, serial_buf, stop_flag)
+                hitz_vmm::boot_and_run(
+                    &*hv,
+                    &config,
+                    serial_buf,
+                    stop_flag,
+                    hitz_vmm::BootExtras::none(),
+                )
             })
             .await;
 

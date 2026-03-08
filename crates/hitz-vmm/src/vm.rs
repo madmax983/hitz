@@ -16,11 +16,13 @@ use hitz_boot::{
     BOOT_PARAMS_GPA, CMDLINE_GPA, RSDP_GPA, build_boot_params, build_madt, build_page_tables,
     build_rsdp, build_xsdt, load_elf, load_initramfs, set_acpi_rsdp, set_initramfs_params,
 };
+use hitz_devices::VirtioVsockDevice;
 use hitz_devices::mmio_bus::MmioBus;
 use hitz_devices::serial::SerialDevice;
 use hitz_devices::virtio::block::VirtioBlockDevice;
 use hitz_devices::virtio::mmio_transport::VirtioMmioTransport;
 use hitz_devices::virtio::net::VirtioNetDevice;
+use hitz_devices::virtio::vsock::VsockPacket;
 use hitz_hal::{
     Gpa, GuestMemAccess, Hypervisor, MemFlags, MemSizeMiB, Partition, PartitionConfig, Vcpu, VcpuId,
 };
@@ -38,9 +40,42 @@ const VIRTIO_MMIO_SIZE: u64 = 0x1000;
 const VIRTIO_IRQ_BASE: u8 = 5;
 /// IRQ vector for the virtio-net device.
 const VIRTIO_IRQ_NET: u8 = 6;
+/// IRQ vector for the virtio-vsock device (MMIO slot 2).
+const VIRTIO_IRQ_VSOCK: u8 = 7;
 
 /// Minimum RAM in MiB (kernel + page tables + `boot_params` need at least 2 MiB).
 const MIN_RAM_MIB: u32 = 2;
+
+/// Optional channel endpoints pre-created by the daemon before `boot_and_run`.
+///
+/// Allows the host-side async runtime to communicate with the vsock device
+/// during VM execution. When `vsock_channels` is `Some`, the device is wired
+/// into MMIO slot 2 at `VIRTIO_MMIO_BASE + VIRTIO_MMIO_SIZE * 2` (IRQ 7).
+///
+/// The daemon creates both pairs before `spawn_blocking`, retaining the
+/// host-facing ends and passing the device-facing ends here.
+pub struct BootExtras {
+    /// Device-facing vsock channel ends:
+    /// - `.0`: receiver for host→guest RX packets (device reads from this)
+    /// - `.1`: sender for guest→host TX packets (device writes to this)
+    ///
+    /// If `None`, no vsock device is instantiated regardless of `VmConfig`.
+    pub vsock_channels: Option<(
+        crossbeam_channel::Receiver<VsockPacket>,
+        crossbeam_channel::Sender<VsockPacket>,
+    )>,
+}
+
+impl BootExtras {
+    /// No vsock channels — used when the guest agent is disabled or the
+    /// caller (CLI, tests) does not need vsock.
+    #[must_use]
+    pub const fn none() -> Self {
+        Self {
+            vsock_channels: None,
+        }
+    }
+}
 
 /// Errors that can occur during VM boot or execution.
 #[derive(Debug, thiserror::Error)]
@@ -150,6 +185,7 @@ pub fn boot_and_run<H: Hypervisor, W: Write + Send + 'static>(
     config: &VmConfig,
     serial_out: W,
     stop_flag: Arc<AtomicBool>,
+    extras: BootExtras,
 ) -> Result<VmRunResult, VmError> {
     // ── 1. Validate config ──
     validate_config(config)?;
@@ -241,6 +277,15 @@ pub fn boot_and_run<H: Hypervisor, W: Write + Send + 'static>(
         );
     }
 
+    // Append virtio-vsock MMIO device descriptor when vsock channels are provided.
+    if extras.vsock_channels.is_some() {
+        let vsock_base = VIRTIO_MMIO_BASE + VIRTIO_MMIO_SIZE * 2;
+        let _ = write!(
+            cmdline,
+            " virtio_mmio.device=0x{VIRTIO_MMIO_SIZE:x}@0x{vsock_base:x}:{VIRTIO_IRQ_VSOCK}"
+        );
+    }
+
     let mut cmdline_bytes = cmdline.as_bytes().to_vec();
     cmdline_bytes.push(0); // null-terminate
     guest_mem.write_slice(Gpa::new(CMDLINE_GPA), &cmdline_bytes)?;
@@ -329,6 +374,23 @@ pub fn boot_and_run<H: Hypervisor, W: Write + Send + 'static>(
     } else {
         None
     };
+
+    // ── 13c. Optional virtio-vsock (guest metrics agent) ──────────────────────
+    //
+    // When the daemon provides pre-created channel ends via `BootExtras`, we
+    // construct the device from those channels so the host-side async task can
+    // communicate with the guest without crossing the `spawn_blocking` boundary.
+    // The device is registered at MMIO slot 2 (0xD000_2000, IRQ 7).
+    //
+    // If `vsock_channels` is `None` (CLI, tests, or agent disabled), no vsock
+    // device is created and the cmdline entry was also skipped above.
+    if let Some((rx_receiver, tx_sender)) = extras.vsock_channels {
+        let vsock_dev = VirtioVsockDevice::with_channels(config.guest_cid, rx_receiver, tx_sender);
+        let vsock_base = VIRTIO_MMIO_BASE + VIRTIO_MMIO_SIZE * 2;
+        let vsock_mem: Arc<dyn GuestMemAccess> = guest_mem_arc.clone();
+        let vsock_transport = VirtioMmioTransport::new(vsock_dev, vsock_mem, VIRTIO_IRQ_VSOCK);
+        mmio_bus.register(vsock_base, VIRTIO_MMIO_SIZE, Box::new(vsock_transport));
+    }
 
     // ── 14. Run vCPU threads ──
     let devices = Arc::new(Mutex::new(SharedDevices { serial, mmio_bus }));
@@ -571,5 +633,17 @@ mod tests {
         let tmp = tempfile::NamedTempFile::new().expect("create temp file");
         let cfg = valid_config(tmp.path().to_path_buf());
         validate_config(&cfg).expect("valid config should pass");
+    }
+
+    #[test]
+    fn vsock_mmio_slot_does_not_overlap_net() {
+        // Slot 0 = blk (0xD000_0000), slot 1 = net (0xD000_1000),
+        // slot 2 = vsock (0xD000_2000). Verify no overlap.
+        let blk = VIRTIO_MMIO_BASE;
+        let net = VIRTIO_MMIO_BASE + VIRTIO_MMIO_SIZE;
+        let vsock = VIRTIO_MMIO_BASE + VIRTIO_MMIO_SIZE * 2;
+        assert_ne!(blk, net);
+        assert_ne!(net, vsock);
+        assert_eq!(VIRTIO_IRQ_VSOCK, 7);
     }
 }
