@@ -4,3 +4,4 @@ pub mod block;
 pub mod mmio_transport;
 pub mod net;
 pub mod queue;
+pub mod vsock;
