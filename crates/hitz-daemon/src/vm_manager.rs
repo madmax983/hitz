@@ -208,6 +208,7 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
                     &config,
                     serial_buf,
                     stop_flag,
+                    // Phase 12 (Tasks 8-9): vsock channels wired here — BootExtras::none() until then.
                     hitz_vmm::BootExtras::none(),
                 )
             })

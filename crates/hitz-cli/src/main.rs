@@ -373,6 +373,7 @@ fn run_vm(args: RunArgs) -> Result<ExitCode> {
         &config,
         serial_out,
         stop_flag,
+        // No vsock in standalone mode; BootExtras::none() permanently for hitz run.
         hitz_vmm::BootExtras::none(),
     )
     .context("VM boot failed")?;
