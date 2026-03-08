@@ -5,6 +5,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use opentelemetry::KeyValue;
 use tokio::sync::mpsc as tokio_mpsc;
 
 use hitz_api::{VmConfig, VmInfo, VmState};
@@ -50,6 +51,8 @@ pub struct VmManager<H> {
     /// Receiver half, wrapped in a tokio `Mutex` so it can be shared across
     /// `Clone`d managers without requiring `&mut self`.
     completion_rx: Arc<tokio::sync::Mutex<tokio_mpsc::UnboundedReceiver<String>>>,
+    /// `OTel` up-down counter tracking VMs by state.
+    vm_count: Arc<opentelemetry::metrics::UpDownCounter<i64>>,
 }
 
 impl<H> Clone for VmManager<H> {
@@ -59,6 +62,7 @@ impl<H> Clone for VmManager<H> {
             vms: Arc::clone(&self.vms),
             completion_tx: self.completion_tx.clone(),
             completion_rx: Arc::clone(&self.completion_rx),
+            vm_count: Arc::clone(&self.vm_count),
         }
     }
 }
@@ -67,11 +71,19 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
     /// Create a new manager with the given hypervisor backend.
     pub fn new(hypervisor: Arc<H>) -> Self {
         let (tx, rx) = tokio_mpsc::unbounded_channel();
+        let meter = opentelemetry::global::meter("hitz");
+        let vm_count = Arc::new(
+            meter
+                .i64_up_down_counter("hitz.vm.count")
+                .with_description("Number of VMs by state")
+                .build(),
+        );
         Self {
             hypervisor,
             vms: Arc::new(Mutex::new(HashMap::new())),
             completion_tx: tx,
             completion_rx: Arc::new(tokio::sync::Mutex::new(rx)),
+            vm_count,
         }
     }
 
@@ -103,7 +115,7 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
     }
 
     /// Boot a previously created VM.
-    #[allow(clippy::significant_drop_tightening)]
+    #[allow(clippy::significant_drop_tightening, clippy::too_many_lines)]
     pub fn start_vm(&self, id: &str) -> Result<VmInfo, DaemonError> {
         let (config, stop_flag, serial_buf, info) = {
             let mut vms = self
@@ -133,14 +145,40 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
         };
         // Mutex released here — spawn_blocking must not hold it.
 
+        // Record guest RAM size as a one-shot gauge.
+        {
+            let meter = opentelemetry::global::meter("hitz");
+            let memory_gauge = meter
+                .u64_gauge("hitz.vm.memory_bytes")
+                .with_description("Guest RAM in bytes at VM start")
+                .build();
+            memory_gauge.record(
+                u64::from(config.ram_mib) * 1024 * 1024,
+                &[KeyValue::new("vm.id", id.to_string())],
+            );
+        }
+
+        // Increment the running-VM count.
+        self.vm_count.add(1, &[KeyValue::new("state", "running")]);
+
         let hv = self.hypervisor.clone();
         let vms = self.vms.clone();
         let vm_id = id.to_string();
         let completion_tx = self.completion_tx.clone();
+        let vm_count_clone = Arc::clone(&self.vm_count);
+        let vm_id_span = vm_id.clone();
 
         // Fire-and-forget: the spawned task updates VM state on completion
         // and signals the completion channel so `stop_all_and_wait` can drain.
         drop(tokio::task::spawn(async move {
+            let boot_span = tracing::info_span!(
+                "vm.boot",
+                vm.id = %vm_id_span,
+                vm.ram_mib = config.ram_mib,
+                vm.cpus = config.cpus,
+            );
+            let _boot_enter = boot_span.enter();
+
             // Start port forwarders if networking is configured and rules exist.
             let _port_fwd = if let Some(ref net) = config.net {
                 if config.ports.is_empty() {
@@ -170,6 +208,9 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
             .await;
 
             // _port_fwd drops here → all listener tasks aborted.
+
+            // Decrement the running-VM count now that the VM has exited.
+            vm_count_clone.add(-1, &[KeyValue::new("state", "running")]);
 
             // Update state based on result.
             if let Ok(mut vms) = vms.lock()
@@ -566,6 +607,17 @@ mod tests {
         let _info = mgr.create_vm("port_fwd_test".into(), config).unwrap();
         // start_vm fires off an async task; just verify it doesn't panic.
         mgr.start_vm("port_fwd_test").unwrap();
+    }
+
+    #[tokio::test]
+    async fn start_vm_metrics_do_not_panic() {
+        // Regression guard: metric and span calls must not panic when no global
+        // OTel provider is registered (the no-op provider handles it).
+        let mgr = make_manager();
+        mgr.create_vm("m1".into(), make_config()).expect("create");
+        // start_vm spawns an async task; synchronous metric setup happens before spawn.
+        // This verifies the counter/gauge creation path doesn't panic.
+        let _info = mgr.start_vm("m1").expect("start");
     }
 
     #[test]
