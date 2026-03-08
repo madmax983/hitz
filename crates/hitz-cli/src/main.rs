@@ -23,6 +23,7 @@ use hitz_api::{
     ActionVmRequest, CreateVmRequest, DEFAULT_CMDLINE, DEFAULT_CPUS, DEFAULT_RAM_MIB, VmAction,
     VmConfig,
 };
+use hitz_daemon::TelemetryGuard;
 use hitz_vmm::ExitReason;
 use hitz_whp::WhpHypervisor;
 use hyper::Method;
@@ -144,6 +145,11 @@ struct DaemonStartArgs {
     /// Verbose output.
     #[arg(short, long)]
     verbose: bool,
+
+    /// OTLP gRPC collector endpoint (e.g. `<http://localhost:4317>`).
+    /// Falls back to `OTEL_EXPORTER_OTLP_ENDPOINT` env var. Omit to disable telemetry.
+    #[arg(long)]
+    otlp_endpoint: Option<String>,
 }
 
 // ── VM ──
@@ -251,6 +257,16 @@ struct VmListArgs {
     /// Connect to daemon via TCP instead of named pipe.
     #[arg(long)]
     tcp: Option<std::net::SocketAddr>,
+}
+
+// ── Helpers ──
+
+/// Resolve the OTLP endpoint from the CLI flag, falling back to the
+/// `OTEL_EXPORTER_OTLP_ENDPOINT` environment variable.
+///
+/// Returns `None` when neither is set, which disables telemetry.
+fn resolve_otlp_endpoint(cli_arg: Option<String>) -> Option<String> {
+    cli_arg.or_else(|| std::env::var("OTEL_EXPORTER_OTLP_ENDPOINT").ok())
 }
 
 // ── Main ──
@@ -373,12 +389,39 @@ fn run_vm(args: RunArgs) -> Result<ExitCode> {
 /// Starts the named pipe (and optional TCP) listener, then waits for Ctrl+C.
 /// On signal: broadcasts shutdown to the listener loops, calls
 /// `stop_all_and_wait` to drain running VMs (up to 5 s), then returns.
+///
+/// The tokio runtime is shut down *before* the [`TelemetryGuard`] is dropped
+/// so the OTLP batch exporter can flush its queue while the runtime is still
+/// alive.
 fn run_daemon(args: &DaemonStartArgs) -> Result<()> {
-    if args.verbose {
-        tracing_subscriber::fmt()
-            .with_env_filter("hitz=debug")
-            .with_writer(std::io::stderr)
-            .init();
+    use tracing_subscriber::prelude::*;
+
+    let endpoint = resolve_otlp_endpoint(args.otlp_endpoint.clone());
+
+    // Init OTel providers BEFORE subscriber registration so the tracer exists
+    // when the layer is built.
+    let telemetry = TelemetryGuard::init(endpoint);
+
+    {
+        use tracing_subscriber::Layer as _;
+
+        let mut layers: Vec<
+            Box<dyn tracing_subscriber::Layer<tracing_subscriber::Registry> + Send + Sync>,
+        > = Vec::new();
+
+        if args.verbose {
+            let fmt = tracing_subscriber::fmt::layer()
+                .with_writer(std::io::stderr)
+                .with_filter(tracing_subscriber::filter::EnvFilter::new("hitz=debug"))
+                .boxed();
+            layers.push(fmt);
+        }
+
+        if let Some(otel) = telemetry.tracing_layer() {
+            layers.push(otel.boxed());
+        }
+
+        tracing_subscriber::registry().with(layers).init();
     }
 
     eprintln!("hitz: daemon listening on {}", args.pipe);
@@ -388,7 +431,7 @@ fn run_daemon(args: &DaemonStartArgs) -> Result<()> {
 
     let rt = tokio::runtime::Runtime::new().context("failed to create tokio runtime")?;
 
-    rt.block_on(async {
+    let result = rt.block_on(async {
         let hv = Arc::new(WhpHypervisor::new().context("WHP not available")?);
         let manager = hitz_daemon::VmManager::new(hv);
         let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
@@ -415,8 +458,15 @@ fn run_daemon(args: &DaemonStartArgs) -> Result<()> {
         let _ = server_handle.await;
 
         eprintln!("hitz: shutdown complete");
-        Ok(())
-    })
+        Ok::<(), anyhow::Error>(())
+    });
+
+    // Shut down the runtime BEFORE dropping the OTel guard so the batch
+    // exporter can flush pending spans while the async executor is still live.
+    rt.shutdown_timeout(std::time::Duration::from_secs(5));
+    drop(telemetry);
+
+    result
 }
 
 // ── hitz vm * ──
@@ -590,6 +640,50 @@ fn run_vm_command(cmd: VmCommand) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Mutex that serialises any test touching `OTEL_EXPORTER_OTLP_ENDPOINT`
+    /// so parallel test threads cannot race on environment state.
+    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    #[test]
+    fn endpoint_resolution_cli_wins_over_env() {
+        let _guard = ENV_LOCK.lock().expect("env lock poisoned");
+        let cli_val = "http://cli-endpoint:4317".to_string();
+        let env_val = "http://env-endpoint:4317";
+        // SAFETY: single-threaded test, no other env manipulation concurrent
+        unsafe {
+            std::env::set_var("OTEL_EXPORTER_OTLP_ENDPOINT", env_val);
+        }
+        let resolved = resolve_otlp_endpoint(Some(cli_val.clone()));
+        unsafe {
+            std::env::remove_var("OTEL_EXPORTER_OTLP_ENDPOINT");
+        }
+        assert_eq!(resolved, Some(cli_val));
+    }
+
+    #[test]
+    fn endpoint_resolution_falls_back_to_env() {
+        let _guard = ENV_LOCK.lock().expect("env lock poisoned");
+        let env_val = "http://env-endpoint:4317".to_string();
+        unsafe {
+            std::env::set_var("OTEL_EXPORTER_OTLP_ENDPOINT", &env_val);
+        }
+        let resolved = resolve_otlp_endpoint(None);
+        unsafe {
+            std::env::remove_var("OTEL_EXPORTER_OTLP_ENDPOINT");
+        }
+        assert_eq!(resolved, Some(env_val));
+    }
+
+    #[test]
+    fn endpoint_resolution_none_when_absent() {
+        let _guard = ENV_LOCK.lock().expect("env lock poisoned");
+        unsafe {
+            std::env::remove_var("OTEL_EXPORTER_OTLP_ENDPOINT");
+        }
+        let resolved = resolve_otlp_endpoint(None);
+        assert_eq!(resolved, None);
+    }
 
     #[test]
     fn parse_port_forward_valid() {
