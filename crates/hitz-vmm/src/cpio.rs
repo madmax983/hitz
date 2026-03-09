@@ -43,6 +43,12 @@ impl CpioBuilder {
     fn append_entry(&mut self, name: &str, content: &[u8], mode: u32) {
         let namesize = name.len() + 1; // include null terminator
         let filesize = content.len();
+        // Both fields are 32-bit in the cpio spec. Inputs are always small
+        // (initramfs paths and content), so truncation is safe.
+        #[allow(clippy::cast_possible_truncation)]
+        let namesize32 = namesize as u32;
+        #[allow(clippy::cast_possible_truncation)]
+        let filesize32 = filesize as u32;
 
         // 110-byte ASCII header.
         let header = format!(
@@ -53,12 +59,12 @@ impl CpioBuilder {
             0u32,       // gid
             1u32,       // nlink
             0u32,       // mtime
-            filesize,   // filesize
+            filesize32, // filesize
             0u32,       // devmajor
             0u32,       // devminor
             0u32,       // rdevmajor
             0u32,       // rdevminor
-            namesize,   // namesize
+            namesize32, // namesize
             0u32,       // check (always 0 for newc)
         );
         assert_eq!(header.len(), 110, "cpio header must be 110 bytes");
@@ -109,6 +115,13 @@ mod tests {
         assert_eq!(&archive[0..6], b"070701");
         // Archive is non-empty and contains the file content.
         assert!(archive.len() > 110 + content.len());
+        // Verify content is at the correct byte offset.
+        // Header(110) + name("etc/init.d/S99hitz-agent\0" = 25) + 1 pad byte = 136
+        let name = "etc/init.d/S99hitz-agent";
+        let name_total = 110 + name.len() + 1; // +1 for null terminator
+        let name_pad = (4 - name_total % 4) % 4;
+        let data_start = name_total + name_pad;
+        assert_eq!(&archive[data_start..data_start + content.len()], content);
     }
 
     #[test]
