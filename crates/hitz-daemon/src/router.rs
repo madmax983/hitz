@@ -105,6 +105,7 @@ where
         (&Method::PUT, None) => handle_create(req, id, manager).await,
         (&Method::GET, None) => handle_get(id, manager),
         (&Method::GET, Some("serial")) => handle_serial(id, manager),
+        (&Method::GET, Some("metrics")) => handle_metrics(id, manager),
         (&Method::DELETE, None) => handle_delete(id, manager),
         (&Method::POST, Some("action")) => handle_action(req, id, manager).await,
         _ => Ok(error_response(
@@ -216,6 +217,24 @@ where
         .header("transfer-encoding", "chunked")
         .body(ChannelBody { rx }.boxed())
         .expect("build serial response"))
+}
+
+fn handle_metrics<H>(
+    id: &str,
+    manager: &VmManager<H>,
+) -> Result<Response<BoxBody<Bytes, Infallible>>, DaemonError>
+where
+    H: Hypervisor + Send + Sync + 'static,
+{
+    manager.request_metrics_snapshot(id).map_or_else(
+        || {
+            Ok(error_response(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "vsock metrics not available (push-to-OTel mode active; on-demand pull not yet implemented)",
+            ))
+        },
+        |snap| json_response(StatusCode::OK, &snap),
+    )
 }
 
 fn json_response<T: serde::Serialize>(

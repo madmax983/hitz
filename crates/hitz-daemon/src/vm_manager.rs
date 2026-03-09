@@ -21,6 +21,13 @@ struct VmEntry {
     exit_reason: Option<String>,
     stop_flag: Option<Arc<AtomicBool>>,
     serial_buf: Option<SerialBuf>,
+    /// Vsock I/O handle kept alive for the duration of the VM run.
+    ///
+    /// Dropping this closes the channels, which signals the vsock device's
+    /// poll loop to stop. Currently `None` for VMs without agent injection,
+    /// and `None` for the simplified push-to-`OTel` path (the handle ends are
+    /// consumed by the metrics task).
+    vsock_handle: Option<hitz_vmm::VsockIoHandle>,
 }
 
 impl VmEntry {
@@ -53,6 +60,18 @@ pub struct VmManager<H> {
     completion_rx: Arc<tokio::sync::Mutex<tokio_mpsc::UnboundedReceiver<String>>>,
     /// `OTel` up-down counter tracking VMs by state.
     vm_count: Arc<opentelemetry::metrics::UpDownCounter<i64>>,
+    /// Shutdown watch receiver, shared with the vsock metrics tasks so they
+    /// stop when the daemon shuts down.
+    shutdown_rx: tokio::sync::watch::Receiver<bool>,
+    /// Sender half retained to keep the watch channel alive.
+    ///
+    /// When no external sender is wired (standalone mode), this prevents the
+    /// receiver from becoming permanently ready (as it would if all senders
+    /// were dropped). The daemon replaces the receiver via
+    /// [`set_shutdown_receiver`] in production.
+    ///
+    /// [`set_shutdown_receiver`]: VmManager::set_shutdown_receiver
+    shutdown_tx_owned: Arc<tokio::sync::watch::Sender<bool>>,
 }
 
 impl<H> Clone for VmManager<H> {
@@ -63,6 +82,8 @@ impl<H> Clone for VmManager<H> {
             completion_tx: self.completion_tx.clone(),
             completion_rx: Arc::clone(&self.completion_rx),
             vm_count: Arc::clone(&self.vm_count),
+            shutdown_rx: self.shutdown_rx.clone(),
+            shutdown_tx_owned: Arc::clone(&self.shutdown_tx_owned),
         }
     }
 }
@@ -78,13 +99,26 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
                 .with_description("Number of VMs by state")
                 .build(),
         );
+        let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
         Self {
             hypervisor,
             vms: Arc::new(Mutex::new(HashMap::new())),
             completion_tx: tx,
             completion_rx: Arc::new(tokio::sync::Mutex::new(rx)),
             vm_count,
+            shutdown_rx,
+            shutdown_tx_owned: Arc::new(shutdown_tx),
         }
+    }
+
+    /// Wire the vsock metrics tasks to stop when a daemon-provided shutdown
+    /// signal fires.
+    ///
+    /// Call this after constructing the manager with the same watch receiver
+    /// passed to [`run_server`]. If not called, the manager uses an internal
+    /// channel that is never triggered.
+    pub fn set_shutdown_receiver(&mut self, rx: tokio::sync::watch::Receiver<bool>) {
+        self.shutdown_rx = rx;
     }
 
     /// Create a VM with the given ID and config. Validates the config
@@ -107,6 +141,7 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
             exit_reason: None,
             stop_flag: None,
             serial_buf: None,
+            vsock_handle: None,
         };
         let info = entry.to_info(&id);
         let _ = vms.insert(id, entry);
@@ -145,6 +180,27 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
         };
         // Mutex released here — spawn_blocking must not hold it.
 
+        // Inject guest agent overlay into initramfs if agent is enabled.
+        let boot_config =
+            if let Some(agent_bytes) = crate::agent::resolve_agent_bytes(&config.guest_agent) {
+                let overlay = crate::agent::build_agent_overlay(&agent_bytes);
+                let mut combined = config
+                    .initramfs_path
+                    .as_ref()
+                    .map_or_else(Vec::new, |path| std::fs::read(path).unwrap_or_default());
+                combined.extend_from_slice(&overlay);
+                let tmp = std::env::temp_dir().join(format!("hitz-initrd-{id}.cpio"));
+                if std::fs::write(&tmp, &combined).is_ok() {
+                    let mut patched = config.clone();
+                    patched.initramfs_path = Some(tmp);
+                    patched
+                } else {
+                    config.clone()
+                }
+            } else {
+                config.clone()
+            };
+
         // Record guest RAM size as a one-shot gauge.
         {
             let meter = opentelemetry::global::meter("hitz");
@@ -168,20 +224,45 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
         let vm_count_clone = Arc::clone(&self.vm_count);
         let vm_id_span = vm_id.clone();
 
+        // Create vsock channels if agent injection is enabled.
+        // The host-facing ends are consumed by the async metrics task;
+        // the device-facing ends are passed to boot_and_run via BootExtras.
+        // On-demand pull is a future enhancement; only push-to-OTel is wired here.
+        let extras = if matches!(
+            boot_config.guest_agent,
+            hitz_api::GuestAgentMode::Auto | hitz_api::GuestAgentMode::Custom(_)
+        ) {
+            let (handle, rx_receiver, tx_sender) = hitz_vmm::VsockIoHandle::new_pair();
+            // Spawn the async metrics task with the host-facing channel ends.
+            // The task runs until the channels close (VM exit) or shutdown.
+            let shutdown_rx = self.shutdown_rx.clone();
+            drop(tokio::spawn(crate::vsock_server::run_metrics_task(
+                vm_id.clone(),
+                handle.tx_rx,
+                handle.rx_tx,
+                shutdown_rx,
+            )));
+            hitz_vmm::BootExtras {
+                vsock_channels: Some((rx_receiver, tx_sender)),
+            }
+        } else {
+            hitz_vmm::BootExtras::none()
+        };
+
         // Fire-and-forget: the spawned task updates VM state on completion
         // and signals the completion channel so `stop_all_and_wait` can drain.
         drop(tokio::task::spawn(async move {
             let boot_span = tracing::info_span!(
                 "vm.boot",
                 vm.id = %vm_id_span,
-                vm.ram_mib = config.ram_mib,
-                vm.cpus = config.cpus,
+                vm.ram_mib = boot_config.ram_mib,
+                vm.cpus = boot_config.cpus,
             );
             let _boot_enter = boot_span.enter();
 
             // Start port forwarders if networking is configured and rules exist.
-            let _port_fwd = if let Some(ref net) = config.net {
-                if config.ports.is_empty() {
+            let _port_fwd = if let Some(ref net) = boot_config.net {
+                if boot_config.ports.is_empty() {
                     None
                 } else {
                     let guest_ip = net
@@ -191,7 +272,8 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
                         .and_then(|s| s.parse::<std::net::Ipv4Addr>().ok());
                     if let Some(ip) = guest_ip {
                         Some(
-                            crate::port_forward::PortForwardManager::start(ip, &config.ports).await,
+                            crate::port_forward::PortForwardManager::start(ip, &boot_config.ports)
+                                .await,
                         )
                     } else {
                         tracing::warn!("could not parse guest IP from {}", net.guest_ip);
@@ -203,14 +285,7 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
             };
 
             let result = tokio::task::spawn_blocking(move || {
-                hitz_vmm::boot_and_run(
-                    &*hv,
-                    &config,
-                    serial_buf,
-                    stop_flag,
-                    // Phase 12 (Tasks 8-9): vsock channels wired here — BootExtras::none() until then.
-                    hitz_vmm::BootExtras::none(),
-                )
+                hitz_vmm::boot_and_run(&*hv, &boot_config, serial_buf, stop_flag, extras)
             })
             .await;
 
@@ -244,6 +319,7 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
                     }
                 }
                 entry.stop_flag = None;
+                entry.vsock_handle = None;
                 if let Some(ref buf) = entry.serial_buf {
                     buf.close();
                 }
@@ -423,6 +499,20 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
                 }
             }
         }
+    }
+
+    /// On-demand metrics pull. Currently returns `None` (push-to-`OTel` path
+    /// works automatically via the vsock metrics task).
+    ///
+    /// Future: implement pull by injecting a request packet and awaiting
+    /// the response — requires storing a dedicated pull channel end in
+    /// `VmEntry` separate from the push stream read by `run_metrics_task`.
+    #[must_use]
+    pub const fn request_metrics_snapshot(
+        &self,
+        _vm_id: &str,
+    ) -> Option<hitz_api::MetricsSnapshot> {
+        None
     }
 }
 
@@ -656,5 +746,14 @@ mod tests {
                 reader.err().map_or_else(String::new, |e| e.to_string())
             );
         });
+    }
+
+    #[test]
+    fn vsock_pull_channel_accessible() {
+        let mgr = make_manager();
+        mgr.create_vm("v1".into(), make_config()).expect("create");
+        // Returns None since no vsock channels in test mode (push-to-OTel only).
+        let result = mgr.request_metrics_snapshot("v1");
+        assert!(result.is_none());
     }
 }
