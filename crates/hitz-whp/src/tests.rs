@@ -2060,3 +2060,90 @@ fn phase11_otel_noop_boot() {
     // For a full boot regression, see phase5_boot_and_run_hello (same WHP guard).
     eprintln!("phase11_otel_noop_boot: OTel no-op path verified");
 }
+
+/// Phase 12 integration test skeleton — vsock channel plumbing + OTel publishing no-op.
+///
+/// Verifies that:
+/// 1. `VirtioVsockDevice::new()` constructs without WHP (no partition needed).
+/// 2. A `VsockPacket` can be sent through the crossbeam channels.
+/// 3. `hitz_daemon::vsock_server::publish_to_otel()` does not panic when no
+///    OTel provider is registered (all calls become no-ops).
+///
+/// Run with: cargo test -p hitz-whp -- --ignored phase12
+#[test]
+#[ignore]
+fn phase12_vsock_noop() {
+    use hitz_api::{
+        CpuMetrics, DiskMetrics, MemoryMetrics, MetricsSnapshot, NetMetrics, ProcMetrics,
+    };
+    use hitz_devices::VirtioVsockDevice;
+    use hitz_devices::virtio::vsock::{VsockHdr, VsockOp};
+
+    // ── 1. Construct vsock device (no WHP partition required) ────────────────
+    let guest_cid: u32 = 3;
+    let (_dev, tx_rx, rx_tx) = VirtioVsockDevice::new(guest_cid);
+    eprintln!("phase12: VirtioVsockDevice constructed, guest_cid={guest_cid}");
+
+    // ── 2. Send a packet through the channel ────────────────────────────────
+    let hdr = VsockHdr {
+        src_cid: 2,
+        dst_cid: u64::from(guest_cid),
+        src_port: 1024,
+        dst_port: 52,
+        len: 0,
+        r#type: 1,
+        op: VsockOp::Request as u16,
+        flags: 0,
+        buf_alloc: 0,
+        fwd_cnt: 0,
+    };
+    rx_tx.send((hdr, vec![])).expect("send packet to device");
+    let received = tx_rx.try_recv();
+    // The device is not running its run-loop, so nothing is forwarded back —
+    // we just verify the channel endpoints are wired up correctly.
+    eprintln!("phase12: channel send ok; try_recv={received:?}");
+
+    // ── 3. OTel publish no-op ────────────────────────────────────────────────
+    let snap = MetricsSnapshot {
+        timestamp_ms: 1_000_000,
+        cpu: CpuMetrics {
+            total_pct: 12.5,
+            per_core: vec![10.0, 15.0],
+            load_avg: [0.5, 0.3, 0.2],
+        },
+        memory: MemoryMetrics {
+            total_bytes: 256 * 1024 * 1024,
+            used_bytes: 128 * 1024 * 1024,
+            free_bytes: 128 * 1024 * 1024,
+            buffers_bytes: 0,
+            cached_bytes: 0,
+            swap_total: 0,
+            swap_used: 0,
+        },
+        disks: vec![DiskMetrics {
+            name: "vda".into(),
+            reads_total: 100,
+            writes_total: 50,
+            read_bytes: 4096,
+            write_bytes: 2048,
+        }],
+        networks: vec![NetMetrics {
+            interface: "eth0".into(),
+            rx_bytes: 8192,
+            tx_bytes: 4096,
+            rx_packets: 64,
+            tx_packets: 32,
+            rx_errors: 0,
+            tx_errors: 0,
+        }],
+        processes: vec![ProcMetrics {
+            pid: 1,
+            name: "init".into(),
+            cpu_pct: 0.1,
+            rss_bytes: 4096,
+            state: 'S',
+        }],
+    };
+    hitz_daemon::vsock_server::publish_to_otel("test-vm", &snap);
+    eprintln!("phase12: publish_to_otel no-op ok");
+}
