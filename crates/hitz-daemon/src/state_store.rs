@@ -80,7 +80,14 @@ impl StateStore {
             Err(e) => return Err(DaemonError::Io(e)),
         };
 
-        for entry in read_dir.flatten() {
+        for entry in read_dir {
+            let entry = match entry {
+                Ok(e) => e,
+                Err(e) => {
+                    tracing::warn!(error = %e, "failed to read state directory entry — skipping");
+                    continue;
+                }
+            };
             let path = entry.path();
             if !path.is_dir() {
                 continue;
