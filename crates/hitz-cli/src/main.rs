@@ -171,6 +171,8 @@ enum VmCommand {
     Delete(VmIdArgs),
     /// Stream serial console output.
     Serial(VmIdArgs),
+    /// Display live resource metrics for a running VM.
+    Metrics(VmIdArgs),
 }
 
 /// Arguments for `vm create`.
@@ -478,6 +480,72 @@ fn run_daemon(args: &DaemonStartArgs) -> Result<()> {
     result
 }
 
+// ── Metrics formatting ──
+
+/// Format a [`hitz_api::MetricsSnapshot`] into a human-readable string for CLI display.
+fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
+    use std::fmt::Write as _;
+    let mut out = String::new();
+
+    let cores: Vec<String> = snap
+        .cpu
+        .per_core
+        .iter()
+        .map(|p| format!("{p:.1}%"))
+        .collect();
+    let _ = writeln!(
+        out,
+        "CPU:     total={:.1}%  cores=[{}]  load={:.2}/{:.2}/{:.2}",
+        snap.cpu.total_pct,
+        cores.join(", "),
+        snap.cpu.load_avg[0],
+        snap.cpu.load_avg[1],
+        snap.cpu.load_avg[2],
+    );
+
+    let used_mib = snap.memory.used_bytes / (1024 * 1024);
+    let total_mib = snap.memory.total_bytes / (1024 * 1024);
+    let _ = writeln!(out, "Memory:  {used_mib} MiB / {total_mib} MiB");
+
+    for disk in &snap.disks {
+        let read_kb = disk.read_bytes / 1024;
+        let write_kb = disk.write_bytes / 1024;
+        let _ = writeln!(
+            out,
+            "Disk:    {}  reads={}  writes={}  read={}K  write={}K",
+            disk.name, disk.reads_total, disk.writes_total, read_kb, write_kb,
+        );
+    }
+
+    for net in &snap.networks {
+        let rx_kb = net.rx_bytes / 1024;
+        let tx_kb = net.tx_bytes / 1024;
+        let _ = writeln!(
+            out,
+            "Net:     {}  rx={}K  tx={}K  rx_pkt={}  tx_pkt={}",
+            net.interface, rx_kb, tx_kb, net.rx_packets, net.tx_packets,
+        );
+    }
+
+    if !snap.processes.is_empty() {
+        let _ = writeln!(
+            out,
+            "Procs:   {:>6}  {:<20} {:>6}  {:>8}",
+            "PID", "NAME", "CPU%", "RSS"
+        );
+        for proc in &snap.processes {
+            let rss_mb = proc.rss_bytes / (1024 * 1024);
+            let _ = writeln!(
+                out,
+                "         {:>6}  {:<20} {:>5.1}%  {:>7}M",
+                proc.pid, proc.name, proc.cpu_pct, rss_mb,
+            );
+        }
+    }
+
+    out
+}
+
 // ── hitz vm * ──
 
 /// Execute a `vm` subcommand by talking to the daemon over the named pipe.
@@ -643,6 +711,23 @@ fn run_vm_command(cmd: VmCommand) -> Result<()> {
                     }
                 }
             }
+            VmCommand::Metrics(args) => {
+                let (status, resp) = pipe_client::pipe_request(
+                    &args.pipe,
+                    args.tcp,
+                    Method::GET,
+                    &format!("/vms/{}/metrics", args.id),
+                    None,
+                )
+                .await?;
+                if status.is_success() {
+                    let snap: hitz_api::MetricsSnapshot =
+                        serde_json::from_str(&resp).context("failed to parse metrics response")?;
+                    print!("{}", format_metrics_snapshot(&snap));
+                } else {
+                    println!("{status}: {resp}");
+                }
+            }
         }
         Ok(())
     })
@@ -716,5 +801,52 @@ mod tests {
     #[test]
     fn parse_port_forward_bad_guest() {
         assert!(parse_port_forward("2222:xyz").is_err());
+    }
+
+    #[test]
+    fn metrics_output_formats_snapshot() {
+        use hitz_api::{CpuMetrics, DiskMetrics, MemoryMetrics, MetricsSnapshot, NetMetrics};
+        let snap = MetricsSnapshot {
+            timestamp_ms: 0,
+            cpu: CpuMetrics {
+                total_pct: 12.5,
+                per_core: vec![10.0, 15.0],
+                load_avg: [0.42, 0.38, 0.31],
+            },
+            memory: MemoryMetrics {
+                total_bytes: 256 * 1024 * 1024,
+                used_bytes: 128 * 1024 * 1024,
+                free_bytes: 128 * 1024 * 1024,
+                buffers_bytes: 0,
+                cached_bytes: 0,
+                swap_total: 0,
+                swap_used: 0,
+            },
+            disks: vec![DiskMetrics {
+                name: "vda".into(),
+                reads_total: 100,
+                writes_total: 50,
+                read_bytes: 512 * 1024,
+                write_bytes: 256 * 1024,
+            }],
+            networks: vec![NetMetrics {
+                interface: "eth0".into(),
+                rx_bytes: 1_048_576,
+                tx_bytes: 524_288,
+                rx_packets: 1000,
+                tx_packets: 500,
+                rx_errors: 0,
+                tx_errors: 0,
+            }],
+            processes: vec![],
+        };
+        let output = format_metrics_snapshot(&snap);
+        assert!(output.contains("12.5%"), "missing CPU pct: {output}");
+        assert!(
+            output.contains("128 MiB / 256 MiB"),
+            "missing memory: {output}"
+        );
+        assert!(output.contains("vda"), "missing disk: {output}");
+        assert!(output.contains("eth0"), "missing network: {output}");
     }
 }
