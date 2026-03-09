@@ -1,0 +1,20 @@
+[package]
+name    = "hitz-guest-agent"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "hitz-agent"
+path = "src/main.rs"
+
+[dependencies]
+hitz-api    = { path = "../../crates/hitz-api" }
+serde       = { version = "1", features = ["derive"] }
+rmp-serde   = "1"
+
+[target.'cfg(unix)'.dependencies]
+vsock = "0.5"
+
+[lints]
+workspace = true
