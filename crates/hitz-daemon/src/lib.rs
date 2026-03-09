@@ -5,6 +5,7 @@ pub mod error;
 pub mod port_forward;
 pub mod router;
 pub mod server;
+pub mod state_store;
 pub mod telemetry;
 pub mod vm_manager;
 pub mod vsock_server;
