@@ -480,7 +480,9 @@ name = "hitz-daemon"
 version = "0.1.0"
 dependencies = [
  "bytes",
+ "crossbeam-channel",
  "hitz-api",
+ "hitz-devices",
  "hitz-hal",
  "hitz-vmm",
  "http-body-util",
@@ -489,6 +491,7 @@ dependencies = [
  "opentelemetry",
  "opentelemetry-otlp",
  "opentelemetry_sdk",
+ "rmp-serde",
  "serde",
  "serde_json",
  "tempfile",
@@ -509,6 +512,16 @@ dependencies = [
  "thiserror 2.0.18",
  "tracing",
  "vm-superio",
+]
+
+[[package]]
+name = "hitz-guest-agent"
+version = "0.1.0"
+dependencies = [
+ "hitz-api",
+ "rmp-serde",
+ "serde",
+ "vsock",
 ]
 
 [[package]]
@@ -909,6 +922,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8ca58f447f06ed17d5fc4043ce1b10dd205e060fb3ce5b979b8ed8e59ff3f79"
 
 [[package]]
+name = "memoffset"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "488016bfae457b036d996092f6cb448677611ce4449e970ceaf42695203f218a"
+dependencies = [
+ "autocfg",
+]
+
+[[package]]
 name = "mio"
 version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -929,6 +951,7 @@ dependencies = [
  "cfg-if",
  "cfg_aliases",
  "libc",
+ "memoffset",
 ]
 
 [[package]]
@@ -1835,6 +1858,16 @@ name = "vm-superio"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "69c376a9b84afdf97bddd2628096cf3554208b2a676cf06b4532e0f433a54e02"
+
+[[package]]
+name = "vsock"
+version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b82aeb12ad864eb8cd26a6c21175d0bdc66d398584ee6c93c76964c3bcfc78ff"
+dependencies = [
+ "libc",
+ "nix",
+]
 
 [[package]]
 name = "want"

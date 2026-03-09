@@ -25,10 +25,13 @@ const PUSH_INTERVAL_SECS: u64 = 5;
 const TOP_N_PROCS: usize = 10;
 
 fn now_ms() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or(Duration::ZERO)
-        .as_millis() as u64
+    u64::try_from(
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or(Duration::ZERO)
+            .as_millis(),
+    )
+    .unwrap_or(u64::MAX)
 }
 
 fn read_file(path: &str) -> String {
@@ -43,8 +46,7 @@ fn collect_snapshot() -> MetricsSnapshot {
     let total_pct = sample1
         .first()
         .zip(sample2.first())
-        .map(|(a, b)| cpu_pct(a, b))
-        .unwrap_or(0.0);
+        .map_or(0.0, |(a, b)| cpu_pct(a, b));
 
     let per_core: Vec<f32> = sample1
         .iter()
@@ -54,8 +56,8 @@ fn collect_snapshot() -> MetricsSnapshot {
         .collect();
 
     let load_avg = parse_load_avg(&read_file("/proc/loadavg"));
-    let memory = parse_proc_meminfo(&read_file("/proc/meminfo")).unwrap_or_else(|| {
-        hitz_api::MemoryMetrics {
+    let memory =
+        parse_proc_meminfo(&read_file("/proc/meminfo")).unwrap_or(hitz_api::MemoryMetrics {
             total_bytes: 0,
             used_bytes: 0,
             free_bytes: 0,
@@ -63,8 +65,7 @@ fn collect_snapshot() -> MetricsSnapshot {
             cached_bytes: 0,
             swap_total: 0,
             swap_used: 0,
-        }
-    });
+        });
     let disks = parse_proc_diskstats(&read_file("/proc/diskstats"));
     let networks = parse_proc_net_dev(&read_file("/proc/net/dev"));
     let processes = collect_top_procs(TOP_N_PROCS);
@@ -94,16 +95,16 @@ fn parse_load_avg(content: &str) -> [f32; 3] {
 fn collect_top_procs(n: usize) -> Vec<hitz_api::ProcMetrics> {
     let mut procs = Vec::new();
     if let Ok(entries) = std::fs::read_dir("/proc") {
-        for entry in entries.filter_map(|e| e.ok()) {
+        for entry in entries.filter_map(std::result::Result::ok) {
             let path = entry.path();
-            if let Some(pid_str) = path.file_name().and_then(|n| n.to_str()) {
-                if let Ok(pid) = pid_str.parse::<u32>() {
-                    let stat_path = format!("/proc/{pid}/stat");
-                    if let Ok(stat) = std::fs::read_to_string(&stat_path) {
-                        if let Some(p) = parse_proc_pid_stat(pid, &stat) {
-                            procs.push(p);
-                        }
-                    }
+            if let Some(pid_str) = path.file_name().and_then(|n| n.to_str())
+                && let Ok(pid) = pid_str.parse::<u32>()
+            {
+                let stat_path = format!("/proc/{pid}/stat");
+                if let Ok(stat) = std::fs::read_to_string(&stat_path)
+                    && let Some(p) = parse_proc_pid_stat(pid, &stat)
+                {
+                    procs.push(p);
                 }
             }
         }
@@ -141,12 +142,17 @@ fn parse_proc_pid_stat(pid: u32, content: &str) -> Option<hitz_api::ProcMetrics>
     // USER_HZ = 100 on all Linux targets.
     // This is a lifetime average, not a current-window percentage.
     // Future: implement two-sample differential for accurate current usage.
+    #[allow(
+        clippy::cast_precision_loss,
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss
+    )]
     let uptime_ticks = (read_uptime_secs() * 100.0) as u64;
-    #[allow(clippy::cast_precision_loss)]
-    let cpu_pct = if uptime_ticks == 0 {
-        0.0
+    #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
+    let cpu_pct: f32 = if uptime_ticks == 0 {
+        0.0_f32
     } else {
-        ((utime + stime) as f64 / uptime_ticks as f64 * 100.0).min(100.0) as f32
+        (((utime + stime) as f64 / uptime_ticks as f64) * 100.0).clamp(0.0, 100.0) as f32
     };
     Some(hitz_api::ProcMetrics {
         pid,

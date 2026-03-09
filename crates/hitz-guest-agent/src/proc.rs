@@ -16,12 +16,12 @@ pub struct CpuSample {
 
 impl CpuSample {
     /// Total active (non-idle) ticks.
-    pub fn active(&self) -> u64 {
+    pub const fn active(&self) -> u64 {
         self.user + self.nice + self.system + self.irq + self.softirq
     }
 
     /// Total ticks (active + idle).
-    pub fn total(&self) -> u64 {
+    pub const fn total(&self) -> u64 {
         self.active() + self.idle + self.iowait
     }
 }
@@ -81,8 +81,12 @@ pub fn parse_proc_meminfo(content: &str) -> Option<MemoryMetrics> {
     for line in content.lines() {
         let mut parts = line.split_ascii_whitespace();
         let Some(key) = parts.next() else { continue };
-        let Some(val_str) = parts.next() else { continue };
-        let Ok(val) = val_str.parse::<u64>() else { continue };
+        let Some(val_str) = parts.next() else {
+            continue;
+        };
+        let Ok(val) = val_str.parse::<u64>() else {
+            continue;
+        };
         let val = val * 1024;
         match key {
             "MemTotal:" => total = val,
