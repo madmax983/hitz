@@ -112,7 +112,7 @@ pub fn publish_to_otel(vm_id: &str, snap: &MetricsSnapshot) {
             KeyValue::new("cpu", i.to_string()),
         ];
         meter
-            .f64_gauge("hitz.guest.cpu_usage")
+            .f64_gauge("hitz.guest.cpu_usage_per_core")
             .build()
             .record(f64::from(pct), &core_labels);
     }
