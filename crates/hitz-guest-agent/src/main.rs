@@ -117,6 +117,16 @@ fn collect_top_procs(n: usize) -> Vec<hitz_api::ProcMetrics> {
     procs
 }
 
+/// Read wall-clock uptime in seconds from `/proc/uptime`.
+///
+/// Returns `1.0` as a safe fallback if the file is unreadable (e.g. on Windows).
+fn read_uptime_secs() -> f64 {
+    std::fs::read_to_string("/proc/uptime")
+        .ok()
+        .and_then(|s| s.split_ascii_whitespace().next()?.parse::<f64>().ok())
+        .unwrap_or(1.0)
+}
+
 fn parse_proc_pid_stat(pid: u32, content: &str) -> Option<hitz_api::ProcMetrics> {
     let open = content.find('(')?;
     let close = content.rfind(')')?;
@@ -126,8 +136,18 @@ fn parse_proc_pid_stat(pid: u32, content: &str) -> Option<hitz_api::ProcMetrics>
     let utime: u64 = rest.get(11)?.parse().ok()?;
     let stime: u64 = rest.get(12)?.parse().ok()?;
     let rss_pages: u64 = rest.get(21)?.parse().ok()?;
+    // cpu_pct: lifetime CPU fraction as a percentage.
+    // Computed as (lifetime_ticks / USER_HZ) / uptime_secs * 100, capped at 100%.
+    // USER_HZ = 100 on all Linux targets.
+    // This is a lifetime average, not a current-window percentage.
+    // Future: implement two-sample differential for accurate current usage.
+    let uptime_ticks = (read_uptime_secs() * 100.0) as u64;
     #[allow(clippy::cast_precision_loss)]
-    let cpu_pct = (utime + stime) as f32 / 100.0;
+    let cpu_pct = if uptime_ticks == 0 {
+        0.0
+    } else {
+        ((utime + stime) as f64 / uptime_ticks as f64 * 100.0).min(100.0) as f32
+    };
     Some(hitz_api::ProcMetrics {
         pid,
         name,

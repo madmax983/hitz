@@ -80,15 +80,17 @@ pub fn parse_proc_meminfo(content: &str) -> Option<MemoryMetrics> {
 
     for line in content.lines() {
         let mut parts = line.split_ascii_whitespace();
-        let key = parts.next()?;
-        let val: u64 = parts.next()?.parse().ok()?;
+        let Some(key) = parts.next() else { continue };
+        let Some(val_str) = parts.next() else { continue };
+        let Ok(val) = val_str.parse::<u64>() else { continue };
+        let val = val * 1024;
         match key {
-            "MemTotal:" => total = val * 1024,
-            "MemFree:" => free = val * 1024,
-            "Buffers:" => buffers = val * 1024,
-            "Cached:" => cached = val * 1024,
-            "SwapTotal:" => swap_total = val * 1024,
-            "SwapFree:" => swap_free = val * 1024,
+            "MemTotal:" => total = val,
+            "MemFree:" => free = val,
+            "Buffers:" => buffers = val,
+            "Cached:" => cached = val,
+            "SwapTotal:" => swap_total = val,
+            "SwapFree:" => swap_free = val,
             _ => {}
         }
     }
