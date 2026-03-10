@@ -162,7 +162,7 @@ struct DaemonInstallArgs {
     #[arg(long)]
     auto_start: bool,
 
-    /// Display name shown in Services MMC. Default: "Hitz `MicroVM` Daemon".
+    /// Display name shown in Services MMC. Default: "Hitz micro-VM daemon".
     #[arg(long)]
     display_name: Option<String>,
 
@@ -172,13 +172,18 @@ struct DaemonInstallArgs {
 }
 
 /// Build the `launch_arguments` vec baked into the SCM registry entry.
-// Used by install_service (Task 2); stubs don't call it yet.
 ///
 /// The SCM invokes: `hitz.exe daemon start <these args>`.
 /// `--pipe` and `--state-dir` are always explicit so the service does not
 /// depend on runtime defaults or `%APPDATA%` being set.
+///
+/// Fields **not** forwarded — they are SCM-registration-only and have no
+/// corresponding `daemon start` flag:
+/// - `auto_start` — controls `ServiceStartType`, not daemon behaviour
+/// - `display_name` — stored in the service registry, not passed to the process
+/// - `description` — same as above
 #[allow(dead_code)] // used by install_service once implemented in Task 2
-fn build_launch_args(args: &DaemonInstallArgs) -> Vec<String> {
+fn build_launch_args(args: &DaemonInstallArgs) -> Result<Vec<String>> {
     let mut v = vec!["daemon".to_string(), "start".to_string()];
     v.push("--pipe".to_string());
     v.push(args.pipe.clone());
@@ -193,14 +198,19 @@ fn build_launch_args(args: &DaemonInstallArgs) -> Vec<String> {
         v.push("--otlp-endpoint".to_string());
         v.push(ep.clone());
     }
-    // Always resolve and include --state-dir at install time.
+    // Always resolve and include --state-dir at install time so the service
+    // does not depend on %APPDATA% being set for the LocalSystem account.
     let state_dir = args
         .state_dir
         .clone()
         .unwrap_or_else(|| resolve_state_dir(None));
+    let state_dir_str = state_dir
+        .to_str()
+        .context("state-dir path is not valid UTF-8")?
+        .to_owned();
     v.push("--state-dir".to_string());
-    v.push(state_dir.to_string_lossy().into_owned());
-    v
+    v.push(state_dir_str);
+    Ok(v)
 }
 
 fn install_service(_args: &DaemonInstallArgs) -> Result<()> {
@@ -935,7 +945,20 @@ mod tests {
             display_name: None,
             description: None,
         };
-        let launch_args = build_launch_args(&original);
+        let launch_args = build_launch_args(&original).expect("valid UTF-8 path");
+        // SCM-only fields must NOT be forwarded to the daemon process.
+        assert!(
+            !launch_args.iter().any(|a| a == "--auto-start"),
+            "--auto-start must not be forwarded; it is SCM-only"
+        );
+        assert!(
+            !launch_args.iter().any(|a| a == "--display-name"),
+            "--display-name must not be forwarded; it is SCM-only"
+        );
+        assert!(
+            !launch_args.iter().any(|a| a == "--description"),
+            "--description must not be forwarded; it is SCM-only"
+        );
         let mut argv = vec![std::ffi::OsString::from("hitz")];
         argv.extend(launch_args.into_iter().map(std::ffi::OsString::from));
         let cli = Cli::try_parse_from(argv).expect("re-parse failed");
@@ -959,7 +982,7 @@ mod tests {
             display_name: None,
             description: None,
         };
-        let launch = build_launch_args(&args);
+        let launch = build_launch_args(&args).expect("valid UTF-8 path");
         assert!(launch.contains(&"--pipe".to_string()));
         assert!(launch.contains(&r"\\.\pipe\custom".to_string()));
         assert!(launch.contains(&"--state-dir".to_string()));
@@ -978,7 +1001,7 @@ mod tests {
             display_name: None,
             description: None,
         };
-        let launch = build_launch_args(&args);
+        let launch = build_launch_args(&args).expect("valid UTF-8 path");
         assert!(launch.contains(&"--verbose".to_string()));
     }
 

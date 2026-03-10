@@ -43,6 +43,9 @@ hitz-net = { path = "crates/hitz-net" }
 hitz-api = { path = "crates/hitz-api" }
 hitz-daemon = { path = "crates/hitz-daemon" }
 
+# External - Windows service management
+windows-service = "0.6"
+
 # External - hypervisor
 windows = { version = "0.61", features = [
     "Win32_Foundation",
