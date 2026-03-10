@@ -129,6 +129,86 @@ struct RunArgs {
 enum DaemonCommand {
     /// Start the daemon in the foreground.
     Start(DaemonStartArgs),
+    /// Install hitz as a Windows service (requires admin).
+    Install(Box<DaemonInstallArgs>),
+    /// Remove the hitz Windows service (requires admin).
+    Remove,
+}
+
+/// Arguments for `daemon install`.
+#[derive(Parser)]
+struct DaemonInstallArgs {
+    /// Named pipe path baked into the service binary path.
+    #[arg(long, default_value = DEFAULT_PIPE)]
+    pipe: String,
+
+    /// Optional TCP address to listen on (e.g. 127.0.0.1:8080).
+    #[arg(long)]
+    tcp_listen: Option<std::net::SocketAddr>,
+
+    /// Verbose output.
+    #[arg(short, long)]
+    verbose: bool,
+
+    /// OTLP gRPC collector endpoint.
+    #[arg(long)]
+    otlp_endpoint: Option<String>,
+
+    /// Directory for persisted VM state.
+    #[arg(long)]
+    state_dir: Option<PathBuf>,
+
+    /// Auto-start at boot (`ServiceStartType::AutoStart`). Default: manual start.
+    #[arg(long)]
+    auto_start: bool,
+
+    /// Display name shown in Services MMC. Default: "Hitz `MicroVM` Daemon".
+    #[arg(long)]
+    display_name: Option<String>,
+
+    /// Service description. Default: "Hyper-V microVM manager".
+    #[arg(long)]
+    description: Option<String>,
+}
+
+/// Build the `launch_arguments` vec baked into the SCM registry entry.
+// Used by install_service (Task 2); stubs don't call it yet.
+///
+/// The SCM invokes: `hitz.exe daemon start <these args>`.
+/// `--pipe` and `--state-dir` are always explicit so the service does not
+/// depend on runtime defaults or `%APPDATA%` being set.
+#[allow(dead_code)] // used by install_service once implemented in Task 2
+fn build_launch_args(args: &DaemonInstallArgs) -> Vec<String> {
+    let mut v = vec!["daemon".to_string(), "start".to_string()];
+    v.push("--pipe".to_string());
+    v.push(args.pipe.clone());
+    if let Some(addr) = args.tcp_listen {
+        v.push("--tcp-listen".to_string());
+        v.push(addr.to_string());
+    }
+    if args.verbose {
+        v.push("--verbose".to_string());
+    }
+    if let Some(ref ep) = args.otlp_endpoint {
+        v.push("--otlp-endpoint".to_string());
+        v.push(ep.clone());
+    }
+    // Always resolve and include --state-dir at install time.
+    let state_dir = args
+        .state_dir
+        .clone()
+        .unwrap_or_else(|| resolve_state_dir(None));
+    v.push("--state-dir".to_string());
+    v.push(state_dir.to_string_lossy().into_owned());
+    v
+}
+
+fn install_service(_args: &DaemonInstallArgs) -> Result<()> {
+    anyhow::bail!("not yet implemented")
+}
+
+fn remove_service() -> Result<()> {
+    anyhow::bail!("not yet implemented")
 }
 
 /// Arguments for `daemon start`.
@@ -309,6 +389,20 @@ fn main() -> ExitCode {
         },
         Command::Daemon(cmd) => match cmd {
             DaemonCommand::Start(ref args) => match run_daemon(args) {
+                Ok(()) => ExitCode::SUCCESS,
+                Err(e) => {
+                    eprintln!("error: {e:#}");
+                    ExitCode::FAILURE
+                }
+            },
+            DaemonCommand::Install(ref args) => match install_service(args) {
+                Ok(()) => ExitCode::SUCCESS,
+                Err(e) => {
+                    eprintln!("error: {e:#}");
+                    ExitCode::FAILURE
+                }
+            },
+            DaemonCommand::Remove => match remove_service() {
                 Ok(()) => ExitCode::SUCCESS,
                 Err(e) => {
                     eprintln!("error: {e:#}");
@@ -827,6 +921,65 @@ mod tests {
     #[test]
     fn parse_port_forward_bad_guest() {
         assert!(parse_port_forward("2222:xyz").is_err());
+    }
+
+    #[test]
+    fn build_launch_args_round_trip() {
+        let original = DaemonInstallArgs {
+            pipe: r"\\.\pipe\hitz-test".to_string(),
+            tcp_listen: None,
+            verbose: false,
+            otlp_endpoint: None,
+            state_dir: Some(PathBuf::from(r"C:\hitz\vms")),
+            auto_start: false,
+            display_name: None,
+            description: None,
+        };
+        let launch_args = build_launch_args(&original);
+        let mut argv = vec![std::ffi::OsString::from("hitz")];
+        argv.extend(launch_args.into_iter().map(std::ffi::OsString::from));
+        let cli = Cli::try_parse_from(argv).expect("re-parse failed");
+        let Command::Daemon(DaemonCommand::Start(recovered)) = cli.command else {
+            panic!("expected daemon start");
+        };
+        assert_eq!(recovered.pipe, original.pipe);
+        assert_eq!(recovered.state_dir, original.state_dir);
+        assert_eq!(recovered.verbose, original.verbose);
+    }
+
+    #[test]
+    fn build_launch_args_includes_pipe_and_state_dir() {
+        let args = DaemonInstallArgs {
+            pipe: r"\\.\pipe\custom".to_string(),
+            tcp_listen: None,
+            verbose: false,
+            otlp_endpoint: None,
+            state_dir: Some(PathBuf::from(r"D:\vms")),
+            auto_start: false,
+            display_name: None,
+            description: None,
+        };
+        let launch = build_launch_args(&args);
+        assert!(launch.contains(&"--pipe".to_string()));
+        assert!(launch.contains(&r"\\.\pipe\custom".to_string()));
+        assert!(launch.contains(&"--state-dir".to_string()));
+        assert!(launch.contains(&r"D:\vms".to_string()));
+    }
+
+    #[test]
+    fn build_launch_args_verbose_flag() {
+        let args = DaemonInstallArgs {
+            pipe: DEFAULT_PIPE.to_string(),
+            tcp_listen: None,
+            verbose: true,
+            otlp_endpoint: None,
+            state_dir: Some(PathBuf::from(r"C:\hitz")),
+            auto_start: false,
+            display_name: None,
+            description: None,
+        };
+        let launch = build_launch_args(&args);
+        assert!(launch.contains(&"--verbose".to_string()));
     }
 
     #[test]

@@ -28,3 +28,4 @@ hyper-util.workspace = true
 serde_json.workspace = true
 bytes.workspace = true
 ctrlc.workspace = true
+windows-service = "0.6"
