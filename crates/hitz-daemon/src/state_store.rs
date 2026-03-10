@@ -59,11 +59,11 @@ impl StateStore {
 
     /// Delete the VM directory for `id`. No-op if directory does not exist.
     pub fn delete(&self, id: &str) -> Result<(), DaemonError> {
-        let dir = self.vm_dir(id);
-        if dir.exists() {
-            std::fs::remove_dir_all(&dir)?;
+        match std::fs::remove_dir_all(self.vm_dir(id)) {
+            Ok(()) => Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(e) => Err(DaemonError::Io(e)),
         }
-        Ok(())
     }
 
     /// Load all valid VMs from the state directory.
@@ -139,8 +139,9 @@ impl StateStore {
 fn now_ms() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs() * 1_000 + u64::from(d.subsec_millis()))
-        .unwrap_or(0)
+        .map_or(u64::MAX, |d| {
+            u64::try_from(d.as_millis()).unwrap_or(u64::MAX)
+        })
 }
 
 #[cfg(test)]

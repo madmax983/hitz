@@ -177,8 +177,17 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
             // Mutex released here — filesystem I/O must not hold it.
         };
 
-        self.store.save_config(&id, config)?;
-        self.store.save_state(&id, VmState::Created)?;
+        if let Err(e) = self
+            .store
+            .save_config(&id, config)
+            .and_then(|()| self.store.save_state(&id, VmState::Created))
+        {
+            // Rollback the in-memory insert so a retry doesn't hit AlreadyExists.
+            if let Ok(mut vms) = self.vms.lock() {
+                let _ = vms.remove(&id);
+            }
+            return Err(e);
+        }
         Ok(info)
     }
 
