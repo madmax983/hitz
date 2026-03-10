@@ -131,7 +131,7 @@ where
     let create_req: CreateVmRequest = serde_json::from_slice(&body.to_bytes())
         .map_err(|e| DaemonError::Internal(format!("invalid JSON: {e}")))?;
 
-    let info = manager.create_vm(id.to_string(), create_req.config)?;
+    let info = manager.create_vm(id.to_string(), &create_req.config)?;
     json_response(StatusCode::CREATED, &info)
 }
 

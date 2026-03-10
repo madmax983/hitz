@@ -1491,7 +1491,7 @@ fn phase6_vm_manager_lifecycle() {
 
         // Create
         let info = manager
-            .create_vm("test-vm".into(), config)
+            .create_vm("test-vm".into(), &config)
             .expect("create_vm");
         assert_eq!(info.state, VmState::Created);
 
@@ -1741,7 +1741,7 @@ fn phase7_vm_manager_serial_streaming() {
         let manager = VmManager::new(hv, state_dir).expect("VmManager::new");
 
         let _ = manager
-            .create_vm("serial-test".into(), config)
+            .create_vm("serial-test".into(), &config)
             .expect("create");
         let _ = manager.start_vm("serial-test").expect("start");
 

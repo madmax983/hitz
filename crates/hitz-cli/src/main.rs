@@ -280,11 +280,17 @@ fn resolve_otlp_endpoint(cli_arg: Option<String>) -> Option<String> {
 /// `%APPDATA%\hitz\vms` on Windows.
 fn resolve_state_dir(cli_arg: Option<PathBuf>) -> PathBuf {
     cli_arg.unwrap_or_else(|| {
-        std::env::var("APPDATA")
-            .ok()
-            .map_or_else(|| PathBuf::from("."), PathBuf::from)
-            .join("hitz")
-            .join("vms")
+        std::env::var("APPDATA").map_or_else(
+            |_| {
+                let fallback = PathBuf::from(".").join("hitz").join("vms");
+                eprintln!(
+                    "hitz: warning: APPDATA not set, state dir defaults to {}",
+                    fallback.display()
+                );
+                fallback
+            },
+            |appdata| PathBuf::from(appdata).join("hitz").join("vms"),
+        )
     })
 }
 

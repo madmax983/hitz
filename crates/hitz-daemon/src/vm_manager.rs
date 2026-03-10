@@ -150,30 +150,34 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
 
     /// Create a VM with the given ID and config. Validates the config
     /// but does not boot.
-    pub fn create_vm(&self, id: String, config: VmConfig) -> Result<VmInfo, DaemonError> {
-        hitz_vmm::validate_config(&config)?;
+    pub fn create_vm(&self, id: String, config: &VmConfig) -> Result<VmInfo, DaemonError> {
+        hitz_vmm::validate_config(config)?;
 
-        let mut vms = self
-            .vms
-            .lock()
-            .map_err(|e| DaemonError::Internal(e.to_string()))?;
+        let info = {
+            let mut vms = self
+                .vms
+                .lock()
+                .map_err(|e| DaemonError::Internal(e.to_string()))?;
 
-        if vms.contains_key(&id) {
-            return Err(DaemonError::AlreadyExists(id));
-        }
+            if vms.contains_key(&id) {
+                return Err(DaemonError::AlreadyExists(id));
+            }
 
-        self.store.save_config(&id, &config)?;
-        let entry = VmEntry {
-            config,
-            state: VmState::Created,
-            exit_reason: None,
-            stop_flag: None,
-            serial_buf: None,
-            vsock_handle: None,
+            let entry = VmEntry {
+                config: config.clone(),
+                state: VmState::Created,
+                exit_reason: None,
+                stop_flag: None,
+                serial_buf: None,
+                vsock_handle: None,
+            };
+            let info = entry.to_info(&id);
+            let _ = vms.insert(id.clone(), entry);
+            info
+            // Mutex released here — filesystem I/O must not hold it.
         };
-        let info = entry.to_info(&id);
-        let _ = vms.insert(id.clone(), entry);
-        drop(vms);
+
+        self.store.save_config(&id, config)?;
         self.store.save_state(&id, VmState::Created)?;
         Ok(info)
     }
@@ -646,20 +650,17 @@ mod tests {
         }
     }
 
-    fn make_manager() -> VmManager<FakeHypervisor> {
+    fn make_manager() -> (VmManager<FakeHypervisor>, tempfile::TempDir) {
         let dir = tempfile::tempdir().expect("tempdir");
         let path = dir.path().to_path_buf();
-        // Keep the TempDir alive through the test by leaking it.
-        std::mem::forget(dir);
-        VmManager::new(Arc::new(FakeHypervisor), path).expect("VmManager::new")
+        let mgr = VmManager::new(Arc::new(FakeHypervisor), path).expect("VmManager::new");
+        (mgr, dir)
     }
 
-    fn make_config() -> VmConfig {
+    fn make_config() -> (VmConfig, tempfile::NamedTempFile) {
         let tmp = tempfile::NamedTempFile::new().expect("create temp file");
-        // Leak the temp file so it survives the test.
         let path = tmp.path().to_path_buf();
-        std::mem::forget(tmp);
-        VmConfig {
+        let config = VmConfig {
             kernel_path: path,
             initramfs_path: None,
             disk_path: None,
@@ -670,52 +671,59 @@ mod tests {
             ports: vec![],
             guest_cid: hitz_api::DEFAULT_GUEST_CID,
             guest_agent: hitz_api::GuestAgentMode::Auto,
-        }
+        };
+        (config, tmp)
     }
 
     #[test]
     fn create_vm_sets_created_state() {
-        let mgr = make_manager();
-        let info = mgr.create_vm("vm1".into(), make_config()).expect("create");
+        let (mgr, _dir) = make_manager();
+        let (config, _tmp) = make_config();
+        let info = mgr.create_vm("vm1".into(), &config).expect("create");
         assert_eq!(info.state, VmState::Created);
         assert_eq!(info.id, "vm1");
     }
 
     #[test]
     fn create_duplicate_vm_fails() {
-        let mgr = make_manager();
-        mgr.create_vm("vm1".into(), make_config()).expect("create");
-        let err = mgr.create_vm("vm1".into(), make_config()).unwrap_err();
+        let (mgr, _dir) = make_manager();
+        let (config1, _tmp1) = make_config();
+        let (config2, _tmp2) = make_config();
+        mgr.create_vm("vm1".into(), &config1).expect("create");
+        let err = mgr.create_vm("vm1".into(), &config2).unwrap_err();
         assert!(err.to_string().contains("already exists"), "got: {err}");
     }
 
     #[test]
     fn get_vm_not_found() {
-        let mgr = make_manager();
+        let (mgr, _dir) = make_manager();
         let err = mgr.get_vm("nope").unwrap_err();
         assert!(err.to_string().contains("not found"), "got: {err}");
     }
 
     #[test]
     fn list_vms_empty() {
-        let mgr = make_manager();
+        let (mgr, _dir) = make_manager();
         let list = mgr.list_vms().expect("list");
         assert!(list.is_empty());
     }
 
     #[test]
     fn list_vms_after_create() {
-        let mgr = make_manager();
-        mgr.create_vm("a".into(), make_config()).expect("create a");
-        mgr.create_vm("b".into(), make_config()).expect("create b");
+        let (mgr, _dir) = make_manager();
+        let (config_a, _tmp_a) = make_config();
+        let (config_b, _tmp_b) = make_config();
+        mgr.create_vm("a".into(), &config_a).expect("create a");
+        mgr.create_vm("b".into(), &config_b).expect("create b");
         let list = mgr.list_vms().expect("list");
         assert_eq!(list.len(), 2);
     }
 
     #[test]
     fn delete_created_vm() {
-        let mgr = make_manager();
-        mgr.create_vm("vm1".into(), make_config()).expect("create");
+        let (mgr, _dir) = make_manager();
+        let (config, _tmp) = make_config();
+        mgr.create_vm("vm1".into(), &config).expect("create");
         mgr.delete_vm("vm1").expect("delete");
         let err = mgr.get_vm("vm1").unwrap_err();
         assert!(err.to_string().contains("not found"), "got: {err}");
@@ -723,15 +731,16 @@ mod tests {
 
     #[test]
     fn delete_nonexistent_vm_fails() {
-        let mgr = make_manager();
+        let (mgr, _dir) = make_manager();
         let err = mgr.delete_vm("nope").unwrap_err();
         assert!(err.to_string().contains("not found"), "got: {err}");
     }
 
     #[test]
     fn stop_created_vm_fails() {
-        let mgr = make_manager();
-        mgr.create_vm("vm1".into(), make_config()).expect("create");
+        let (mgr, _dir) = make_manager();
+        let (config, _tmp) = make_config();
+        mgr.create_vm("vm1".into(), &config).expect("create");
         let err = mgr.stop_vm("vm1").unwrap_err();
         assert!(err.to_string().contains("Created"), "got: {err}");
     }
@@ -739,15 +748,15 @@ mod tests {
     #[tokio::test]
     async fn port_forwards_start_with_vm() {
         // VmConfig with a port forward but no net → ports should be ignored silently (no panic).
-        let mgr = make_manager();
-        let mut config = make_config();
+        let (mgr, _dir) = make_manager();
+        let (mut config, _tmp) = make_config();
         config.ports = vec![hitz_api::PortForward {
             host_port: 19876,
             guest_port: 22,
         }];
         // config.net is None → port forward should be a no-op.
 
-        let _info = mgr.create_vm("port_fwd_test".into(), config).unwrap();
+        let _info = mgr.create_vm("port_fwd_test".into(), &config).unwrap();
         // start_vm fires off an async task; just verify it doesn't panic.
         mgr.start_vm("port_fwd_test").unwrap();
     }
@@ -756,8 +765,9 @@ mod tests {
     async fn start_vm_metrics_do_not_panic() {
         // Regression guard: metric and span calls must not panic when no global
         // OTel provider is registered (the no-op provider handles it).
-        let mgr = make_manager();
-        mgr.create_vm("m1".into(), make_config()).expect("create");
+        let (mgr, _dir) = make_manager();
+        let (config, _tmp) = make_config();
+        mgr.create_vm("m1".into(), &config).expect("create");
         // start_vm spawns an async task; synchronous metric setup happens before spawn.
         // This verifies the counter/gauge creation path doesn't panic.
         let _info = mgr.start_vm("m1").expect("start");
@@ -771,8 +781,9 @@ mod tests {
             .expect("build runtime");
 
         rt.block_on(async {
-            let mgr = make_manager();
-            mgr.create_vm("vm1".into(), make_config()).expect("create");
+            let (mgr, _dir) = make_manager();
+            let (config, _tmp) = make_config();
+            mgr.create_vm("vm1".into(), &config).expect("create");
 
             // Start will fail (FakeHypervisor can't create partition) but
             // serial_buf should be created before boot_and_run is called.
@@ -794,8 +805,9 @@ mod tests {
 
     #[test]
     fn vsock_pull_channel_accessible() {
-        let mgr = make_manager();
-        mgr.create_vm("v1".into(), make_config()).expect("create");
+        let (mgr, _dir) = make_manager();
+        let (config, _tmp) = make_config();
+        mgr.create_vm("v1".into(), &config).expect("create");
         // Returns None since no vsock channels in test mode (push-to-OTel only).
         let result = mgr.request_metrics_snapshot("v1");
         assert!(result.is_none());
