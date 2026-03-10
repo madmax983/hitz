@@ -812,6 +812,24 @@ async fn run_daemon_inner(
 fn run_daemon(args: &DaemonStartArgs) -> Result<()> {
     use tracing_subscriber::prelude::*;
 
+    // Auto-detect: if launched by the Service Control Manager, enter service
+    // mode. service_dispatcher::start() returns
+    // ERROR_FAILED_SERVICE_CONTROLLER_CONNECT (Win32 error 1063) when NOT
+    // running under the SCM — that is our signal to fall through to foreground.
+    {
+        use windows_service::service_dispatcher;
+        match service_dispatcher::start("hitz", ffi_service_main) {
+            Ok(()) => return Ok(()),
+            Err(windows_service::Error::Winapi(ref e)) if e.raw_os_error() == Some(1063) => {
+                // Not running as a service — continue to foreground mode.
+            }
+            Err(e) => {
+                return Err(anyhow::Error::new(e)
+                    .context("service dispatcher error"));
+            }
+        }
+    }
+
     let endpoint = resolve_otlp_endpoint(args.otlp_endpoint.clone());
 
     // Init OTel providers BEFORE subscriber registration so the tracer exists
