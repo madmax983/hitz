@@ -13,6 +13,7 @@ use hitz_hal::Hypervisor;
 use hitz_vmm::{ExitReason, SerialBuf, SerialReader};
 
 use crate::error::DaemonError;
+use crate::state_store::StateStore;
 
 /// Internal state for a single VM.
 struct VmEntry {
@@ -50,6 +51,7 @@ impl VmEntry {
 /// (all fields are `Arc`-wrapped).
 pub struct VmManager<H> {
     hypervisor: Arc<H>,
+    store: Arc<StateStore>,
     vms: Arc<Mutex<HashMap<String, VmEntry>>>,
     /// Sender half of the VM-completion channel.  Each spawned VM task sends
     /// its ID here after `boot_and_run` returns so `stop_all_and_wait` can
@@ -78,6 +80,7 @@ impl<H> Clone for VmManager<H> {
     fn clone(&self) -> Self {
         Self {
             hypervisor: Arc::clone(&self.hypervisor),
+            store: Arc::clone(&self.store),
             vms: Arc::clone(&self.vms),
             completion_tx: self.completion_tx.clone(),
             completion_rx: Arc::clone(&self.completion_rx),
@@ -89,8 +92,30 @@ impl<H> Clone for VmManager<H> {
 }
 
 impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
-    /// Create a new manager with the given hypervisor backend.
-    pub fn new(hypervisor: Arc<H>) -> Self {
+    /// Create a new manager with the given hypervisor backend and state directory.
+    ///
+    /// Existing VMs are loaded from `state_dir` on construction. Any VM that was
+    /// `Running` at daemon shutdown is recovered as `Stopped`.
+    pub fn new(hypervisor: Arc<H>, state_dir: std::path::PathBuf) -> Result<Self, DaemonError> {
+        let store = StateStore::new(state_dir)?;
+        let existing = store.load_all()?;
+
+        let mut map = HashMap::new();
+        for (id, config, state) in existing {
+            tracing::info!(vm_id = %id, ?state, "recovered persisted VM");
+            let _ = map.insert(
+                id,
+                VmEntry {
+                    config,
+                    state,
+                    exit_reason: None,
+                    stop_flag: None,
+                    serial_buf: None,
+                    vsock_handle: None,
+                },
+            );
+        }
+
         let (tx, rx) = tokio_mpsc::unbounded_channel();
         let meter = opentelemetry::global::meter("hitz");
         let vm_count = Arc::new(
@@ -100,15 +125,17 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
                 .build(),
         );
         let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
-        Self {
+
+        Ok(Self {
             hypervisor,
-            vms: Arc::new(Mutex::new(HashMap::new())),
+            store: Arc::new(store),
+            vms: Arc::new(Mutex::new(map)),
             completion_tx: tx,
             completion_rx: Arc::new(tokio::sync::Mutex::new(rx)),
             vm_count,
             shutdown_rx,
             shutdown_tx_owned: Arc::new(shutdown_tx),
-        }
+        })
     }
 
     /// Wire the vsock metrics tasks to stop when a daemon-provided shutdown
@@ -135,6 +162,7 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
             return Err(DaemonError::AlreadyExists(id));
         }
 
+        self.store.save_config(&id, &config)?;
         let entry = VmEntry {
             config,
             state: VmState::Created,
@@ -144,8 +172,9 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
             vsock_handle: None,
         };
         let info = entry.to_info(&id);
-        let _ = vms.insert(id, entry);
+        let _ = vms.insert(id.clone(), entry);
         drop(vms);
+        self.store.save_state(&id, VmState::Created)?;
         Ok(info)
     }
 
@@ -179,6 +208,9 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
             (entry.config.clone(), flag, serial_buf, entry.to_info(id))
         };
         // Mutex released here — spawn_blocking must not hold it.
+
+        // Persist Running state before spawning the VM task.
+        self.store.save_state(id, VmState::Running)?;
 
         // Inject guest agent overlay into initramfs if agent is enabled.
         let boot_config =
@@ -248,6 +280,8 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
         } else {
             hitz_vmm::BootExtras::none()
         };
+
+        let store_exit = Arc::clone(&self.store);
 
         // Fire-and-forget: the spawned task updates VM state on completion
         // and signals the completion channel so `stop_all_and_wait` can drain.
@@ -322,6 +356,11 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
                 entry.vsock_handle = None;
                 if let Some(ref buf) = entry.serial_buf {
                     buf.close();
+                }
+                let final_state = entry.state;
+                drop(vms); // explicit drop — persist state outside the lock
+                if let Err(e) = store_exit.save_state(&vm_id, final_state) {
+                    tracing::warn!(vm_id = %vm_id, error = %e, "failed to persist VM exit state");
                 }
             }
 
@@ -428,6 +467,7 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
 
         let _ = vms.remove(id);
         drop(vms);
+        self.store.delete(id)?;
         Ok(())
     }
 
@@ -607,7 +647,11 @@ mod tests {
     }
 
     fn make_manager() -> VmManager<FakeHypervisor> {
-        VmManager::new(Arc::new(FakeHypervisor))
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().to_path_buf();
+        // Keep the TempDir alive through the test by leaking it.
+        std::mem::forget(dir);
+        VmManager::new(Arc::new(FakeHypervisor), path).expect("VmManager::new")
     }
 
     fn make_config() -> VmConfig {
