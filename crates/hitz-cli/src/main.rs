@@ -604,6 +604,45 @@ fn run_vm(args: RunArgs) -> Result<ExitCode> {
 
 // ── hitz daemon start ──
 
+/// Shared async body for foreground and service daemon modes.
+///
+/// `shutdown` resolves when the caller wants the daemon to stop:
+/// - foreground: `tokio::signal::ctrl_c()` future
+/// - service mode: a `tokio::sync::watch` receiver future (Task 4)
+async fn run_daemon_inner(
+    args: &DaemonStartArgs,
+    shutdown: impl std::future::Future<Output = ()>,
+) -> Result<()> {
+    let state_dir = resolve_state_dir(args.state_dir.clone());
+    eprintln!("hitz: state dir {}", state_dir.display());
+    let hv = Arc::new(WhpHypervisor::new().context("WHP not available")?);
+    let manager = hitz_daemon::VmManager::new(hv, state_dir)
+        .context("failed to initialize VM state store")?;
+    let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
+
+    let server_mgr = manager.clone();
+    let pipe = args.pipe.clone();
+    let tcp = args.tcp_listen;
+    let server_handle = tokio::spawn(async move {
+        hitz_daemon::run_server(&pipe, tcp, server_mgr, shutdown_rx).await
+    });
+
+    shutdown.await;
+    eprintln!("\nhitz: shutting down...");
+
+    // Signal listeners to stop accepting new connections.
+    let _ = shutdown_tx.send(true);
+    // Gracefully stop all running VMs (cancel + join, 5 s timeout).
+    manager
+        .stop_all_and_wait(std::time::Duration::from_secs(5))
+        .await;
+    // Wait for the server task to exit cleanly.
+    let _ = server_handle.await;
+
+    eprintln!("hitz: shutdown complete");
+    Ok(())
+}
+
 /// Run the daemon in the foreground.
 ///
 /// Starts the named pipe (and optional TCP) listener, then waits for Ctrl+C.
@@ -652,36 +691,12 @@ fn run_daemon(args: &DaemonStartArgs) -> Result<()> {
     let rt = tokio::runtime::Runtime::new().context("failed to create tokio runtime")?;
 
     let result = rt.block_on(async {
-        let state_dir = resolve_state_dir(args.state_dir.clone());
-        eprintln!("hitz: state dir {}", state_dir.display());
-        let hv = Arc::new(WhpHypervisor::new().context("WHP not available")?);
-        let manager = hitz_daemon::VmManager::new(hv, state_dir)
-            .context("failed to initialize VM state store")?;
-        let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
-
-        let server_mgr = manager.clone();
-        let pipe = args.pipe.clone();
-        let tcp = args.tcp_listen;
-        let server_handle = tokio::spawn(async move {
-            hitz_daemon::run_server(&pipe, tcp, server_mgr, shutdown_rx).await
-        });
-
-        tokio::signal::ctrl_c()
-            .await
-            .context("failed to listen for Ctrl+C")?;
-        eprintln!("\nhitz: shutting down...");
-
-        // Signal listeners to stop accepting new connections.
-        let _ = shutdown_tx.send(true);
-        // Gracefully stop all running VMs (cancel + join, 5 s timeout).
-        manager
-            .stop_all_and_wait(std::time::Duration::from_secs(5))
-            .await;
-        // Wait for the server task to exit cleanly.
-        let _ = server_handle.await;
-
-        eprintln!("hitz: shutdown complete");
-        Ok::<(), anyhow::Error>(())
+        let shutdown = async {
+            // ctrl_c() only errors if the OS signal handler cannot be registered;
+            // treat that as a stop signal rather than panicking.
+            tokio::signal::ctrl_c().await.unwrap_or(());
+        };
+        run_daemon_inner(args, shutdown).await
     });
 
     // Shut down the runtime BEFORE dropping the OTel guard so the batch
