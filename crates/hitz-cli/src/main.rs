@@ -484,7 +484,7 @@ fn service_main(arguments: Vec<OsString>) {
 }
 
 // Called only from service_main (itself FFI-only); suppress dead_code + pass-by-value.
-#[allow(dead_code)]
+#[allow(dead_code, clippy::too_many_lines)]
 fn run_service(arguments: &[OsString]) -> anyhow::Result<()> {
     use std::time::Duration;
     use windows_service::{
@@ -589,10 +589,17 @@ fn run_service(arguments: &[OsString]) -> anyhow::Result<()> {
         .context("failed to create tokio runtime in service mode")?;
 
     let result = rt.block_on(async move {
-        // Shutdown future: resolves when SCM sends Stop/Shutdown control.
+        // Shutdown future: resolves when SCM sends Stop/Shutdown (value = true).
+        // Loop so a spurious send(false) does not trigger premature shutdown.
         let shutdown = async move {
-            // changed() resolves once the value changes to true.
-            let _ = stop_rx.changed().await;
+            loop {
+                if stop_rx.changed().await.is_err() {
+                    break; // sender dropped — treat as stop
+                }
+                if *stop_rx.borrow() {
+                    break;
+                }
+            }
         };
         run_daemon_inner(&daemon_args, shutdown).await
     });
