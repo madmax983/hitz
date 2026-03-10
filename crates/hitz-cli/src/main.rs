@@ -150,6 +150,11 @@ struct DaemonStartArgs {
     /// Falls back to `OTEL_EXPORTER_OTLP_ENDPOINT` env var. Omit to disable telemetry.
     #[arg(long)]
     otlp_endpoint: Option<String>,
+
+    /// Directory for persisted VM state.
+    /// Default: `%APPDATA%\hitz\vms` (Windows) or `.hitz/vms` (fallback).
+    #[arg(long)]
+    state_dir: Option<PathBuf>,
 }
 
 // ── VM ──
@@ -269,6 +274,18 @@ struct VmListArgs {
 /// Returns `None` when neither is set, which disables telemetry.
 fn resolve_otlp_endpoint(cli_arg: Option<String>) -> Option<String> {
     cli_arg.or_else(|| std::env::var("OTEL_EXPORTER_OTLP_ENDPOINT").ok())
+}
+
+/// Resolve the state directory from the CLI flag, falling back to
+/// `%APPDATA%\hitz\vms` on Windows.
+fn resolve_state_dir(cli_arg: Option<PathBuf>) -> PathBuf {
+    cli_arg.unwrap_or_else(|| {
+        std::env::var("APPDATA")
+            .ok()
+            .map_or_else(|| PathBuf::from("."), PathBuf::from)
+            .join("hitz")
+            .join("vms")
+    })
 }
 
 // ── Main ──
@@ -443,8 +460,11 @@ fn run_daemon(args: &DaemonStartArgs) -> Result<()> {
     let rt = tokio::runtime::Runtime::new().context("failed to create tokio runtime")?;
 
     let result = rt.block_on(async {
+        let state_dir = resolve_state_dir(args.state_dir.clone());
+        eprintln!("hitz: state dir {}", state_dir.display());
         let hv = Arc::new(WhpHypervisor::new().context("WHP not available")?);
-        let manager = hitz_daemon::VmManager::new(hv);
+        let manager = hitz_daemon::VmManager::new(hv, state_dir)
+            .context("failed to initialize VM state store")?;
         let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
 
         let server_mgr = manager.clone();

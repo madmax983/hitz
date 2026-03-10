@@ -1486,7 +1486,8 @@ fn phase6_vm_manager_lifecycle() {
 
     rt.block_on(async {
         let hv = Arc::new(WhpHypervisor::new().expect("WHP not available"));
-        let manager = VmManager::new(hv);
+        let state_dir = tempfile::tempdir().expect("tempdir").into_path();
+        let manager = VmManager::new(hv, state_dir).expect("VmManager::new");
 
         // Create
         let info = manager
@@ -1736,7 +1737,8 @@ fn phase7_vm_manager_serial_streaming() {
 
     rt.block_on(async {
         let hv = Arc::new(WhpHypervisor::new().expect("WHP not available"));
-        let manager = VmManager::new(hv);
+        let state_dir = tempfile::tempdir().expect("tempdir").into_path();
+        let manager = VmManager::new(hv, state_dir).expect("VmManager::new");
 
         let _ = manager
             .create_vm("serial-test".into(), config)
