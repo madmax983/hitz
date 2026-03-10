@@ -182,7 +182,6 @@ struct DaemonInstallArgs {
 /// - `auto_start` — controls `ServiceStartType`, not daemon behaviour
 /// - `display_name` — stored in the service registry, not passed to the process
 /// - `description` — same as above
-#[allow(dead_code)] // used by install_service once implemented in Task 2
 fn build_launch_args(args: &DaemonInstallArgs) -> Result<Vec<String>> {
     let mut v = vec!["daemon".to_string(), "start".to_string()];
     v.push("--pipe".to_string());
@@ -213,12 +212,95 @@ fn build_launch_args(args: &DaemonInstallArgs) -> Result<Vec<String>> {
     Ok(v)
 }
 
-fn install_service(_args: &DaemonInstallArgs) -> Result<()> {
-    anyhow::bail!("not yet implemented")
+fn install_service(args: &DaemonInstallArgs) -> Result<()> {
+    use std::ffi::OsString;
+    use windows_service::{
+        service::{ServiceAccess, ServiceErrorControl, ServiceInfo, ServiceStartType, ServiceType},
+        service_manager::{ServiceManager, ServiceManagerAccess},
+    };
+
+    let exe = std::env::current_exe().context("failed to get current exe path")?;
+
+    let launch_arguments: Vec<OsString> = build_launch_args(args)?
+        .into_iter()
+        .map(OsString::from)
+        .collect();
+
+    let display_name = args
+        .display_name
+        .clone()
+        .unwrap_or_else(|| "Hitz micro-VM daemon".to_string());
+    let description = args
+        .description
+        .clone()
+        .unwrap_or_else(|| "Hyper-V micro-VM manager".to_string());
+
+    let start_type = if args.auto_start {
+        ServiceStartType::AutoStart
+    } else {
+        ServiceStartType::OnDemand
+    };
+
+    let manager = ServiceManager::local_computer(
+        None::<&str>,
+        ServiceManagerAccess::CONNECT | ServiceManagerAccess::CREATE_SERVICE,
+    )
+    .context("failed to open SCM — run as Administrator")?;
+
+    let service_info = ServiceInfo {
+        name: OsString::from("hitz"),
+        display_name: OsString::from(display_name),
+        service_type: ServiceType::OWN_PROCESS,
+        start_type,
+        error_control: ServiceErrorControl::Normal,
+        executable_path: exe,
+        launch_arguments,
+        dependencies: vec![],
+        account_name: None,  // LocalSystem
+        account_password: None,
+    };
+
+    let service = manager
+        .create_service(&service_info, ServiceAccess::CHANGE_CONFIG)
+        .context("failed to create service — service may already exist, or access denied (run as Administrator)")?;
+
+    service
+        .set_description(description)
+        .context("failed to set service description")?;
+
+    println!("installed: hitz daemon as Windows service");
+    if args.auto_start {
+        println!("  start type: automatic (starts at boot)");
+    } else {
+        println!("  start type: manual — use `sc start hitz` to start");
+    }
+    Ok(())
 }
 
 fn remove_service() -> Result<()> {
-    anyhow::bail!("not yet implemented")
+    use windows_service::{
+        service::ServiceAccess,
+        service_manager::{ServiceManager, ServiceManagerAccess},
+    };
+
+    let manager =
+        ServiceManager::local_computer(None::<&str>, ServiceManagerAccess::CONNECT)
+            .context("failed to open SCM — run as Administrator")?;
+
+    let service = manager
+        .open_service(
+            "hitz",
+            ServiceAccess::DELETE | ServiceAccess::STOP | ServiceAccess::QUERY_STATUS,
+        )
+        .context("service 'hitz' not found — is it installed?")?;
+
+    // Best-effort stop before delete (service may already be stopped).
+    let _ = service.stop();
+
+    service.delete().context("failed to delete service")?;
+
+    println!("removed: hitz Windows service");
+    Ok(())
 }
 
 /// Arguments for `daemon start`.
@@ -1003,6 +1085,81 @@ mod tests {
         };
         let launch = build_launch_args(&args).expect("valid UTF-8 path");
         assert!(launch.contains(&"--verbose".to_string()));
+    }
+
+    /// Requires admin privileges and `HITZ_TEST_SERVICE=1` env var.
+    /// Run: `cargo test -p hitz-cli svc_ -- --ignored --test-threads=1`
+    #[test]
+    #[ignore]
+    fn svc_install_and_remove() {
+        if std::env::var("HITZ_TEST_SERVICE").is_err() {
+            return;
+        }
+        use windows_service::{
+            service::ServiceAccess,
+            service_manager::{ServiceManager, ServiceManagerAccess},
+        };
+        // Clean up any leftover from a previous run.
+        let _ = remove_service();
+
+        let args = DaemonInstallArgs {
+            pipe: DEFAULT_PIPE.to_string(),
+            tcp_listen: None,
+            verbose: false,
+            otlp_endpoint: None,
+            state_dir: Some(PathBuf::from(r"C:\hitz\vms-test")),
+            auto_start: false,
+            display_name: Some("Hitz test service".to_string()),
+            description: Some("Integration test".to_string()),
+        };
+        install_service(&args).expect("install failed");
+
+        // Verify entry exists in SCM.
+        let mgr = ServiceManager::local_computer(None::<&str>, ServiceManagerAccess::CONNECT)
+            .expect("open SCM");
+        let svc = mgr.open_service("hitz", ServiceAccess::QUERY_STATUS);
+        assert!(svc.is_ok(), "service not found after install");
+
+        remove_service().expect("remove failed");
+
+        // Verify entry is gone.
+        let svc2 = mgr.open_service("hitz", ServiceAccess::QUERY_STATUS);
+        assert!(svc2.is_err(), "service still exists after remove");
+    }
+
+    #[test]
+    #[ignore]
+    fn svc_install_idempotent_error() {
+        if std::env::var("HITZ_TEST_SERVICE").is_err() {
+            return;
+        }
+        let _ = remove_service();
+        let args = DaemonInstallArgs {
+            pipe: DEFAULT_PIPE.to_string(),
+            tcp_listen: None,
+            verbose: false,
+            otlp_endpoint: None,
+            state_dir: Some(PathBuf::from(r"C:\hitz\vms-test")),
+            auto_start: false,
+            display_name: None,
+            description: None,
+        };
+        install_service(&args).expect("first install failed");
+        let result = install_service(&args);
+        // Cleanup before asserting so we don't leave the service installed on failure.
+        remove_service().expect("cleanup remove failed");
+        assert!(result.is_err(), "second install should fail");
+    }
+
+    #[test]
+    #[ignore]
+    fn svc_remove_nonexistent() {
+        if std::env::var("HITZ_TEST_SERVICE").is_err() {
+            return;
+        }
+        let _ = remove_service(); // ensure not installed
+        let result = remove_service();
+        assert!(result.is_err(), "remove of non-existent service should error");
     }
 
     #[test]
