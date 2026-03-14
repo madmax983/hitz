@@ -14,7 +14,8 @@
       "WebFetch(domain:github.com)",
       "Bash(cargo doc:*)",
       "Bash(cargo build:*)",
-      "Bash(cargo run:*)"
+      "Bash(cargo run:*)",
+      "Bash(git:*)"
     ]
   }
 }
