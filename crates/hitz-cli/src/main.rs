@@ -32,6 +32,9 @@ use hyper::Method;
 /// Default named pipe path for the daemon.
 const DEFAULT_PIPE: &str = r"\\.\pipe\hitz";
 
+/// Windows service name registered with the SCM.
+const SERVICE_NAME: &str = "hitz";
+
 /// Parse a `HOST:GUEST` port forward string into a [`hitz_api::PortForward`].
 fn parse_port_forward(s: &str) -> Result<hitz_api::PortForward, String> {
     let (host, guest) = s
@@ -248,7 +251,7 @@ fn install_service(args: &DaemonInstallArgs) -> Result<()> {
     .context("failed to open SCM — run as Administrator")?;
 
     let service_info = ServiceInfo {
-        name: OsString::from("hitz"),
+        name: OsString::from(SERVICE_NAME),
         display_name: OsString::from(display_name),
         service_type: ServiceType::OWN_PROCESS,
         start_type,
@@ -289,7 +292,7 @@ fn remove_service() -> Result<()> {
 
     let service = manager
         .open_service(
-            "hitz",
+            SERVICE_NAME,
             ServiceAccess::DELETE | ServiceAccess::STOP | ServiceAccess::QUERY_STATUS,
         )
         .context("service 'hitz' not found — is it installed?")?;
@@ -466,6 +469,32 @@ fn resolve_state_dir(cli_arg: Option<PathBuf>) -> PathBuf {
     })
 }
 
+/// Initialise the tracing subscriber with an optional fmt layer and optional `OTel` layer.
+///
+/// Uses `try_init` so a pre-existing subscriber (e.g. in unit tests) is not replaced.
+fn init_tracing(telemetry: &TelemetryGuard, verbose: bool) {
+    use tracing_subscriber::Layer as _;
+    use tracing_subscriber::prelude::*;
+
+    let mut layers: Vec<
+        Box<dyn tracing_subscriber::Layer<tracing_subscriber::Registry> + Send + Sync>,
+    > = Vec::new();
+
+    if verbose {
+        let fmt = tracing_subscriber::fmt::layer()
+            .with_writer(std::io::stderr)
+            .with_filter(tracing_subscriber::filter::EnvFilter::new("hitz=debug"))
+            .boxed();
+        layers.push(fmt);
+    }
+
+    if let Some(otel) = telemetry.tracing_layer() {
+        layers.push(otel.boxed());
+    }
+
+    let _ = tracing_subscriber::registry().with(layers).try_init();
+}
+
 // Generate the FFI service entry point for the Windows Service Control Manager.
 windows_service::define_windows_service!(ffi_service_main, service_main);
 
@@ -508,7 +537,7 @@ fn run_service(arguments: &[OsString]) -> anyhow::Result<()> {
         _ => ServiceControlHandlerResult::NotImplemented,
     };
 
-    let status_handle = service_control_handler::register("hitz", event_handler)
+    let status_handle = service_control_handler::register(SERVICE_NAME, event_handler)
         .context("failed to register service control handler")?;
 
     // Report: starting up.
@@ -563,27 +592,7 @@ fn run_service(arguments: &[OsString]) -> anyhow::Result<()> {
     // Init telemetry (same as foreground path in run_daemon).
     let endpoint = resolve_otlp_endpoint(daemon_args.otlp_endpoint.clone());
     let telemetry = hitz_daemon::TelemetryGuard::init(endpoint);
-
-    {
-        use tracing_subscriber::Layer as _;
-        use tracing_subscriber::prelude::*;
-
-        let mut layers: Vec<
-            Box<dyn tracing_subscriber::Layer<tracing_subscriber::Registry> + Send + Sync>,
-        > = Vec::new();
-        if daemon_args.verbose {
-            let fmt = tracing_subscriber::fmt::layer()
-                .with_writer(std::io::stderr)
-                .with_filter(tracing_subscriber::filter::EnvFilter::new("hitz=debug"))
-                .boxed();
-            layers.push(fmt);
-        }
-        if let Some(otel) = telemetry.tracing_layer() {
-            layers.push(otel.boxed());
-        }
-        // If a subscriber was already set (e.g. in tests), ignore the error.
-        let _ = tracing_subscriber::registry().with(layers).try_init();
-    }
+    init_tracing(&telemetry, daemon_args.verbose);
 
     let rt = tokio::runtime::Runtime::new()
         .context("failed to create tokio runtime in service mode")?;
@@ -810,15 +819,13 @@ async fn run_daemon_inner(
 /// so the OTLP batch exporter can flush its queue while the runtime is still
 /// alive.
 fn run_daemon(args: &DaemonStartArgs) -> Result<()> {
-    use tracing_subscriber::prelude::*;
-
     // Auto-detect: if launched by the Service Control Manager, enter service
     // mode. service_dispatcher::start() returns
     // ERROR_FAILED_SERVICE_CONTROLLER_CONNECT (Win32 error 1063) when NOT
     // running under the SCM — that is our signal to fall through to foreground.
     {
         use windows_service::service_dispatcher;
-        match service_dispatcher::start("hitz", ffi_service_main) {
+        match service_dispatcher::start(SERVICE_NAME, ffi_service_main) {
             Ok(()) => return Ok(()),
             Err(windows_service::Error::Winapi(ref e)) if e.raw_os_error() == Some(1063) => {
                 // Not running as a service — continue to foreground mode.
@@ -835,28 +842,7 @@ fn run_daemon(args: &DaemonStartArgs) -> Result<()> {
     // Init OTel providers BEFORE subscriber registration so the tracer exists
     // when the layer is built.
     let telemetry = TelemetryGuard::init(endpoint);
-
-    {
-        use tracing_subscriber::Layer as _;
-
-        let mut layers: Vec<
-            Box<dyn tracing_subscriber::Layer<tracing_subscriber::Registry> + Send + Sync>,
-        > = Vec::new();
-
-        if args.verbose {
-            let fmt = tracing_subscriber::fmt::layer()
-                .with_writer(std::io::stderr)
-                .with_filter(tracing_subscriber::filter::EnvFilter::new("hitz=debug"))
-                .boxed();
-            layers.push(fmt);
-        }
-
-        if let Some(otel) = telemetry.tracing_layer() {
-            layers.push(otel.boxed());
-        }
-
-        tracing_subscriber::registry().with(layers).init();
-    }
+    init_tracing(&telemetry, args.verbose);
 
     eprintln!("hitz: daemon listening on {}", args.pipe);
     if let Some(addr) = args.tcp_listen {
@@ -1307,13 +1293,13 @@ mod tests {
         // Verify entry exists in SCM.
         let mgr = ServiceManager::local_computer(None::<&str>, ServiceManagerAccess::CONNECT)
             .expect("open SCM");
-        let svc = mgr.open_service("hitz", ServiceAccess::QUERY_STATUS);
+        let svc = mgr.open_service(SERVICE_NAME, ServiceAccess::QUERY_STATUS);
         assert!(svc.is_ok(), "service not found after install");
 
         remove_service().expect("remove failed");
 
         // Verify entry is gone.
-        let svc2 = mgr.open_service("hitz", ServiceAccess::QUERY_STATUS);
+        let svc2 = mgr.open_service(SERVICE_NAME, ServiceAccess::QUERY_STATUS);
         assert!(svc2.is_err(), "service still exists after remove");
     }
 
