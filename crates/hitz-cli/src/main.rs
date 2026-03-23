@@ -238,7 +238,7 @@ fn install_service(args: &DaemonInstallArgs) -> Result<()> {
         executable_path: exe,
         launch_arguments,
         dependencies: vec![],
-        account_name: None,  // LocalSystem
+        account_name: None, // LocalSystem
         account_password: None,
     };
 
@@ -265,9 +265,8 @@ fn remove_service() -> Result<()> {
         service_manager::{ServiceManager, ServiceManagerAccess},
     };
 
-    let manager =
-        ServiceManager::local_computer(None::<&str>, ServiceManagerAccess::CONNECT)
-            .context("failed to open SCM — run as Administrator")?;
+    let manager = ServiceManager::local_computer(None::<&str>, ServiceManagerAccess::CONNECT)
+        .context("failed to open SCM — run as Administrator")?;
 
     let service = manager
         .open_service(
@@ -573,8 +572,8 @@ fn run_service(arguments: &[OsString]) -> anyhow::Result<()> {
     let telemetry = hitz_daemon::TelemetryGuard::init(endpoint);
     init_tracing(&telemetry, daemon_args.verbose);
 
-    let rt = tokio::runtime::Runtime::new()
-        .context("failed to create tokio runtime in service mode")?;
+    let rt =
+        tokio::runtime::Runtime::new().context("failed to create tokio runtime in service mode")?;
 
     let result = rt.block_on(async move {
         // Shutdown future: resolves when SCM sends Stop/Shutdown (value = true).
@@ -768,9 +767,10 @@ async fn run_daemon_inner(
     let server_mgr = manager.clone();
     let pipe = args.pipe.clone();
     let tcp = args.tcp_listen;
-    let server_handle = tokio::spawn(async move {
-        hitz_daemon::run_server(&pipe, tcp, server_mgr, shutdown_rx).await
-    });
+    let server_handle =
+        tokio::spawn(
+            async move { hitz_daemon::run_server(&pipe, tcp, server_mgr, shutdown_rx).await },
+        );
 
     shutdown.await;
     eprintln!("\nhitz: shutting down...");
@@ -810,8 +810,7 @@ fn run_daemon(args: &DaemonStartArgs) -> Result<()> {
                 // Not running as a service — continue to foreground mode.
             }
             Err(e) => {
-                return Err(anyhow::Error::new(e)
-                    .context("service dispatcher error"));
+                return Err(anyhow::Error::new(e).context("service dispatcher error"));
             }
         }
     }
@@ -1324,7 +1323,10 @@ mod tests {
         }
         let _ = remove_service(); // ensure not installed
         let result = remove_service();
-        assert!(result.is_err(), "remove of non-existent service should error");
+        assert!(
+            result.is_err(),
+            "remove of non-existent service should error"
+        );
     }
 
     #[test]

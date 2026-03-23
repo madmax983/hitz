@@ -1,4 +1,12 @@
-//! VM lifecycle manager — coordinates `boot_and_run` tasks.
+//! The core orchestrator of virtual machines.
+//!
+//! A modern VMM cannot simply boot a kernel and block the main thread. We must juggle
+//! multiple concurrent virtual machines, coordinate state transitions (Created -> Running -> Stopped),
+//! route API requests to the right target, and ensure resources are cleaned up when the party ends.
+//!
+//! The `VmManager` acts as the grand conductor of this orchestra. It holds the map of all known
+//! VMs, safely wrapped in asynchronous-friendly synchronization primitives, and manages the lifecycle
+//! tasks.
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -42,13 +50,19 @@ impl VmEntry {
     }
 }
 
-/// Manages the lifecycle of multiple VMs.
+/// Manages the lifecycle of multiple virtual machines.
 ///
-/// Generic over the hypervisor backend so the daemon library doesn't
-/// depend on a specific platform (WHP, KVM, etc.).
+/// The `VmManager` is the source of truth for all VMs on the host. It maps string identifiers
+/// to their internal representation, tracks their current state, and provides the API to
+/// start, stop, and inspect them.
+///
+/// **Why generic over `H: Hypervisor`?**
+/// By relying on the [`Hypervisor`] trait from `hitz_hal` instead of a concrete implementation
+/// (like `WhpHypervisor`), we achieve true decoupling. This allows us to write comprehensive unit tests
+/// using a `FakeHypervisor` without needing a physical Windows machine or Hyper-V enabled.
 ///
 /// `Clone` is implemented manually so `H` does not need to be `Clone`
-/// (all fields are `Arc`-wrapped).
+/// (all internal fields are `Arc`-wrapped for cheap cloning across threads).
 pub struct VmManager<H> {
     hypervisor: Arc<H>,
     store: Arc<StateStore>,
@@ -92,10 +106,28 @@ impl<H> Clone for VmManager<H> {
 }
 
 impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
-    /// Create a new manager with the given hypervisor backend and state directory.
+    /// Creates a new manager with the given hypervisor backend and state directory.
     ///
-    /// Existing VMs are loaded from `state_dir` on construction. Any VM that was
-    /// `Running` at daemon shutdown is recovered as `Stopped`.
+    /// The manager is persistent by design. On startup, it inspects the provided `state_dir`
+    /// to resurrect the configuration and state of VMs from the previous run.
+    ///
+    /// **Why recover `Running` VMs as `Stopped`?**
+    /// If the daemon exits while a VM is running, the underlying hypervisor partition is destroyed.
+    /// We cannot magically reconnect to a lost micro-VM. Therefore, any VM that was left in the `Running`
+    /// state is safely transitioned to `Stopped` upon recovery so the user knows it must be started again.
+    ///
+    /// ## Examples
+    ///
+    /// ```rust,no_run
+    /// # use std::sync::Arc;
+    /// # use std::path::PathBuf;
+    /// # use hitz_daemon::VmManager;
+    /// # use hitz_whp::WhpHypervisor;
+    /// let hypervisor = Arc::new(WhpHypervisor::new().unwrap());
+    /// let state_dir = PathBuf::from("C:\\hitz\\vms");
+    ///
+    /// let manager = VmManager::new(hypervisor, state_dir).unwrap();
+    /// ```
     pub fn new(hypervisor: Arc<H>, state_dir: std::path::PathBuf) -> Result<Self, DaemonError> {
         let store = StateStore::new(state_dir)?;
         let existing = store.load_all()?;
@@ -138,18 +170,69 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
         })
     }
 
-    /// Wire the vsock metrics tasks to stop when a daemon-provided shutdown
-    /// signal fires.
+    /// Wires the vsock metrics tasks to stop when a daemon-provided shutdown signal fires.
     ///
-    /// Call this after constructing the manager with the same watch receiver
-    /// passed to [`run_server`]. If not called, the manager uses an internal
-    /// channel that is never triggered.
+    /// **Why do we need a shutdown receiver?**
+    /// A running VM might have a background task pumping metrics over a vsock channel.
+    /// If the daemon needs to shut down cleanly, it must signal these background tasks
+    /// to exit their polling loops; otherwise, the Tokio runtime will hang waiting for them.
+    ///
+    /// Call this after constructing the manager. If not called, the manager uses a dummy internal
+    /// channel that never fires, which is acceptable for standalone or test execution.
+    ///
+    /// ## Examples
+    ///
+    /// ```rust,no_run
+    /// # use std::sync::Arc;
+    /// # use std::path::PathBuf;
+    /// # use hitz_daemon::VmManager;
+    /// # use hitz_whp::WhpHypervisor;
+    /// # let hypervisor = Arc::new(WhpHypervisor::new().unwrap());
+    /// # let state_dir = PathBuf::from("C:\\hitz\\vms");
+    /// # let mut manager = VmManager::new(hypervisor, state_dir).unwrap();
+    /// let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
+    /// manager.set_shutdown_receiver(shutdown_rx);
+    /// ```
     pub fn set_shutdown_receiver(&mut self, rx: tokio::sync::watch::Receiver<bool>) {
         self.shutdown_rx = rx;
     }
 
-    /// Create a VM with the given ID and config. Validates the config
-    /// but does not boot.
+    /// Creates a VM with the given ID and configuration.
+    ///
+    /// This validates the [`VmConfig`] and persists it to disk. It transitions the VM to the
+    /// `Created` state, ready to be started. It does **not** boot the VM.
+    ///
+    /// ## Errors
+    ///
+    /// Returns a [`DaemonError`] if a VM with the same ID already exists, if the configuration
+    /// is invalid, or if the state cannot be saved to the filesystem.
+    ///
+    /// ## Examples
+    ///
+    /// ```rust,no_run
+    /// # use std::sync::Arc;
+    /// # use std::path::PathBuf;
+    /// # use hitz_daemon::VmManager;
+    /// # use hitz_whp::WhpHypervisor;
+    /// # use hitz_api::{VmConfig, GuestAgentMode};
+    /// # let hypervisor = Arc::new(WhpHypervisor::new().unwrap());
+    /// # let state_dir = PathBuf::from("C:\\hitz\\vms");
+    /// # let manager = VmManager::new(hypervisor, state_dir).unwrap();
+    /// let config = VmConfig {
+    ///     kernel_path: PathBuf::from("vmlinux"),
+    ///     initramfs_path: None,
+    ///     disk_path: None,
+    ///     ram_mib: 256,
+    ///     cpus: 1,
+    ///     cmdline: None,
+    ///     net: None,
+    ///     ports: vec![],
+    ///     guest_cid: 3,
+    ///     guest_agent: GuestAgentMode::Auto,
+    /// };
+    ///
+    /// let info = manager.create_vm("my-vm".to_string(), &config).unwrap();
+    /// ```
     pub fn create_vm(&self, id: String, config: &VmConfig) -> Result<VmInfo, DaemonError> {
         hitz_vmm::validate_config(config)?;
 
@@ -191,7 +274,28 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
         Ok(info)
     }
 
-    /// Boot a previously created VM.
+    /// Boots a previously created VM.
+    ///
+    /// Transitions a `Created` VM into the `Running` state. This spawns an asynchronous background task
+    /// that drives the VMM execution loop.
+    ///
+    /// **Why spawn a blocking task?**
+    /// The actual hypervisor execution (`boot_and_run`) is heavily CPU-bound and blocks
+    /// synchronously on the vCPU run loop. We use `tokio::task::spawn_blocking` to ensure
+    /// the Tokio async executor isn't starved.
+    ///
+    /// ## Examples
+    ///
+    /// ```rust,no_run
+    /// # use std::sync::Arc;
+    /// # use std::path::PathBuf;
+    /// # use hitz_daemon::VmManager;
+    /// # use hitz_whp::WhpHypervisor;
+    /// # let hypervisor = Arc::new(WhpHypervisor::new().unwrap());
+    /// # let state_dir = PathBuf::from("C:\\hitz\\vms");
+    /// # let manager = VmManager::new(hypervisor, state_dir).unwrap();
+    /// manager.start_vm("my-vm").expect("Failed to start VM");
+    /// ```
     #[allow(clippy::significant_drop_tightening, clippy::too_many_lines)]
     pub fn start_vm(&self, id: &str) -> Result<VmInfo, DaemonError> {
         let (config, stop_flag, serial_buf, info) = {
@@ -384,7 +488,26 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
         Ok(info)
     }
 
-    /// Stop a running VM by setting its stop flag.
+    /// Stops a running VM by setting its atomic stop flag.
+    ///
+    /// **Why an atomic flag?**
+    /// The vCPU is deeply buried inside a synchronous run loop on a separate thread.
+    /// We can't simply `await` it to stop. Instead, we flip an atomic boolean.
+    /// A cancel-watchdog thread checks this flag and issues a hypervisor-level cancellation
+    /// to yank the vCPU back to reality.
+    ///
+    /// ## Examples
+    ///
+    /// ```rust,no_run
+    /// # use std::sync::Arc;
+    /// # use std::path::PathBuf;
+    /// # use hitz_daemon::VmManager;
+    /// # use hitz_whp::WhpHypervisor;
+    /// # let hypervisor = Arc::new(WhpHypervisor::new().unwrap());
+    /// # let state_dir = PathBuf::from("C:\\hitz\\vms");
+    /// # let manager = VmManager::new(hypervisor, state_dir).unwrap();
+    /// manager.stop_vm("my-vm").unwrap();
+    /// ```
     pub fn stop_vm(&self, id: &str) -> Result<VmInfo, DaemonError> {
         let mut vms = self
             .vms
@@ -411,11 +534,27 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
         Ok(info)
     }
 
-    /// Get a serial output reader for a VM.
+    /// Gets a serial output reader for a running VM.
     ///
-    /// Returns a [`SerialReader`] that can be polled for chunks of serial
-    /// output.  Only available while the VM is running (i.e. has a serial
-    /// buffer attached).
+    /// Returns a [`SerialReader`] that can be polled for chunks of serial output.
+    ///
+    /// **Why only when running?**
+    /// The serial buffer is a live ring buffer tied to the VM's execution. When the VM is stopped
+    /// or hasn't started, the buffer doesn't exist.
+    ///
+    /// ## Examples
+    ///
+    /// ```rust,no_run
+    /// # use std::sync::Arc;
+    /// # use std::path::PathBuf;
+    /// # use hitz_daemon::VmManager;
+    /// # use hitz_whp::WhpHypervisor;
+    /// # let hypervisor = Arc::new(WhpHypervisor::new().unwrap());
+    /// # let state_dir = PathBuf::from("C:\\hitz\\vms");
+    /// # let manager = VmManager::new(hypervisor, state_dir).unwrap();
+    /// let mut reader = manager.serial_reader("my-vm").unwrap();
+    /// // Stream chunks to the client...
+    /// ```
     pub fn serial_reader(&self, id: &str) -> Result<SerialReader, DaemonError> {
         let vms = self
             .vms
@@ -437,7 +576,21 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
         Ok(reader)
     }
 
-    /// Get info about a single VM.
+    /// Gets detailed information about a single VM.
+    ///
+    /// ## Examples
+    ///
+    /// ```rust,no_run
+    /// # use std::sync::Arc;
+    /// # use std::path::PathBuf;
+    /// # use hitz_daemon::VmManager;
+    /// # use hitz_whp::WhpHypervisor;
+    /// # let hypervisor = Arc::new(WhpHypervisor::new().unwrap());
+    /// # let state_dir = PathBuf::from("C:\\hitz\\vms");
+    /// # let manager = VmManager::new(hypervisor, state_dir).unwrap();
+    /// let info = manager.get_vm("my-vm").unwrap();
+    /// println!("State: {:?}", info.state);
+    /// ```
     pub fn get_vm(&self, id: &str) -> Result<VmInfo, DaemonError> {
         let vms = self
             .vms
@@ -451,7 +604,22 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
         Ok(info)
     }
 
-    /// List all VMs.
+    /// Lists all virtual machines managed by this instance.
+    ///
+    /// ## Examples
+    ///
+    /// ```rust,no_run
+    /// # use std::sync::Arc;
+    /// # use std::path::PathBuf;
+    /// # use hitz_daemon::VmManager;
+    /// # use hitz_whp::WhpHypervisor;
+    /// # let hypervisor = Arc::new(WhpHypervisor::new().unwrap());
+    /// # let state_dir = PathBuf::from("C:\\hitz\\vms");
+    /// # let manager = VmManager::new(hypervisor, state_dir).unwrap();
+    /// for vm in manager.list_vms().unwrap() {
+    ///     println!("Found VM: {}", vm.id);
+    /// }
+    /// ```
     pub fn list_vms(&self) -> Result<Vec<VmInfo>, DaemonError> {
         let vms = self
             .vms
@@ -460,7 +628,25 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
         Ok(vms.iter().map(|(id, entry)| entry.to_info(id)).collect())
     }
 
-    /// Delete a VM. Must not be running.
+    /// Deletes a VM.
+    ///
+    /// **Why must it be stopped?**
+    /// Deleting a running VM would orphan the underlying hypervisor partition and background tasks,
+    /// leading to resource leaks. Force the user to explicitly stop it first.
+    ///
+    /// ## Examples
+    ///
+    /// ```rust,no_run
+    /// # use std::sync::Arc;
+    /// # use std::path::PathBuf;
+    /// # use hitz_daemon::VmManager;
+    /// # use hitz_whp::WhpHypervisor;
+    /// # let hypervisor = Arc::new(WhpHypervisor::new().unwrap());
+    /// # let state_dir = PathBuf::from("C:\\hitz\\vms");
+    /// # let manager = VmManager::new(hypervisor, state_dir).unwrap();
+    /// manager.stop_vm("my-vm").unwrap();
+    /// manager.delete_vm("my-vm").unwrap();
+    /// ```
     pub fn delete_vm(&self, id: &str) -> Result<(), DaemonError> {
         let mut vms = self
             .vms
@@ -484,14 +670,27 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
         Ok(())
     }
 
-    /// Stop all running VMs (fire-and-forget, does not wait for them to finish).
+    /// Stops all running VMs (fire-and-forget, does not wait for them to finish).
     ///
     /// Sets the stop flag on every running VM, which signals the cancel-watchdog
     /// threads to cancel the vCPU run loops. Returns immediately without waiting
-    /// for the VMs to reach a terminal state. Use [`stop_all_and_wait`] if you
-    /// need to block until all VMs have stopped.
+    /// for the VMs to reach a terminal state.
     ///
-    /// [`stop_all_and_wait`]: VmManager::stop_all_and_wait
+    /// Use [`VmManager::stop_all_and_wait`] if you need to block until all VMs have stopped.
+    ///
+    /// ## Examples
+    ///
+    /// ```rust,no_run
+    /// # use std::sync::Arc;
+    /// # use std::path::PathBuf;
+    /// # use hitz_daemon::VmManager;
+    /// # use hitz_whp::WhpHypervisor;
+    /// # let hypervisor = Arc::new(WhpHypervisor::new().unwrap());
+    /// # let state_dir = PathBuf::from("C:\\hitz\\vms");
+    /// # let manager = VmManager::new(hypervisor, state_dir).unwrap();
+    /// manager.stop_all();
+    /// println!("Shutdown signals sent, moving on...");
+    /// ```
     pub fn stop_all(&self) {
         if let Ok(vms) = self.vms.lock() {
             for entry in vms.values() {
@@ -504,14 +703,33 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
         }
     }
 
-    /// Stop all running VMs and wait for them to finish.
+    /// Stops all running VMs and waits for them to finish.
     ///
-    /// Sets stop flags for all running VMs (triggering their internal
-    /// cancel-watchdog threads), then waits on the completion channel
-    /// until all VMs report done or `timeout` expires.
+    /// Sets stop flags for all running VMs (triggering their internal cancel-watchdog threads),
+    /// then asynchronously awaits on the completion channel until all VMs report they are done
+    /// or the `timeout` expires.
     ///
-    /// If the timeout elapses before all VMs stop, a warning is logged and
-    /// the method returns — it does not forcibly kill any remaining VMs.
+    /// **Why a timeout?**
+    /// Sometimes a VM might be deadlocked in the kernel or ignoring the ACPI shutdown request.
+    /// The daemon must eventually proceed with its own shutdown rather than hanging forever.
+    /// If the timeout elapses, it logs a warning and returns, leaving the OS process teardown
+    /// to clean up the partitions.
+    ///
+    /// ## Examples
+    ///
+    /// ```rust,no_run
+    /// # use std::sync::Arc;
+    /// # use std::path::PathBuf;
+    /// # use hitz_daemon::VmManager;
+    /// # use hitz_whp::WhpHypervisor;
+    /// # let hypervisor = Arc::new(WhpHypervisor::new().unwrap());
+    /// # let state_dir = PathBuf::from("C:\\hitz\\vms");
+    /// # let manager = VmManager::new(hypervisor, state_dir).unwrap();
+    /// use std::time::Duration;
+    /// # tokio_test::block_on(async {
+    /// manager.stop_all_and_wait(Duration::from_secs(5)).await;
+    /// # });
+    /// ```
     pub async fn stop_all_and_wait(&self, timeout: Duration) {
         let running_count = {
             let Ok(vms) = self.vms.lock() else { return };
