@@ -957,7 +957,14 @@ fn run_vm_command(cmd: VmCommand) -> Result<()> {
                     Some(&body),
                 )
                 .await?;
-                println!("{status}: {resp}");
+                if status.is_success() {
+                    println!("{status}: {resp}");
+                } else if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(&resp) {
+                    use crossterm::style::Stylize;
+                    println!("{}", err.message.red());
+                } else {
+                    println!("{status}: {resp}");
+                }
             }
             VmCommand::Start(args) => {
                 let body = serde_json::to_string(&ActionVmRequest {
@@ -972,7 +979,14 @@ fn run_vm_command(cmd: VmCommand) -> Result<()> {
                     Some(&body),
                 )
                 .await?;
-                println!("{status}: {resp}");
+                if status.is_success() {
+                    println!("{status}: {resp}");
+                } else if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(&resp) {
+                    use crossterm::style::Stylize;
+                    println!("{}", err.message.red());
+                } else {
+                    println!("{status}: {resp}");
+                }
             }
             VmCommand::Stop(args) => {
                 let body = serde_json::to_string(&ActionVmRequest {
@@ -987,7 +1001,14 @@ fn run_vm_command(cmd: VmCommand) -> Result<()> {
                     Some(&body),
                 )
                 .await?;
-                println!("{status}: {resp}");
+                if status.is_success() {
+                    println!("{status}: {resp}");
+                } else if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(&resp) {
+                    use crossterm::style::Stylize;
+                    println!("{}", err.message.red());
+                } else {
+                    println!("{status}: {resp}");
+                }
             }
             VmCommand::Status(args) => {
                 let (status, resp) = pipe_client::pipe_request(
@@ -1000,8 +1021,40 @@ fn run_vm_command(cmd: VmCommand) -> Result<()> {
                 .await?;
                 if status.is_success() {
                     if let Ok(info) = serde_json::from_str::<hitz_api::VmInfo>(&resp) {
-                        println!("ID:    {}", info.id);
-                        println!("State: {:?}", info.state);
+                        use comfy_table::presets::NOTHING;
+                        use comfy_table::{Cell, Color, Table};
+
+                        let mut table = Table::new();
+                        let _ = table.load_preset(NOTHING);
+
+                        let state_cell = match info.state {
+                            hitz_api::VmState::Running => Cell::new("Running").fg(Color::Green),
+                            hitz_api::VmState::Stopped => Cell::new("Stopped").fg(Color::Yellow),
+                            hitz_api::VmState::Failed => Cell::new("Failed").fg(Color::Red),
+                            hitz_api::VmState::Created => Cell::new("Created").fg(Color::Cyan),
+                        };
+
+                        let _ = table.add_row(vec![
+                            Cell::new("ID:").add_attribute(comfy_table::Attribute::Bold),
+                            Cell::new(&info.id),
+                        ]);
+                        let _ = table.add_row(vec![
+                            Cell::new("State:").add_attribute(comfy_table::Attribute::Bold),
+                            state_cell,
+                        ]);
+                        let _ = table.add_row(vec![
+                            Cell::new("Kernel:").add_attribute(comfy_table::Attribute::Bold),
+                            Cell::new(info.config.kernel_path.display().to_string()),
+                        ]);
+                        let _ = table.add_row(vec![
+                            Cell::new("RAM:").add_attribute(comfy_table::Attribute::Bold),
+                            Cell::new(format!("{} MiB", info.config.ram_mib)),
+                        ]);
+                        let _ = table.add_row(vec![
+                            Cell::new("CPUs:").add_attribute(comfy_table::Attribute::Bold),
+                            Cell::new(info.config.cpus.to_string()),
+                        ]);
+
                         if !info.config.ports.is_empty() {
                             let ports: Vec<String> = info
                                 .config
@@ -1009,14 +1062,25 @@ fn run_vm_command(cmd: VmCommand) -> Result<()> {
                                 .iter()
                                 .map(|p| format!("0.0.0.0:{} -> {}", p.host_port, p.guest_port))
                                 .collect();
-                            println!("Ports: {}", ports.join(", "));
+                            let _ = table.add_row(vec![
+                                Cell::new("Ports:").add_attribute(comfy_table::Attribute::Bold),
+                                Cell::new(ports.join(", ")),
+                            ]);
                         }
                         if let Some(reason) = &info.exit_reason {
-                            println!("Exit:  {reason}");
+                            let _ = table.add_row(vec![
+                                Cell::new("Exit:").add_attribute(comfy_table::Attribute::Bold),
+                                Cell::new(reason),
+                            ]);
                         }
+
+                        println!("{table}");
                     } else {
                         println!("{status}: {resp}");
                     }
+                } else if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(&resp) {
+                    use crossterm::style::Stylize;
+                    println!("{}", err.message.red());
                 } else {
                     println!("{status}: {resp}");
                 }
@@ -1025,7 +1089,46 @@ fn run_vm_command(cmd: VmCommand) -> Result<()> {
                 let (status, resp) =
                     pipe_client::pipe_request(&args.pipe, args.tcp, Method::GET, "/vms", None)
                         .await?;
-                println!("{status}: {resp}");
+                if status.is_success() {
+                    if let Ok(vms) = serde_json::from_str::<Vec<hitz_api::VmInfo>>(&resp) {
+                        use comfy_table::{Cell, Color, Table};
+                        let mut table = Table::new();
+                        let _ = table.set_header(vec![
+                            "ID",
+                            "State",
+                            "RAM (MiB)",
+                            "CPUs",
+                            "Exit Reason",
+                        ]);
+
+                        for info in vms {
+                            let state_cell = match info.state {
+                                hitz_api::VmState::Running => Cell::new("Running").fg(Color::Green),
+                                hitz_api::VmState::Stopped => {
+                                    Cell::new("Stopped").fg(Color::Yellow)
+                                }
+                                hitz_api::VmState::Failed => Cell::new("Failed").fg(Color::Red),
+                                hitz_api::VmState::Created => Cell::new("Created").fg(Color::Cyan),
+                            };
+                            let exit_reason = info.exit_reason.unwrap_or_else(|| "-".to_string());
+                            let _ = table.add_row(vec![
+                                Cell::new(&info.id),
+                                state_cell,
+                                Cell::new(info.config.ram_mib.to_string()),
+                                Cell::new(info.config.cpus.to_string()),
+                                Cell::new(exit_reason),
+                            ]);
+                        }
+                        println!("{table}");
+                    } else {
+                        println!("{status}: {resp}");
+                    }
+                } else if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(&resp) {
+                    use crossterm::style::Stylize;
+                    println!("{}", err.message.red());
+                } else {
+                    println!("{status}: {resp}");
+                }
             }
             VmCommand::Delete(args) => {
                 let (status, resp) = pipe_client::pipe_request(
@@ -1038,6 +1141,9 @@ fn run_vm_command(cmd: VmCommand) -> Result<()> {
                 .await?;
                 if status.is_success() {
                     println!("deleted {}", args.id);
+                } else if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(&resp) {
+                    use crossterm::style::Stylize;
+                    println!("{}", err.message.red());
                 } else {
                     println!("{status}: {resp}");
                 }
