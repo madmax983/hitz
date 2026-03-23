@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used)]
 //! Reusable VM boot pipeline.
 //!
 //! Extracts the 17-step boot sequence from integration tests into a single
@@ -561,7 +562,7 @@ mod tests {
     #[test]
     fn validate_config_missing_kernel() {
         let cfg = valid_config("nonexistent_kernel".into());
-        let err = validate_config(&cfg).unwrap_err();
+        let err = validate_config(&cfg).expect_err("expected error");
         assert!(
             err.to_string().contains("kernel not found"),
             "unexpected: {err}"
@@ -573,7 +574,7 @@ mod tests {
         let tmp = tempfile::NamedTempFile::new().expect("create temp file");
         let mut cfg = valid_config(tmp.path().to_path_buf());
         cfg.initramfs_path = Some("nonexistent_initramfs.cpio".into());
-        let err = validate_config(&cfg).unwrap_err();
+        let err = validate_config(&cfg).expect_err("expected error");
         assert!(
             err.to_string().contains("initramfs not found"),
             "unexpected: {err}"
@@ -585,7 +586,7 @@ mod tests {
         let tmp = tempfile::NamedTempFile::new().expect("create temp file");
         let mut cfg = valid_config(tmp.path().to_path_buf());
         cfg.disk_path = Some("nonexistent_disk.img".into());
-        let err = validate_config(&cfg).unwrap_err();
+        let err = validate_config(&cfg).expect_err("expected error");
         assert!(
             err.to_string().contains("disk image not found"),
             "unexpected: {err}"
@@ -597,7 +598,7 @@ mod tests {
         let tmp = tempfile::NamedTempFile::new().expect("create temp file");
         let mut cfg = valid_config(tmp.path().to_path_buf());
         cfg.ram_mib = 1;
-        let err = validate_config(&cfg).unwrap_err();
+        let err = validate_config(&cfg).expect_err("expected error");
         assert!(
             err.to_string().contains("at least 2 MiB"),
             "unexpected: {err}"
@@ -609,7 +610,7 @@ mod tests {
         let tmp = tempfile::NamedTempFile::new().expect("create temp file");
         let mut cfg = valid_config(tmp.path().to_path_buf());
         cfg.cpus = 0;
-        let err = validate_config(&cfg).unwrap_err();
+        let err = validate_config(&cfg).expect_err("expected error");
         assert!(
             err.to_string().contains("cpus must be"),
             "unexpected: {err}"
@@ -621,7 +622,7 @@ mod tests {
         let tmp = tempfile::NamedTempFile::new().expect("create temp file");
         let mut cfg = valid_config(tmp.path().to_path_buf());
         cfg.cpus = 256;
-        let err = validate_config(&cfg).unwrap_err();
+        let err = validate_config(&cfg).expect_err("expected error");
         assert!(
             err.to_string().contains("cpus must be"),
             "unexpected: {err}"

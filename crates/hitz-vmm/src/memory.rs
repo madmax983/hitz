@@ -1,3 +1,4 @@
+#![allow(clippy::expect_used)]
 //! Guest physical memory backed by `VirtualAlloc` on Windows.
 //!
 //! Because the upstream `vm-memory` crate does not compile on Windows
@@ -79,7 +80,10 @@ impl GuestMemory {
     /// `size` is rounded up to the next page boundary. The region is
     /// zero-initialized by the OS.
     pub fn add_region(&mut self, gpa: Gpa, size: usize) -> Result<(), MemError> {
-        let aligned_size = align_up(size, PAGE_SIZE);
+        let aligned_size = align_up(size, PAGE_SIZE).ok_or(MemError::AllocFailed {
+            gpa: gpa.as_u64(),
+            size,
+        })?;
 
         let hva = virtual_alloc(aligned_size).ok_or(MemError::AllocFailed {
             gpa: gpa.as_u64(),
@@ -264,9 +268,15 @@ impl hitz_boot::GuestMemWriter for GuestMemory {
 
 /// Round `value` up to the next multiple of `align`.
 ///
-/// `align` must be a power of two.
-const fn align_up(value: usize, align: usize) -> usize {
-    (value + align - 1) & !(align - 1)
+/// `align` must be a power of two. Returns `None` if the operation overflows.
+const fn align_up(value: usize, align: usize) -> Option<usize> {
+    if let Some(addend) = align.checked_sub(1) {
+        let added = value.checked_add(addend);
+        if let Some(added) = added {
+            return Some(added & !addend);
+        }
+    }
+    None
 }
 
 /// Allocate `size` bytes of committed, read-write, page-aligned memory.
@@ -303,6 +313,12 @@ fn virtual_alloc(size: usize) -> Option<*mut u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn test_align_up_overflow() {
+        let mut mem = GuestMemory::new();
+        // This will panic due to arithmetic overflow in `align_up`
+        let _ = mem.add_region(Gpa::new(0x1000), usize::MAX);
+    }
 
     #[test]
     fn test_add_region() {
@@ -457,11 +473,12 @@ mod tests {
 
     #[test]
     fn test_align_up() {
-        assert_eq!(align_up(0, 4096), 0);
-        assert_eq!(align_up(1, 4096), 4096);
-        assert_eq!(align_up(4096, 4096), 4096);
-        assert_eq!(align_up(4097, 4096), 8192);
-        assert_eq!(align_up(8191, 4096), 8192);
+        assert_eq!(align_up(0, 4096), Some(0));
+        assert_eq!(align_up(1, 4096), Some(4096));
+        assert_eq!(align_up(4096, 4096), Some(4096));
+        assert_eq!(align_up(4097, 4096), Some(8192));
+        assert_eq!(align_up(8191, 4096), Some(8192));
+        assert_eq!(align_up(usize::MAX, 4096), None);
     }
 
     #[test]

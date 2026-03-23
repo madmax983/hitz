@@ -1,3 +1,4 @@
+#![allow(clippy::expect_used)]
 //! MMIO instruction decoder for x86-64.
 //!
 //! WHP (unlike KVM) does not decode MMIO instructions in-kernel.  Instead
@@ -240,6 +241,15 @@ pub const fn set_register(regs: &mut StandardRegs, idx: u8, val: u64) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn fuzz_decode_mmio_instruction(bytes in proptest::collection::vec(any::<u8>(), 0..16)) {
+            // This shouldn't panic
+            let _ = decode_mmio_instruction(&bytes);
+        }
+    }
 
     // -- decode_mmio_instruction tests ----------------------------------------
 
@@ -441,8 +451,8 @@ mod tests {
 
     #[test]
     fn register_value_all_indices() {
-        let mut regs = StandardRegs::default();
-        regs.rax = 100;
+        let mut regs = StandardRegs { rax: 100, ..Default::default() };
+
         regs.rcx = 101;
         regs.rdx = 102;
         regs.rbx = 103;
@@ -473,7 +483,7 @@ mod tests {
 
     #[test]
     fn set_register_roundtrip() {
-        let mut regs = StandardRegs::default();
+        let mut regs = StandardRegs { rax: 100, ..Default::default() };
         for i in 0..16u8 {
             set_register(&mut regs, i, u64::from(i) * 1000);
         }
@@ -488,11 +498,17 @@ mod tests {
 
     #[test]
     fn set_register_out_of_range_is_noop() {
+        #[allow(clippy::field_reassign_with_default)]
         let mut regs = StandardRegs::default();
+        regs.rax = 100;
         set_register(&mut regs, 99, 42);
         // Nothing should have changed.
         for i in 0..16u8 {
-            assert_eq!(register_value(&regs, i), 0);
+            if i == 0 {
+                assert_eq!(register_value(&regs, i), 100);
+            } else {
+                assert_eq!(register_value(&regs, i), 0);
+            }
         }
     }
 }
