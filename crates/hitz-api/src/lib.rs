@@ -220,6 +220,31 @@ pub struct VmConfig {
 
 impl VmConfig {
     /// Returns the effective command line: custom if set, otherwise the default.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use hitz_api::{VmConfig, DEFAULT_CMDLINE, DEFAULT_RAM_MIB, DEFAULT_CPUS, DEFAULT_GUEST_CID, GuestAgentMode};
+    /// use std::path::PathBuf;
+    ///
+    /// let mut config = VmConfig {
+    ///     kernel_path: PathBuf::from("vmlinux"),
+    ///     initramfs_path: None,
+    ///     disk_path: None,
+    ///     ram_mib: DEFAULT_RAM_MIB,
+    ///     cpus: DEFAULT_CPUS,
+    ///     cmdline: None,
+    ///     net: None,
+    ///     ports: vec![],
+    ///     guest_cid: DEFAULT_GUEST_CID,
+    ///     guest_agent: GuestAgentMode::Auto,
+    /// };
+    ///
+    /// assert_eq!(config.effective_cmdline(), DEFAULT_CMDLINE);
+    ///
+    /// config.cmdline = Some("root=/dev/vda rw".to_string());
+    /// assert_eq!(config.effective_cmdline(), "root=/dev/vda rw");
+    /// ```
     #[must_use]
     pub fn effective_cmdline(&self) -> &str {
         self.cmdline.as_deref().unwrap_or(DEFAULT_CMDLINE)
@@ -346,6 +371,22 @@ mod tests {
         let json = serde_json::to_string(&mode).expect("serialize");
         let decoded: GuestAgentMode = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(decoded, mode);
+    }
+
+    #[test]
+    fn guest_agent_mode_disabled_serde_roundtrip() {
+        let mode = GuestAgentMode::Disabled;
+        let json = serde_json::to_string(&mode).expect("serialize");
+        let decoded: GuestAgentMode = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(decoded, mode);
+    }
+
+    #[test]
+    fn metrics_request_serde_roundtrip() {
+        let req = MetricsRequest::Snapshot;
+        let json = serde_json::to_string(&req).expect("serialize");
+        let decoded: MetricsRequest = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(decoded, req);
     }
 
     #[test]
