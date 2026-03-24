@@ -1,14 +1,14 @@
 //! Hitz daemon — named pipe HTTP server and VM coordinator.
 
-pub mod agent;
-pub mod error;
-pub mod port_forward;
-pub mod router;
-pub mod server;
-pub mod state_store;
-pub mod telemetry;
-pub mod vm_manager;
-pub mod vsock_server;
+pub(crate) mod agent;
+pub(crate) mod error;
+pub(crate) mod port_forward;
+pub(crate) mod router;
+pub(crate) mod server;
+pub(crate) mod state_store;
+pub(crate) mod telemetry;
+pub(crate) mod vm_manager;
+pub(crate) mod vsock_server;
 
 pub use error::DaemonError;
 pub use server::run_server;
