@@ -122,7 +122,7 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
     /// # use std::sync::Arc;
     /// # use std::path::PathBuf;
     /// # use hitz_daemon::VmManager;
-    /// # use hitz_whp::WhpHypervisor;
+    /// #
     /// let hypervisor = Arc::new(WhpHypervisor::new().unwrap());
     /// let state_dir = PathBuf::from("C:\\hitz\\vms");
     ///
@@ -186,7 +186,7 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
     /// # use std::sync::Arc;
     /// # use std::path::PathBuf;
     /// # use hitz_daemon::VmManager;
-    /// # use hitz_whp::WhpHypervisor;
+    /// #
     /// # let hypervisor = Arc::new(WhpHypervisor::new().unwrap());
     /// # let state_dir = PathBuf::from("C:\\hitz\\vms");
     /// # let mut manager = VmManager::new(hypervisor, state_dir).unwrap();
@@ -213,7 +213,7 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
     /// # use std::sync::Arc;
     /// # use std::path::PathBuf;
     /// # use hitz_daemon::VmManager;
-    /// # use hitz_whp::WhpHypervisor;
+    /// #
     /// # use hitz_api::{VmConfig, GuestAgentMode};
     /// # let hypervisor = Arc::new(WhpHypervisor::new().unwrap());
     /// # let state_dir = PathBuf::from("C:\\hitz\\vms");
@@ -290,7 +290,7 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
     /// # use std::sync::Arc;
     /// # use std::path::PathBuf;
     /// # use hitz_daemon::VmManager;
-    /// # use hitz_whp::WhpHypervisor;
+    /// #
     /// # let hypervisor = Arc::new(WhpHypervisor::new().unwrap());
     /// # let state_dir = PathBuf::from("C:\\hitz\\vms");
     /// # let manager = VmManager::new(hypervisor, state_dir).unwrap();
@@ -502,7 +502,7 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
     /// # use std::sync::Arc;
     /// # use std::path::PathBuf;
     /// # use hitz_daemon::VmManager;
-    /// # use hitz_whp::WhpHypervisor;
+    /// #
     /// # let hypervisor = Arc::new(WhpHypervisor::new().unwrap());
     /// # let state_dir = PathBuf::from("C:\\hitz\\vms");
     /// # let manager = VmManager::new(hypervisor, state_dir).unwrap();
@@ -548,7 +548,7 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
     /// # use std::sync::Arc;
     /// # use std::path::PathBuf;
     /// # use hitz_daemon::VmManager;
-    /// # use hitz_whp::WhpHypervisor;
+    /// #
     /// # let hypervisor = Arc::new(WhpHypervisor::new().unwrap());
     /// # let state_dir = PathBuf::from("C:\\hitz\\vms");
     /// # let manager = VmManager::new(hypervisor, state_dir).unwrap();
@@ -584,7 +584,7 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
     /// # use std::sync::Arc;
     /// # use std::path::PathBuf;
     /// # use hitz_daemon::VmManager;
-    /// # use hitz_whp::WhpHypervisor;
+    /// #
     /// # let hypervisor = Arc::new(WhpHypervisor::new().unwrap());
     /// # let state_dir = PathBuf::from("C:\\hitz\\vms");
     /// # let manager = VmManager::new(hypervisor, state_dir).unwrap();
@@ -612,7 +612,7 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
     /// # use std::sync::Arc;
     /// # use std::path::PathBuf;
     /// # use hitz_daemon::VmManager;
-    /// # use hitz_whp::WhpHypervisor;
+    /// #
     /// # let hypervisor = Arc::new(WhpHypervisor::new().unwrap());
     /// # let state_dir = PathBuf::from("C:\\hitz\\vms");
     /// # let manager = VmManager::new(hypervisor, state_dir).unwrap();
@@ -640,7 +640,7 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
     /// # use std::sync::Arc;
     /// # use std::path::PathBuf;
     /// # use hitz_daemon::VmManager;
-    /// # use hitz_whp::WhpHypervisor;
+    /// #
     /// # let hypervisor = Arc::new(WhpHypervisor::new().unwrap());
     /// # let state_dir = PathBuf::from("C:\\hitz\\vms");
     /// # let manager = VmManager::new(hypervisor, state_dir).unwrap();
@@ -684,7 +684,7 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
     /// # use std::sync::Arc;
     /// # use std::path::PathBuf;
     /// # use hitz_daemon::VmManager;
-    /// # use hitz_whp::WhpHypervisor;
+    /// #
     /// # let hypervisor = Arc::new(WhpHypervisor::new().unwrap());
     /// # let state_dir = PathBuf::from("C:\\hitz\\vms");
     /// # let manager = VmManager::new(hypervisor, state_dir).unwrap();
@@ -721,7 +721,7 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
     /// # use std::sync::Arc;
     /// # use std::path::PathBuf;
     /// # use hitz_daemon::VmManager;
-    /// # use hitz_whp::WhpHypervisor;
+    /// #
     /// # let hypervisor = Arc::new(WhpHypervisor::new().unwrap());
     /// # let state_dir = PathBuf::from("C:\\hitz\\vms");
     /// # let manager = VmManager::new(hypervisor, state_dir).unwrap();
