@@ -65,14 +65,14 @@ where
     );
 
     let result = async {
-        match (method.clone(), path.as_str()) {
-            (Method::GET, "/vms") => handle_list(manager),
+        match (&method, path.as_str()) {
+            (&Method::GET, "/vms") => handle_list(manager),
             _ if path.starts_with("/vms/") => {
-                let segments: Vec<&str> = path.splitn(4, '/').collect();
+                let mut segments = path.splitn(4, '/');
                 // segments: ["", "vms", "{id}", "action"?]
-                match segments.get(2) {
+                match segments.nth(2) {
                     Some(id) if !id.is_empty() => {
-                        let suffix = segments.get(3).copied();
+                        let suffix = segments.next();
                         route_vm(req, &method, id, suffix, manager).await
                     }
                     _ => Ok(error_response(StatusCode::BAD_REQUEST, "missing VM ID")),
