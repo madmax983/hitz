@@ -849,9 +849,17 @@ fn run_daemon(args: &DaemonStartArgs) -> Result<()> {
 // ── Metrics formatting ──
 
 /// Format a [`hitz_api::MetricsSnapshot`] into a human-readable string for CLI display.
+#[allow(clippy::too_many_lines)]
 fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
+    use comfy_table::presets::NOTHING;
+    use comfy_table::{Attribute, Cell, Table};
     use std::fmt::Write as _;
+
     let mut out = String::new();
+
+    // ── System ──
+    let mut sys_table = Table::new();
+    let _ = sys_table.load_preset(NOTHING);
 
     let cores: Vec<String> = snap
         .cpu
@@ -859,54 +867,106 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
         .iter()
         .map(|p| format!("{p:.1}%"))
         .collect();
-    let _ = writeln!(
-        out,
-        "CPU:     total={:.1}%  cores=[{}]  load={:.2}/{:.2}/{:.2}",
-        snap.cpu.total_pct,
-        cores.join(", "),
-        snap.cpu.load_avg[0],
-        snap.cpu.load_avg[1],
-        snap.cpu.load_avg[2],
+    let cpu_load = format!(
+        "{:.2} / {:.2} / {:.2}",
+        snap.cpu.load_avg[0], snap.cpu.load_avg[1], snap.cpu.load_avg[2]
     );
 
     let used_mib = snap.memory.used_bytes / (1024 * 1024);
     let total_mib = snap.memory.total_bytes / (1024 * 1024);
-    let _ = writeln!(out, "Memory:  {used_mib} MiB / {total_mib} MiB");
+    let mem_str = format!("{used_mib} MiB / {total_mib} MiB");
 
-    for disk in &snap.disks {
-        let read_kb = disk.read_bytes / 1024;
-        let write_kb = disk.write_bytes / 1024;
-        let _ = writeln!(
-            out,
-            "Disk:    {}  reads={}  writes={}  read={}K  write={}K",
-            disk.name, disk.reads_total, disk.writes_total, read_kb, write_kb,
-        );
+    let _ = sys_table.add_row(vec![
+        Cell::new("CPU Total").add_attribute(Attribute::Bold),
+        Cell::new(format!("{:.1}%", snap.cpu.total_pct)),
+        Cell::new("Cores").add_attribute(Attribute::Bold),
+        Cell::new(cores.join(", ")),
+    ]);
+    let _ = sys_table.add_row(vec![
+        Cell::new("CPU Load").add_attribute(Attribute::Bold),
+        Cell::new(cpu_load),
+        Cell::new("Memory").add_attribute(Attribute::Bold),
+        Cell::new(mem_str),
+    ]);
+
+    let _ = writeln!(out, "System:\n{sys_table}");
+
+    // ── Disks ──
+    if !snap.disks.is_empty() {
+        let _ = writeln!(out);
+        let mut disk_table = Table::new();
+        let _ = disk_table.load_preset(NOTHING);
+        let _ = disk_table.set_header(vec![
+            Cell::new("Disk").add_attribute(Attribute::Bold),
+            Cell::new("Reads").add_attribute(Attribute::Bold),
+            Cell::new("Writes").add_attribute(Attribute::Bold),
+            Cell::new("Read KB").add_attribute(Attribute::Bold),
+            Cell::new("Write KB").add_attribute(Attribute::Bold),
+        ]);
+
+        for disk in &snap.disks {
+            let read_kb = disk.read_bytes / 1024;
+            let write_kb = disk.write_bytes / 1024;
+            let _ = disk_table.add_row(vec![
+                disk.name.clone(),
+                disk.reads_total.to_string(),
+                disk.writes_total.to_string(),
+                read_kb.to_string(),
+                write_kb.to_string(),
+            ]);
+        }
+        let _ = writeln!(out, "Disks:\n{disk_table}");
     }
 
-    for net in &snap.networks {
-        let rx_kb = net.rx_bytes / 1024;
-        let tx_kb = net.tx_bytes / 1024;
-        let _ = writeln!(
-            out,
-            "Net:     {}  rx={}K  tx={}K  rx_pkt={}  tx_pkt={}",
-            net.interface, rx_kb, tx_kb, net.rx_packets, net.tx_packets,
-        );
+    // ── Networks ──
+    if !snap.networks.is_empty() {
+        let _ = writeln!(out);
+        let mut net_table = Table::new();
+        let _ = net_table.load_preset(NOTHING);
+        let _ = net_table.set_header(vec![
+            Cell::new("Interface").add_attribute(Attribute::Bold),
+            Cell::new("RX KB").add_attribute(Attribute::Bold),
+            Cell::new("TX KB").add_attribute(Attribute::Bold),
+            Cell::new("RX Pkts").add_attribute(Attribute::Bold),
+            Cell::new("TX Pkts").add_attribute(Attribute::Bold),
+        ]);
+
+        for net in &snap.networks {
+            let rx_kb = net.rx_bytes / 1024;
+            let tx_kb = net.tx_bytes / 1024;
+            let _ = net_table.add_row(vec![
+                net.interface.clone(),
+                rx_kb.to_string(),
+                tx_kb.to_string(),
+                net.rx_packets.to_string(),
+                net.tx_packets.to_string(),
+            ]);
+        }
+        let _ = writeln!(out, "Networks:\n{net_table}");
     }
 
+    // ── Processes ──
     if !snap.processes.is_empty() {
-        let _ = writeln!(
-            out,
-            "Procs:   {:>6}  {:<20} {:>6}  {:>8}",
-            "PID", "NAME", "CPU%", "RSS"
-        );
+        let _ = writeln!(out);
+        let mut proc_table = Table::new();
+        let _ = proc_table.load_preset(NOTHING);
+        let _ = proc_table.set_header(vec![
+            Cell::new("PID").add_attribute(Attribute::Bold),
+            Cell::new("Name").add_attribute(Attribute::Bold),
+            Cell::new("CPU %").add_attribute(Attribute::Bold),
+            Cell::new("RSS MB").add_attribute(Attribute::Bold),
+        ]);
+
         for proc in &snap.processes {
             let rss_mb = proc.rss_bytes / (1024 * 1024);
-            let _ = writeln!(
-                out,
-                "         {:>6}  {:<20} {:>5.1}%  {:>7}M",
-                proc.pid, proc.name, proc.cpu_pct, rss_mb,
-            );
+            let _ = proc_table.add_row(vec![
+                proc.pid.to_string(),
+                proc.name.clone(),
+                format!("{:.1}%", proc.cpu_pct),
+                rss_mb.to_string(),
+            ]);
         }
+        let _ = writeln!(out, "Top Processes:\n{proc_table}");
     }
 
     out
@@ -1214,6 +1274,7 @@ mod tests {
     static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     #[test]
+    #[allow(unsafe_code)]
     fn endpoint_resolution_cli_wins_over_env() {
         let _guard = ENV_LOCK.lock().expect("env lock poisoned");
         let cli_val = "http://cli-endpoint:4317".to_string();
@@ -1230,6 +1291,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(unsafe_code)]
     fn endpoint_resolution_falls_back_to_env() {
         let _guard = ENV_LOCK.lock().expect("env lock poisoned");
         let env_val = "http://env-endpoint:4317".to_string();
@@ -1244,6 +1306,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(unsafe_code)]
     fn endpoint_resolution_none_when_absent() {
         let _guard = ENV_LOCK.lock().expect("env lock poisoned");
         unsafe {
@@ -1356,15 +1419,16 @@ mod tests {
     /// Requires admin privileges and `HITZ_TEST_SERVICE=1` env var.
     /// Run: `cargo test -p hitz-cli svc_ -- --ignored --test-threads=1`
     #[test]
-    #[ignore]
+    #[ignore = "requires Windows Admin + HITZ_TEST_SERVICE=1"]
     fn svc_install_and_remove() {
-        if std::env::var("HITZ_TEST_SERVICE").is_err() {
-            return;
-        }
         use windows_service::{
             service::ServiceAccess,
             service_manager::{ServiceManager, ServiceManagerAccess},
         };
+
+        if std::env::var("HITZ_TEST_SERVICE").is_err() {
+            return;
+        }
         // Clean up any leftover from a previous run.
         let _ = remove_service();
 
@@ -1396,7 +1460,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
+    #[ignore = "requires Windows Admin + HITZ_TEST_SERVICE=1"]
     fn svc_install_idempotent_error() {
         if std::env::var("HITZ_TEST_SERVICE").is_err() {
             return;
@@ -1422,7 +1486,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
+    #[ignore = "requires Windows Admin + HITZ_TEST_SERVICE=1"]
     fn svc_remove_nonexistent() {
         if std::env::var("HITZ_TEST_SERVICE").is_err() {
             return;
@@ -1480,5 +1544,8 @@ mod tests {
         );
         assert!(output.contains("vda"), "missing disk: {output}");
         assert!(output.contains("eth0"), "missing network: {output}");
+        assert!(output.contains("System:"), "missing system header: {output}");
+        assert!(output.contains("Disks:"), "missing disks header: {output}");
+        assert!(output.contains("Networks:"), "missing networks header: {output}");
     }
 }
