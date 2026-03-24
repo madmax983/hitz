@@ -224,17 +224,20 @@ impl VirtioVsockDevice {
     /// Process the TX virtqueue: read all pending guest→host packets and
     /// forward them to the host via `tx_sender`.
     fn process_tx(&self, queue: &mut VirtQueue, mem: &dyn hitz_hal::GuestMemAccess) {
+        // ⚡ Bolt: Hoist buffer to eliminate multiple heap allocations per transmitted packet.
+        let mut raw = Vec::with_capacity(1024);
         while let Some(mut chain) = queue.pop_chain(mem) {
             let head = chain.head_index();
-            let mut raw = Vec::new();
+            raw.clear();
 
             while let Some(desc) = chain.next_descriptor(mem) {
                 if desc.is_device_writable {
                     break; // TX descriptors are all device-readable
                 }
-                let mut buf = vec![0u8; desc.len as usize];
-                if mem.read_guest(desc.gpa, &mut buf).is_ok() {
-                    raw.extend_from_slice(&buf);
+                let start_len = raw.len();
+                raw.resize(start_len + desc.len as usize, 0);
+                if mem.read_guest(desc.gpa, &mut raw[start_len..]).is_err() {
+                    raw.truncate(start_len); // Revert on read failure
                 }
             }
 
