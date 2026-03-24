@@ -952,14 +952,14 @@ mod tests {
         let (config, _tmp) = make_config();
         mgr.create_vm("vm1".into(), &config).expect("create");
         mgr.delete_vm("vm1").expect("delete");
-        let err = mgr.get_vm("vm1").unwrap_err();
+        let err = mgr.get_vm("vm1").expect_err("should fail");
         assert!(err.to_string().contains("not found"), "got: {err}");
     }
 
     #[test]
     fn delete_nonexistent_vm_fails() {
         let (mgr, _dir) = make_manager();
-        let err = mgr.delete_vm("nope").unwrap_err();
+        let err = mgr.delete_vm("nope").expect_err("should fail");
         assert!(err.to_string().contains("not found"), "got: {err}");
     }
 
@@ -968,7 +968,7 @@ mod tests {
         let (mgr, _dir) = make_manager();
         let (config, _tmp) = make_config();
         mgr.create_vm("vm1".into(), &config).expect("create");
-        let err = mgr.stop_vm("vm1").unwrap_err();
+        let err = mgr.stop_vm("vm1").expect_err("should fail");
         assert!(err.to_string().contains("Created"), "got: {err}");
     }
 
@@ -983,9 +983,9 @@ mod tests {
         }];
         // config.net is None → port forward should be a no-op.
 
-        let _info = mgr.create_vm("port_fwd_test".into(), &config).unwrap();
+        let _info = mgr.create_vm("port_fwd_test".into(), &config).expect("create");
         // start_vm fires off an async task; just verify it doesn't panic.
-        mgr.start_vm("port_fwd_test").unwrap();
+        mgr.start_vm("port_fwd_test").expect("start");
     }
 
     #[tokio::test]

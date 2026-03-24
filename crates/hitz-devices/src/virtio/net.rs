@@ -71,16 +71,22 @@ impl VirtioNetDevice {
     /// strip the virtio-net header, and send the raw Ethernet frame
     /// to the I/O thread.
     fn process_tx(&self, queue: &mut VirtQueue, mem: &dyn GuestMemAccess) {
+        // ⚡ Bolt: Hoist buffer to eliminate multiple heap allocations per transmitted frame.
+        let mut frame_data = Vec::with_capacity(2048);
         while let Some(mut chain) = queue.pop_chain(mem) {
             let head = chain.head_index();
-            let mut frame_data = Vec::new();
+            frame_data.clear();
 
             // Collect all device-readable buffers in the chain.
             while let Some(desc) = chain.next_descriptor(mem) {
                 if !desc.is_device_writable {
-                    let mut buf = vec![0u8; desc.len as usize];
-                    if mem.read_guest(desc.gpa, &mut buf).is_ok() {
-                        frame_data.extend_from_slice(&buf);
+                    let start_len = frame_data.len();
+                    frame_data.resize(start_len + desc.len as usize, 0);
+                    if mem
+                        .read_guest(desc.gpa, &mut frame_data[start_len..])
+                        .is_err()
+                    {
+                        frame_data.truncate(start_len); // Revert on read failure
                     }
                 }
             }

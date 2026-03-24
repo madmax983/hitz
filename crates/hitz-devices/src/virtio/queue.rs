@@ -257,6 +257,7 @@ mod tests {
 
         fn write_bytes(&self, offset: u64, data: &[u8]) {
             let mut mem = self.inner.lock().unwrap();
+            #[allow(clippy::cast_possible_truncation)]
             let start = offset as usize;
             mem[start..start + data.len()].copy_from_slice(data);
         }
@@ -265,6 +266,7 @@ mod tests {
     impl GuestMemAccess for MockMem {
         fn read_guest(&self, gpa: u64, buf: &mut [u8]) -> Result<(), hitz_hal::HalError> {
             let mem = self.inner.lock().unwrap();
+            #[allow(clippy::cast_possible_truncation)]
             let start = gpa as usize;
             if start + buf.len() > mem.len() {
                 return Err(hitz_hal::HalError::MapMemory {
@@ -274,11 +276,13 @@ mod tests {
                 });
             }
             buf.copy_from_slice(&mem[start..start + buf.len()]);
+            drop(mem);
             Ok(())
         }
 
         fn write_guest(&self, gpa: u64, data: &[u8]) -> Result<(), hitz_hal::HalError> {
             let mut mem = self.inner.lock().unwrap();
+            #[allow(clippy::cast_possible_truncation)]
             let start = gpa as usize;
             if start + data.len() > mem.len() {
                 return Err(hitz_hal::HalError::MapMemory {
@@ -288,6 +292,7 @@ mod tests {
                 });
             }
             mem[start..start + data.len()].copy_from_slice(data);
+            drop(mem);
             Ok(())
         }
     }

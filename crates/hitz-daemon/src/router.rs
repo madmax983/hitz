@@ -275,7 +275,7 @@ fn daemon_error_response(err: &DaemonError) -> Response<BoxBody<Bytes, Infallibl
 
 #[cfg(test)]
 mod tests {
-    /// Compile guard: the route() function's span instrumentation must not
+    /// Compile guard: the `route()` function's span instrumentation must not
     /// break its infallible return type, and must compile with tracing imports.
     #[tokio::test]
     async fn route_span_compiles() {
