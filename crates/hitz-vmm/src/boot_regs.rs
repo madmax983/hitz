@@ -282,6 +282,7 @@ pub fn configure_regs(
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::expect_used)]
     use super::*;
 
     #[test]
@@ -344,7 +345,7 @@ mod tests {
 
     #[test]
     fn gdt_size() {
-        let limit = (GDT_ENTRY_COUNT * GDT_ENTRY_SIZE - 1) as u16;
+        let limit = u16::try_from(GDT_ENTRY_COUNT * GDT_ENTRY_SIZE - 1).expect("fits in u16");
         assert_eq!(limit, 39, "5 entries * 8 bytes - 1 = 39");
     }
 
@@ -395,9 +396,9 @@ mod tests {
         assert_eq!(seg.limit, 0);
     }
 
-    /// Smoke test: configure_regs builds a valid StandardRegs.
+    /// Smoke test: `configure_regs` builds a valid `StandardRegs`.
     ///
-    /// We can't call set_regs without a real vCPU, but we can verify the
+    /// We can't call `set_regs` without a real vCPU, but we can verify the
     /// values that would be set by calling the same logic directly.
     #[test]
     fn standard_regs_values() {
