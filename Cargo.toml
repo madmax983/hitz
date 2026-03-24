@@ -51,11 +51,6 @@ windows = { version = "0.61", features = [
     "Win32_Foundation",
     "Win32_System_Hypervisor",
 ] }
-
-# External - VMM building blocks
-vm-memory = { version = "0.18", features = ["backend-mmap"] }
-linux-loader = { version = "0.13", features = ["elf", "bzimage"] }
-virtio-queue = "0.17"
 vm-superio = "0.8"
 
 # External - networking
