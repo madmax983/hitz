@@ -13,6 +13,8 @@ path = "src/main.rs"
 workspace = true
 
 [dependencies]
+ratatui = "0.29"
+crossterm = "0.28"
 hitz-api.workspace = true
 hitz-hal.workspace = true
 hitz-vmm.workspace = true

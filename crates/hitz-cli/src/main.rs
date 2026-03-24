@@ -10,6 +10,7 @@
 #![allow(clippy::expect_used)]
 
 mod pipe_client;
+mod tui;
 
 use std::ffi::OsString;
 use std::io::{BufWriter, Write, stdout};
@@ -70,9 +71,23 @@ enum Command {
     /// VM lifecycle (requires running daemon).
     #[command(subcommand)]
     Vm(VmCommand),
+    /// TUI dashboard.
+    Tui(TuiArgs),
 }
 
 // ── Run (standalone) ──
+
+/// Arguments for the `tui` subcommand.
+#[derive(Parser)]
+struct TuiArgs {
+    /// Named pipe path.
+    #[arg(long, default_value = DEFAULT_PIPE)]
+    pipe: String,
+
+    /// Connect to daemon via TCP instead of named pipe.
+    #[arg(long)]
+    tcp: Option<std::net::SocketAddr>,
+}
 
 /// Arguments for the `run` subcommand.
 #[derive(Parser)]
@@ -654,6 +669,16 @@ fn main() -> ExitCode {
                 ExitCode::FAILURE
             }
         },
+        Command::Tui(args) => {
+            let rt = tokio::runtime::Runtime::new().expect("failed to create tokio runtime");
+            match rt.block_on(tui::run_tui(args.pipe, args.tcp)) {
+                Ok(()) => ExitCode::SUCCESS,
+                Err(e) => {
+                    eprintln!("error: {e:#}");
+                    ExitCode::FAILURE
+                }
+            }
+        }
     }
 }
 
@@ -1114,10 +1139,12 @@ mod tests {
         let cli_val = "http://cli-endpoint:4317".to_string();
         let env_val = "http://env-endpoint:4317";
         // SAFETY: single-threaded test, no other env manipulation concurrent
+        #[allow(unsafe_code)]
         unsafe {
             std::env::set_var("OTEL_EXPORTER_OTLP_ENDPOINT", env_val);
         }
         let resolved = resolve_otlp_endpoint(Some(cli_val.clone()));
+        #[allow(unsafe_code)]
         unsafe {
             std::env::remove_var("OTEL_EXPORTER_OTLP_ENDPOINT");
         }
@@ -1128,10 +1155,13 @@ mod tests {
     fn endpoint_resolution_falls_back_to_env() {
         let _guard = ENV_LOCK.lock().expect("env lock poisoned");
         let env_val = "http://env-endpoint:4317".to_string();
+        #[allow(unsafe_code)]
         unsafe {
             std::env::set_var("OTEL_EXPORTER_OTLP_ENDPOINT", &env_val);
         }
         let resolved = resolve_otlp_endpoint(None);
+        #[allow(unsafe_code)]
+        #[allow(unsafe_code)]
         unsafe {
             std::env::remove_var("OTEL_EXPORTER_OTLP_ENDPOINT");
         }
@@ -1141,6 +1171,7 @@ mod tests {
     #[test]
     fn endpoint_resolution_none_when_absent() {
         let _guard = ENV_LOCK.lock().expect("env lock poisoned");
+        #[allow(unsafe_code)]
         unsafe {
             std::env::remove_var("OTEL_EXPORTER_OTLP_ENDPOINT");
         }
@@ -1251,15 +1282,15 @@ mod tests {
     /// Requires admin privileges and `HITZ_TEST_SERVICE=1` env var.
     /// Run: `cargo test -p hitz-cli svc_ -- --ignored --test-threads=1`
     #[test]
-    #[ignore]
+    #[ignore = "requires admin and manual setup"]
     fn svc_install_and_remove() {
-        if std::env::var("HITZ_TEST_SERVICE").is_err() {
-            return;
-        }
         use windows_service::{
             service::ServiceAccess,
             service_manager::{ServiceManager, ServiceManagerAccess},
         };
+        if std::env::var("HITZ_TEST_SERVICE").is_err() {
+            return;
+        }
         // Clean up any leftover from a previous run.
         let _ = remove_service();
 
@@ -1291,7 +1322,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
+    #[ignore = "requires admin and manual setup"]
     fn svc_install_idempotent_error() {
         if std::env::var("HITZ_TEST_SERVICE").is_err() {
             return;
@@ -1317,7 +1348,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
+    #[ignore = "requires admin and manual setup"]
     fn svc_remove_nonexistent() {
         if std::env::var("HITZ_TEST_SERVICE").is_err() {
             return;
