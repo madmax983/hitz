@@ -31,4 +31,5 @@ rmp-serde.workspace              = true
 hitz-devices.workspace           = true
 
 [dev-dependencies]
+hitz-whp.workspace = true
 tempfile = "3"

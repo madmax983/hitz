@@ -726,7 +726,8 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
     /// # let state_dir = PathBuf::from("C:\\hitz\\vms");
     /// # let manager = VmManager::new(hypervisor, state_dir).unwrap();
     /// use std::time::Duration;
-    /// # tokio_test::block_on(async {
+    /// # let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+    /// # rt.block_on(async {
     /// manager.stop_all_and_wait(Duration::from_secs(5)).await;
     /// # });
     /// ```
@@ -917,14 +918,14 @@ mod tests {
         let (config1, _tmp1) = make_config();
         let (config2, _tmp2) = make_config();
         mgr.create_vm("vm1".into(), &config1).expect("create");
-        let err = mgr.create_vm("vm1".into(), &config2).unwrap_err();
+        let err = mgr.create_vm("vm1".into(), &config2).expect_err("should fail");
         assert!(err.to_string().contains("already exists"), "got: {err}");
     }
 
     #[test]
     fn get_vm_not_found() {
         let (mgr, _dir) = make_manager();
-        let err = mgr.get_vm("nope").unwrap_err();
+        let err = mgr.get_vm("nope").expect_err("should fail");
         assert!(err.to_string().contains("not found"), "got: {err}");
     }
 
@@ -964,6 +965,27 @@ mod tests {
     }
 
     #[test]
+    fn delete_running_vm_fails() {
+        let (mgr, _dir) = make_manager();
+        let (config, _tmp) = make_config();
+
+        // Setup a running VM directly in the map
+        mgr.create_vm("vm_run".into(), &config).expect("create");
+        {
+            let mut vms = mgr.vms.lock().expect("lock vms map");
+            let entry = vms.get_mut("vm_run").expect("entry present");
+            entry.state = VmState::Running;
+            drop(vms);
+        }
+
+        let err = mgr.delete_vm("vm_run").expect_err("should fail");
+        assert!(
+            err.to_string().contains("Created, Stopped, or Failed"),
+            "got: {err}"
+        );
+    }
+
+    #[test]
     fn stop_created_vm_fails() {
         let (mgr, _dir) = make_manager();
         let (config, _tmp) = make_config();
@@ -983,7 +1005,9 @@ mod tests {
         }];
         // config.net is None → port forward should be a no-op.
 
-        let _info = mgr.create_vm("port_fwd_test".into(), &config).expect("create");
+        let _info = mgr
+            .create_vm("port_fwd_test".into(), &config)
+            .expect("create");
         // start_vm fires off an async task; just verify it doesn't panic.
         mgr.start_vm("port_fwd_test").expect("start");
     }
@@ -998,6 +1022,24 @@ mod tests {
         // start_vm spawns an async task; synchronous metric setup happens before spawn.
         // This verifies the counter/gauge creation path doesn't panic.
         let _info = mgr.start_vm("m1").expect("start");
+    }
+
+    #[test]
+    fn stop_stopped_vm_fails() {
+        let (mgr, _dir) = make_manager();
+        let (config, _tmp) = make_config();
+
+        // Setup a stopped VM directly in the map
+        mgr.create_vm("vm_stop".into(), &config).expect("create");
+        {
+            let mut vms = mgr.vms.lock().expect("lock vms map");
+            let entry = vms.get_mut("vm_stop").expect("entry present");
+            entry.state = VmState::Stopped;
+            drop(vms);
+        }
+
+        let err = mgr.stop_vm("vm_stop").expect_err("should fail");
+        assert!(err.to_string().contains("Running"), "got: {err}");
     }
 
     #[test]
@@ -1038,5 +1080,66 @@ mod tests {
         // Returns None since no vsock channels in test mode (push-to-OTel only).
         let result = mgr.request_metrics_snapshot("v1");
         assert!(result.is_none());
+    }
+
+    #[test]
+    fn stop_all_sets_stop_flag() {
+        let (mgr, _dir) = make_manager();
+        let (config, _tmp) = make_config();
+
+        let flag = Arc::new(AtomicBool::new(false));
+        mgr.create_vm("vm_run1".into(), &config).expect("create");
+        mgr.create_vm("vm_run2".into(), &config).expect("create");
+
+        {
+            let mut vms = mgr.vms.lock().expect("lock vms map");
+            let entry1 = vms.get_mut("vm_run1").expect("entry present");
+            entry1.state = VmState::Running;
+            entry1.stop_flag = Some(flag.clone());
+
+            let entry2 = vms.get_mut("vm_run2").expect("entry present");
+            // Don't set stop flag for vm_run2. It should skip gracefully
+            entry2.state = VmState::Running;
+            drop(vms);
+        }
+
+        mgr.stop_all();
+
+        assert!(
+            flag.load(Ordering::Relaxed),
+            "stop_flag should be set to true by stop_all"
+        );
+    }
+
+    #[tokio::test]
+    async fn stop_all_and_wait_completes() {
+        let (mgr, _dir) = make_manager();
+        let (config, _tmp) = make_config();
+
+        let flag = Arc::new(AtomicBool::new(false));
+        mgr.create_vm("vm_run1".into(), &config).expect("create");
+
+        {
+            let mut vms = mgr.vms.lock().expect("lock vms map");
+            let entry1 = vms.get_mut("vm_run1").expect("entry present");
+            entry1.state = VmState::Running;
+            entry1.stop_flag = Some(flag.clone());
+            drop(vms);
+        }
+
+        // Simulate VM completion channel
+        let tx = mgr.completion_tx.clone();
+        tokio::spawn(async move {
+            tokio::task::yield_now().await;
+            let _ = tx.send("vm_run1".into());
+        });
+
+        // This should complete successfully and set the flag
+        mgr.stop_all_and_wait(Duration::from_secs(2)).await;
+
+        assert!(
+            flag.load(Ordering::Relaxed),
+            "stop_flag should be set to true by stop_all_and_wait"
+        );
     }
 }

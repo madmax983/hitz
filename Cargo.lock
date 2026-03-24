@@ -617,6 +617,7 @@ dependencies = [
  "hitz-devices",
  "hitz-hal",
  "hitz-vmm",
+ "hitz-whp",
  "http-body-util",
  "hyper",
  "hyper-util",
