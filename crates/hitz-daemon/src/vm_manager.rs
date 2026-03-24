@@ -983,7 +983,9 @@ mod tests {
         }];
         // config.net is None → port forward should be a no-op.
 
-        let _info = mgr.create_vm("port_fwd_test".into(), &config).expect("create");
+        let _info = mgr
+            .create_vm("port_fwd_test".into(), &config)
+            .expect("create");
         // start_vm fires off an async task; just verify it doesn't panic.
         mgr.start_vm("port_fwd_test").expect("start");
     }

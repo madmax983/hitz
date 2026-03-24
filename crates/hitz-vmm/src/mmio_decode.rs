@@ -239,6 +239,7 @@ pub const fn set_register(regs: &mut StandardRegs, idx: u8, val: u64) {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::expect_used)]
     use super::*;
 
     // -- decode_mmio_instruction tests ----------------------------------------
@@ -441,23 +442,25 @@ mod tests {
 
     #[test]
     fn register_value_all_indices() {
-        let mut regs = StandardRegs::default();
-        regs.rax = 100;
-        regs.rcx = 101;
-        regs.rdx = 102;
-        regs.rbx = 103;
-        regs.rsp = 104;
-        regs.rbp = 105;
-        regs.rsi = 106;
-        regs.rdi = 107;
-        regs.r8 = 108;
-        regs.r9 = 109;
-        regs.r10 = 110;
-        regs.r11 = 111;
-        regs.r12 = 112;
-        regs.r13 = 113;
-        regs.r14 = 114;
-        regs.r15 = 115;
+        let regs = StandardRegs {
+            rax: 100,
+            rcx: 101,
+            rdx: 102,
+            rbx: 103,
+            rsp: 104,
+            rbp: 105,
+            rsi: 106,
+            rdi: 107,
+            r8: 108,
+            r9: 109,
+            r10: 110,
+            r11: 111,
+            r12: 112,
+            r13: 113,
+            r14: 114,
+            r15: 115,
+            ..Default::default()
+        };
 
         for i in 0..16u8 {
             assert_eq!(

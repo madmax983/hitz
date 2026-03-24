@@ -302,6 +302,7 @@ fn virtual_alloc(size: usize) -> Option<*mut u8> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::expect_used)]
     use super::*;
 
     #[test]
