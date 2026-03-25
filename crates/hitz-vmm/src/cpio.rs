@@ -6,6 +6,8 @@
 //! Format: each entry = 110-byte ASCII header + filename (null-term, 4-byte
 //! padded) + file data (4-byte padded). Ends with a TRAILER!!! entry.
 
+use std::io::Write;
+
 /// Builds a newc cpio archive in memory.
 pub struct CpioBuilder {
     data: Vec<u8>,
@@ -51,7 +53,9 @@ impl CpioBuilder {
         let filesize32 = filesize as u32;
 
         // 110-byte ASCII header.
-        let header = format!(
+        let start_len = self.data.len();
+        let _ = write!(
+            &mut self.data,
             "070701{:08x}{:08x}{:08x}{:08x}{:08x}{:08x}{:08x}{:08x}{:08x}{:08x}{:08x}{:08x}{:08x}",
             self.inode, // ino
             mode,       // mode
@@ -67,10 +71,13 @@ impl CpioBuilder {
             namesize32, // namesize
             0u32,       // check (always 0 for newc)
         );
-        assert_eq!(header.len(), 110, "cpio header must be 110 bytes");
+        assert_eq!(
+            self.data.len() - start_len,
+            110,
+            "cpio header must be 110 bytes"
+        );
 
         self.inode += 1;
-        self.data.extend_from_slice(header.as_bytes());
 
         // Filename + null terminator, padded to 4-byte boundary.
         self.data.extend_from_slice(name.as_bytes());
