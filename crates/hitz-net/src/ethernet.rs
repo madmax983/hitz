@@ -234,6 +234,9 @@ pub fn random_mac() -> [u8; 6] {
 ///
 /// Returns an error string if the format is invalid.
 pub fn parse_mac(s: &str) -> Result<[u8; 6], String> {
+    if s.len() > 17 {
+        return Err(format!("input too long for MAC address (len {})", s.len()));
+    }
     let parts: Vec<&str> = s.split(':').collect();
     if parts.len() != 6 {
         return Err(format!(
@@ -259,6 +262,9 @@ pub fn parse_mac(s: &str) -> Result<[u8; 6], String> {
 ///
 /// Returns an error string if the format is invalid.
 pub fn parse_cidr(s: &str) -> Result<([u8; 4], u8), String> {
+    if s.len() > 18 {
+        return Err(format!("input too long for CIDR (len {})", s.len()));
+    }
     let parts: Vec<&str> = s.splitn(2, '/').collect();
     if parts.len() != 2 {
         return Err("expected format: A.B.C.D/prefix".to_string());
@@ -434,5 +440,19 @@ mod tests {
         // Unknown version falls back to IPv4.
         let unknown = [0x30]; // version nibble = 3
         assert_eq!(ethertype_from_ip(&unknown), ETHERTYPE_IPV4);
+    }
+
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn havoc_fuzz_parse_mac(s in ".*") {
+            let _ = parse_mac(&s);
+        }
+
+        #[test]
+        fn havoc_fuzz_parse_cidr(s in ".*") {
+            let _ = parse_cidr(&s);
+        }
     }
 }
