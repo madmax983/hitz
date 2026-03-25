@@ -1,3 +1,9 @@
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::cast_possible_truncation,
+    clippy::identity_op
+)]
 //! Identity-mapped x86-64 page table generation.
 //!
 //! Builds 4-level page tables using 2 MiB huge pages. The output is a

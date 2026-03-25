@@ -2,12 +2,12 @@
 //!
 //! ELF/bzImage loading, `boot_params` construction, identity-mapped page tables.
 
-pub mod acpi;
-pub mod boot_params;
-pub mod error;
-pub mod initramfs;
-pub mod loader;
-pub mod page_tables;
+pub(crate) mod acpi;
+pub(crate) mod boot_params;
+pub(crate) mod error;
+pub(crate) mod initramfs;
+pub(crate) mod loader;
+pub(crate) mod page_tables;
 
 pub use acpi::{MADT_GPA, RSDP_GPA, XSDT_GPA, build_madt, build_rsdp, build_xsdt};
 pub use boot_params::{

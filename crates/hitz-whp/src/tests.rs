@@ -1,3 +1,4 @@
+#![allow(clippy::items_after_statements)]
 //! WHP lifecycle integration tests.
 //!
 //! These tests require Windows Hypervisor Platform to be enabled.
@@ -381,7 +382,7 @@ fn make_boot_elf(load_addr: u64, code: &[u8]) -> Vec<u8> {
 #[ignore = "requires WHP enabled (Hyper-V)"]
 fn phase1_boot_elf_to_io_port_exit() {
     use hitz_boot::{BOOT_PARAMS_GPA, CMDLINE_GPA, build_boot_params, build_page_tables, load_elf};
-    use hitz_vmm::{GuestMemory, boot_regs};
+    use hitz_vmm::{GuestMemory, configure_regs, configure_sregs, write_gdt};
 
     // x86-64 machine code:
     //   mov al, 0x42          ; B0 42
@@ -427,7 +428,7 @@ fn phase1_boot_elf_to_io_port_exit() {
         .expect("write cmdline failed");
 
     // ── 5. Write GDT ──
-    boot_regs::write_gdt(&guest_mem).expect("write_gdt failed");
+    write_gdt(&guest_mem).expect("write_gdt failed");
 
     // ── 6. Load ELF ──
     let load_result = load_elf(&elf, &guest_mem).expect("load_elf failed");
@@ -450,8 +451,8 @@ fn phase1_boot_elf_to_io_port_exit() {
         .create_vcpu(VcpuId::new(0))
         .expect("create_vcpu failed");
 
-    boot_regs::configure_sregs(&mut vcpu, pml4_gpa).expect("configure_sregs failed");
-    boot_regs::configure_regs(
+    configure_sregs(&mut vcpu, pml4_gpa).expect("configure_sregs failed");
+    configure_regs(
         &mut vcpu,
         load_result.entry_point,
         Gpa::new(BOOT_PARAMS_GPA),
@@ -479,7 +480,7 @@ fn phase1_boot_elf_to_io_port_exit() {
 /// Returns `(partition, vcpu, guest_mem)` — caller owns the lifetime.
 fn boot_elf_pipeline(code: &[u8]) -> (crate::WhpPartition, crate::WhpVcpu, hitz_vmm::GuestMemory) {
     use hitz_boot::{BOOT_PARAMS_GPA, CMDLINE_GPA, build_boot_params, build_page_tables, load_elf};
-    use hitz_vmm::{GuestMemory, boot_regs};
+    use hitz_vmm::{GuestMemory, configure_regs, configure_sregs, write_gdt};
 
     let load_addr = 0x10_0000u64;
     let elf = make_boot_elf(load_addr, code);
@@ -508,7 +509,7 @@ fn boot_elf_pipeline(code: &[u8]) -> (crate::WhpPartition, crate::WhpVcpu, hitz_
         .write_slice(Gpa::new(CMDLINE_GPA), cmdline)
         .expect("write cmdline failed");
 
-    boot_regs::write_gdt(&guest_mem).expect("write_gdt failed");
+    write_gdt(&guest_mem).expect("write_gdt failed");
 
     let load_result = load_elf(&elf, &guest_mem).expect("load_elf failed");
 
@@ -527,8 +528,8 @@ fn boot_elf_pipeline(code: &[u8]) -> (crate::WhpPartition, crate::WhpVcpu, hitz_
         .create_vcpu(VcpuId::new(0))
         .expect("create_vcpu failed");
 
-    boot_regs::configure_sregs(&mut vcpu, pml4_gpa).expect("configure_sregs failed");
-    boot_regs::configure_regs(
+    configure_sregs(&mut vcpu, pml4_gpa).expect("configure_sregs failed");
+    configure_regs(
         &mut vcpu,
         load_result.entry_point,
         Gpa::new(BOOT_PARAMS_GPA),
@@ -551,9 +552,9 @@ fn phase2_serial_output_from_elf() {
     use std::sync::Mutex;
     use std::sync::atomic::AtomicBool;
 
-    use hitz_devices::mmio_bus::MmioBus;
-    use hitz_devices::serial::SerialDevice;
-    use hitz_vmm::run_loop::{ExitReason, SharedDevices, run_vcpu_loop};
+    use hitz_devices::MmioBus;
+    use hitz_devices::SerialDevice;
+    use hitz_vmm::{ExitReason, SharedDevices, run_vcpu_loop};
 
     // x86-64 machine code that writes "Hello" to COM1 (0x3F8) then halts.
     //
@@ -614,9 +615,9 @@ fn phase2_serial_in_reads_lsr() {
     use std::sync::Mutex;
     use std::sync::atomic::AtomicBool;
 
-    use hitz_devices::mmio_bus::MmioBus;
-    use hitz_devices::serial::SerialDevice;
-    use hitz_vmm::run_loop::{ExitReason, SharedDevices, run_vcpu_loop};
+    use hitz_devices::MmioBus;
+    use hitz_devices::SerialDevice;
+    use hitz_vmm::{ExitReason, SharedDevices, run_vcpu_loop};
 
     // x86-64 machine code:
     //   mov edx, 0x3FD        ; BA FD 03 00 00   — COM1 LSR
@@ -736,11 +737,11 @@ fn phase3_virtio_mmio_magic_read() {
     use std::sync::atomic::AtomicBool;
     use std::sync::{Arc, Mutex};
 
-    use hitz_devices::mmio_bus::MmioBus;
-    use hitz_devices::serial::SerialDevice;
-    use hitz_devices::virtio::block::VirtioBlockDevice;
-    use hitz_devices::virtio::mmio_transport::VirtioMmioTransport;
-    use hitz_vmm::run_loop::{ExitReason, SharedDevices, run_vcpu_loop};
+    use hitz_devices::MmioBus;
+    use hitz_devices::SerialDevice;
+    use hitz_devices::VirtioBlockDevice;
+    use hitz_devices::VirtioMmioTransport;
+    use hitz_vmm::{ExitReason, SharedDevices, run_vcpu_loop};
 
     // x86-64 machine code:
     //   mov ebx, 0xD0000000     ; MMIO base (unmapped GPA)
@@ -830,11 +831,11 @@ fn phase3_virtio_block_read() {
     use std::sync::atomic::AtomicBool;
     use std::sync::{Arc, Mutex};
 
-    use hitz_devices::mmio_bus::MmioBus;
-    use hitz_devices::serial::SerialDevice;
-    use hitz_devices::virtio::block::VirtioBlockDevice;
-    use hitz_devices::virtio::mmio_transport::VirtioMmioTransport;
-    use hitz_vmm::run_loop::{ExitReason, SharedDevices, run_vcpu_loop};
+    use hitz_devices::MmioBus;
+    use hitz_devices::SerialDevice;
+    use hitz_devices::VirtioBlockDevice;
+    use hitz_devices::VirtioMmioTransport;
+    use hitz_vmm::{ExitReason, SharedDevices, run_vcpu_loop};
 
     const IRQ_VECTOR: u8 = 5;
 
@@ -991,11 +992,11 @@ fn phase4_apic_interrupt_delivery() {
     use std::sync::atomic::AtomicBool;
     use std::sync::{Arc, Mutex};
 
-    use hitz_devices::mmio_bus::MmioBus;
-    use hitz_devices::serial::SerialDevice;
-    use hitz_devices::virtio::block::VirtioBlockDevice;
-    use hitz_devices::virtio::mmio_transport::VirtioMmioTransport;
-    use hitz_vmm::run_loop::{ExitReason, SharedDevices, run_vcpu_loop};
+    use hitz_devices::MmioBus;
+    use hitz_devices::SerialDevice;
+    use hitz_devices::VirtioBlockDevice;
+    use hitz_devices::VirtioMmioTransport;
+    use hitz_vmm::{ExitReason, SharedDevices, run_vcpu_loop};
 
     const IRQ_VECTOR: u8 = 5;
 
@@ -1182,10 +1183,10 @@ fn phase4_boot_real_linux() {
         BOOT_PARAMS_GPA, CMDLINE_GPA, build_boot_params, build_page_tables, load_elf,
         load_initramfs, set_initramfs_params,
     };
-    use hitz_devices::mmio_bus::MmioBus;
-    use hitz_devices::serial::SerialDevice;
-    use hitz_vmm::run_loop::{SharedDevices, run_vcpu_loop};
-    use hitz_vmm::{GuestMemory, boot_regs};
+    use hitz_devices::MmioBus;
+    use hitz_devices::SerialDevice;
+    use hitz_vmm::{GuestMemory, configure_regs, configure_sregs, write_gdt};
+    use hitz_vmm::{SharedDevices, run_vcpu_loop};
 
     // ── 1. Read env vars (skip if not set) ──
     let vmlinux_path = match std::env::var("HITZ_VMLINUX") {
@@ -1269,7 +1270,7 @@ fn phase4_boot_real_linux() {
         .expect("write cmdline failed");
 
     // ── 8. Write GDT ──
-    boot_regs::write_gdt(&guest_mem).expect("write_gdt failed");
+    write_gdt(&guest_mem).expect("write_gdt failed");
 
     // ── 9. Create WHP partition (now with APIC) + map memory ──
     let hv = WhpHypervisor::new().expect("WHP not available");
@@ -1288,8 +1289,8 @@ fn phase4_boot_real_linux() {
         .create_vcpu(VcpuId::new(0))
         .expect("create_vcpu failed");
 
-    boot_regs::configure_sregs(&mut vcpu, pml4_gpa).expect("configure_sregs failed");
-    boot_regs::configure_regs(
+    configure_sregs(&mut vcpu, pml4_gpa).expect("configure_sregs failed");
+    configure_regs(
         &mut vcpu,
         load_result.entry_point,
         Gpa::new(BOOT_PARAMS_GPA),
@@ -2037,7 +2038,7 @@ fn phase10_port_forward_tcp() {
 /// This is a compile + behavior test, not a metric correctness test.
 /// Run with: cargo test -p hitz-whp -- --ignored phase11
 #[test]
-#[ignore]
+#[ignore = "temporarily disabled"]
 fn phase11_otel_noop_boot() {
     // No TelemetryGuard initialised → global providers are no-ops.
     // This ensures our instrumentation doesn't add any required setup steps.

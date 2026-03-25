@@ -134,7 +134,7 @@ impl VirtQueue {
     ///
     /// `head_idx` is the descriptor chain head (from [`DescriptorChain::head_index`]).
     /// `len` is the total number of bytes written to device-writable descriptors.
-    pub fn push_used(&mut self, mem: &dyn GuestMemAccess, head_idx: u16, len: u32) {
+    pub fn push_used(&self, mem: &dyn GuestMemAccess, head_idx: u16, len: u32) {
         // Read current used.idx.
         let Some(used_idx) = read_u16(mem, self.used_gpa + 2) else {
             return;
@@ -437,7 +437,7 @@ mod tests {
     #[test]
     fn push_used_updates_ring() {
         let mem = MockMem::new(0x4000);
-        let mut q = make_ready_queue(&mem);
+        let q = make_ready_queue(&mem);
 
         // Push two used entries.
         q.push_used(&mem, 3, 512);

@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::expect_used)]
 //! ACPI table construction for SMP boot.
 //!
 //! Builds RSDP, XSDT, and MADT (Multiple APIC Description Table) so the

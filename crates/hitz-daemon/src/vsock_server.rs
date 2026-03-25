@@ -5,7 +5,7 @@
 
 use crossbeam_channel::{Receiver, Sender};
 use hitz_api::{MetricsSnapshot, VSOCK_METRICS_PORT};
-use hitz_devices::virtio::vsock::{VSOCK_BUF_ALLOC, VsockHdr, VsockOp, VsockPacket};
+use hitz_devices::{VSOCK_BUF_ALLOC, VsockHdr, VsockOp, VsockPacket};
 use opentelemetry::KeyValue;
 use tokio::sync::watch;
 

@@ -9,8 +9,8 @@ use std::io::Write;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use hitz_devices::mmio_bus::MmioBus;
-use hitz_devices::serial::SerialDevice;
+use hitz_devices::MmioBus;
+use hitz_devices::SerialDevice;
 use hitz_hal::{GuestMemAccess, HalError, IoPortExit, Vcpu, VcpuExit};
 use opentelemetry::KeyValue;
 use opentelemetry::metrics::Counter;

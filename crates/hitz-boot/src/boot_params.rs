@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::expect_used)]
 //! Linux boot protocol zero page (`boot_params`) construction.
 //!
 //! The Linux kernel expects a 4096-byte "zero page" at a well-known GPA
