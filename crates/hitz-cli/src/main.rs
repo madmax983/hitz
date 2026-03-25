@@ -994,8 +994,310 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
 
 // ── hitz vm * ──
 
+async fn handle_vm_create(args: &VmCreateArgs) -> Result<()> {
+    let net = if args.net {
+        Some(hitz_api::NetConfig {
+            mac: args.mac.clone(),
+            host_ip: args.host_ip.clone(),
+            guest_ip: args.guest_ip.clone(),
+            adapter_name: None,
+        })
+    } else {
+        None
+    };
+    let config = VmConfig {
+        kernel_path: args.kernel.clone(),
+        initramfs_path: args.initramfs.clone(),
+        disk_path: args.disk.clone(),
+        ram_mib: args.ram,
+        cpus: args.cpus,
+        cmdline: Some(args.cmdline.clone()),
+        net,
+        ports: args.ports.clone(),
+        guest_cid: DEFAULT_GUEST_CID,
+        guest_agent: GuestAgentMode::Auto,
+    };
+    let body = serde_json::to_string(&CreateVmRequest { config }).context("serialize request")?;
+    let (status, resp) = pipe_client::pipe_request(
+        &args.pipe,
+        args.tcp,
+        Method::PUT,
+        &format!("/vms/{}", args.id),
+        Some(&body),
+    )
+    .await?;
+    if status.is_success() {
+        println!("{status}: {resp}");
+    } else if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(&resp) {
+        use crossterm::style::Stylize;
+        println!("{}", err.message.red());
+    } else {
+        println!("{status}: {resp}");
+    }
+    Ok(())
+}
+
+async fn handle_vm_clone(args: &VmCloneArgs) -> Result<()> {
+    let body = serde_json::to_string(&CloneVmRequest {
+        dest_id: args.dest_id.clone(),
+    })
+    .context("serialize request")?;
+    let (status, resp) = pipe_client::pipe_request(
+        &args.pipe,
+        args.tcp,
+        Method::POST,
+        &format!("/vms/{}/clone", args.src_id),
+        Some(&body),
+    )
+    .await?;
+    if status.is_success() {
+        println!("{status}: {resp}");
+    } else if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(&resp) {
+        use crossterm::style::Stylize;
+        println!("{}", err.message.red());
+    } else {
+        println!("{status}: {resp}");
+    }
+    Ok(())
+}
+
+async fn handle_vm_start(args: &VmIdArgs) -> Result<()> {
+    let body = serde_json::to_string(&ActionVmRequest {
+        action: VmAction::Start,
+    })
+    .context("serialize request")?;
+    let (status, resp) = pipe_client::pipe_request(
+        &args.pipe,
+        args.tcp,
+        Method::POST,
+        &format!("/vms/{}/action", args.id),
+        Some(&body),
+    )
+    .await?;
+    if status.is_success() {
+        println!("{status}: {resp}");
+    } else if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(&resp) {
+        use crossterm::style::Stylize;
+        println!("{}", err.message.red());
+    } else {
+        println!("{status}: {resp}");
+    }
+    Ok(())
+}
+
+async fn handle_vm_stop(args: &VmIdArgs) -> Result<()> {
+    let body = serde_json::to_string(&ActionVmRequest {
+        action: VmAction::Stop,
+    })
+    .context("serialize request")?;
+    let (status, resp) = pipe_client::pipe_request(
+        &args.pipe,
+        args.tcp,
+        Method::POST,
+        &format!("/vms/{}/action", args.id),
+        Some(&body),
+    )
+    .await?;
+    if status.is_success() {
+        println!("{status}: {resp}");
+    } else if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(&resp) {
+        use crossterm::style::Stylize;
+        println!("{}", err.message.red());
+    } else {
+        println!("{status}: {resp}");
+    }
+    Ok(())
+}
+
+async fn handle_vm_status(args: &VmIdArgs) -> Result<()> {
+    let (status, resp) = pipe_client::pipe_request(
+        &args.pipe,
+        args.tcp,
+        Method::GET,
+        &format!("/vms/{}", args.id),
+        None,
+    )
+    .await?;
+    if status.is_success() {
+        if let Ok(info) = serde_json::from_str::<hitz_api::VmInfo>(&resp) {
+            use comfy_table::presets::NOTHING;
+            use comfy_table::{Cell, Color, Table};
+
+            let mut table = Table::new();
+            let _ = table.load_preset(NOTHING);
+
+            let state_cell = match info.state {
+                hitz_api::VmState::Running => Cell::new("Running").fg(Color::Green),
+                hitz_api::VmState::Stopped => Cell::new("Stopped").fg(Color::Yellow),
+                hitz_api::VmState::Failed => Cell::new("Failed").fg(Color::Red),
+                hitz_api::VmState::Created => Cell::new("Created").fg(Color::Cyan),
+            };
+
+            let _ = table.add_row(vec![
+                Cell::new("ID:").add_attribute(comfy_table::Attribute::Bold),
+                Cell::new(&info.id),
+            ]);
+            let _ = table.add_row(vec![
+                Cell::new("State:").add_attribute(comfy_table::Attribute::Bold),
+                state_cell,
+            ]);
+            let _ = table.add_row(vec![
+                Cell::new("Kernel:").add_attribute(comfy_table::Attribute::Bold),
+                Cell::new(info.config.kernel_path.display().to_string()),
+            ]);
+            let _ = table.add_row(vec![
+                Cell::new("RAM:").add_attribute(comfy_table::Attribute::Bold),
+                Cell::new(format!("{} MiB", info.config.ram_mib)),
+            ]);
+            let _ = table.add_row(vec![
+                Cell::new("CPUs:").add_attribute(comfy_table::Attribute::Bold),
+                Cell::new(info.config.cpus.to_string()),
+            ]);
+
+            if !info.config.ports.is_empty() {
+                let ports: Vec<String> = info
+                    .config
+                    .ports
+                    .iter()
+                    .map(|p| format!("0.0.0.0:{} -> {}", p.host_port, p.guest_port))
+                    .collect();
+                let _ = table.add_row(vec![
+                    Cell::new("Ports:").add_attribute(comfy_table::Attribute::Bold),
+                    Cell::new(ports.join(", ")),
+                ]);
+            }
+            if let Some(reason) = &info.exit_reason {
+                let _ = table.add_row(vec![
+                    Cell::new("Exit:").add_attribute(comfy_table::Attribute::Bold),
+                    Cell::new(reason),
+                ]);
+            }
+
+            println!("{table}");
+        } else {
+            println!("{status}: {resp}");
+        }
+    } else if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(&resp) {
+        use crossterm::style::Stylize;
+        println!("{}", err.message.red());
+    } else {
+        println!("{status}: {resp}");
+    }
+    Ok(())
+}
+
+async fn handle_vm_list(args: &VmListArgs) -> Result<()> {
+    let (status, resp) =
+        pipe_client::pipe_request(&args.pipe, args.tcp, Method::GET, "/vms", None).await?;
+    if status.is_success() {
+        if let Ok(vms) = serde_json::from_str::<Vec<hitz_api::VmInfo>>(&resp) {
+            use comfy_table::{Cell, Color, Table};
+            let mut table = Table::new();
+            let _ = table.set_header(vec!["ID", "State", "RAM (MiB)", "CPUs", "Exit Reason"]);
+
+            for info in vms {
+                let state_cell = match info.state {
+                    hitz_api::VmState::Running => Cell::new("Running").fg(Color::Green),
+                    hitz_api::VmState::Stopped => Cell::new("Stopped").fg(Color::Yellow),
+                    hitz_api::VmState::Failed => Cell::new("Failed").fg(Color::Red),
+                    hitz_api::VmState::Created => Cell::new("Created").fg(Color::Cyan),
+                };
+                let exit_reason = info.exit_reason.unwrap_or_else(|| "-".to_string());
+                let _ = table.add_row(vec![
+                    Cell::new(&info.id),
+                    state_cell,
+                    Cell::new(info.config.ram_mib.to_string()),
+                    Cell::new(info.config.cpus.to_string()),
+                    Cell::new(exit_reason),
+                ]);
+            }
+            println!("{table}");
+        } else {
+            println!("{status}: {resp}");
+        }
+    } else if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(&resp) {
+        use crossterm::style::Stylize;
+        println!("{}", err.message.red());
+    } else {
+        println!("{status}: {resp}");
+    }
+    Ok(())
+}
+
+async fn handle_vm_delete(args: &VmIdArgs) -> Result<()> {
+    let (status, resp) = pipe_client::pipe_request(
+        &args.pipe,
+        args.tcp,
+        Method::DELETE,
+        &format!("/vms/{}", args.id),
+        None,
+    )
+    .await?;
+    if status.is_success() {
+        println!("deleted {}", args.id);
+    } else if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(&resp) {
+        use crossterm::style::Stylize;
+        println!("{}", err.message.red());
+    } else {
+        println!("{status}: {resp}");
+    }
+    Ok(())
+}
+
+async fn handle_vm_serial(args: &VmIdArgs) -> Result<()> {
+    use http_body_util::BodyExt as _;
+
+    let resp =
+        pipe_client::request_stream(&args.pipe, args.tcp, &format!("/vms/{}/serial", args.id))
+            .await?;
+
+    let status = resp.status();
+    let mut body = resp.into_body();
+
+    if !status.is_success() {
+        let collected = body.collect().await.context("read error body")?.to_bytes();
+        let text = String::from_utf8_lossy(&collected);
+        anyhow::bail!("serial stream failed ({status}): {text}");
+    }
+
+    let mut out = stdout();
+    while let Some(frame_result) = body.frame().await {
+        match frame_result {
+            Ok(frame) => {
+                if let Some(data) = frame.data_ref() {
+                    out.write_all(data)?;
+                    out.flush()?;
+                }
+            }
+            Err(e) => {
+                eprintln!("stream error: {e}");
+                break;
+            }
+        }
+    }
+    Ok(())
+}
+
+async fn handle_vm_metrics(args: &VmIdArgs) -> Result<()> {
+    let (status, resp) = pipe_client::pipe_request(
+        &args.pipe,
+        args.tcp,
+        Method::GET,
+        &format!("/vms/{}/metrics", args.id),
+        None,
+    )
+    .await?;
+    if status.is_success() {
+        let snap: hitz_api::MetricsSnapshot =
+            serde_json::from_str(&resp).context("failed to parse metrics response")?;
+        print!("{}", format_metrics_snapshot(&snap));
+    } else {
+        println!("{status}: {resp}");
+    }
+    Ok(())
+}
+
 /// Execute a `vm` subcommand by talking to the daemon over the named pipe.
-#[allow(clippy::too_many_lines)]
 fn run_vm_command(cmd: VmCommand) -> Result<()> {
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -1004,306 +1306,16 @@ fn run_vm_command(cmd: VmCommand) -> Result<()> {
 
     rt.block_on(async {
         match cmd {
-            VmCommand::Create(args) => {
-                let net = if args.net {
-                    Some(hitz_api::NetConfig {
-                        mac: args.mac,
-                        host_ip: args.host_ip,
-                        guest_ip: args.guest_ip,
-                        adapter_name: None,
-                    })
-                } else {
-                    None
-                };
-                let config = VmConfig {
-                    kernel_path: args.kernel,
-                    initramfs_path: args.initramfs,
-                    disk_path: args.disk,
-                    ram_mib: args.ram,
-                    cpus: args.cpus,
-                    cmdline: Some(args.cmdline),
-                    net,
-                    ports: args.ports,
-                    guest_cid: DEFAULT_GUEST_CID,
-                    guest_agent: GuestAgentMode::Auto,
-                };
-                let body = serde_json::to_string(&CreateVmRequest { config })
-                    .context("serialize request")?;
-                let (status, resp) = pipe_client::pipe_request(
-                    &args.pipe,
-                    args.tcp,
-                    Method::PUT,
-                    &format!("/vms/{}", args.id),
-                    Some(&body),
-                )
-                .await?;
-                if status.is_success() {
-                    println!("{status}: {resp}");
-                } else if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(&resp) {
-                    use crossterm::style::Stylize;
-                    println!("{}", err.message.red());
-                } else {
-                    println!("{status}: {resp}");
-                }
-            }
-            VmCommand::Clone(args) => {
-                let body = serde_json::to_string(&CloneVmRequest {
-                    dest_id: args.dest_id.clone(),
-                })
-                .context("serialize request")?;
-                let (status, resp) = pipe_client::pipe_request(
-                    &args.pipe,
-                    args.tcp,
-                    Method::POST,
-                    &format!("/vms/{}/clone", args.src_id),
-                    Some(&body),
-                )
-                .await?;
-                if status.is_success() {
-                    println!("{status}: {resp}");
-                } else if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(&resp) {
-                    use crossterm::style::Stylize;
-                    println!("{}", err.message.red());
-                } else {
-                    println!("{status}: {resp}");
-                }
-            }
-            VmCommand::Start(args) => {
-                let body = serde_json::to_string(&ActionVmRequest {
-                    action: VmAction::Start,
-                })
-                .context("serialize request")?;
-                let (status, resp) = pipe_client::pipe_request(
-                    &args.pipe,
-                    args.tcp,
-                    Method::POST,
-                    &format!("/vms/{}/action", args.id),
-                    Some(&body),
-                )
-                .await?;
-                if status.is_success() {
-                    println!("{status}: {resp}");
-                } else if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(&resp) {
-                    use crossterm::style::Stylize;
-                    println!("{}", err.message.red());
-                } else {
-                    println!("{status}: {resp}");
-                }
-            }
-            VmCommand::Stop(args) => {
-                let body = serde_json::to_string(&ActionVmRequest {
-                    action: VmAction::Stop,
-                })
-                .context("serialize request")?;
-                let (status, resp) = pipe_client::pipe_request(
-                    &args.pipe,
-                    args.tcp,
-                    Method::POST,
-                    &format!("/vms/{}/action", args.id),
-                    Some(&body),
-                )
-                .await?;
-                if status.is_success() {
-                    println!("{status}: {resp}");
-                } else if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(&resp) {
-                    use crossterm::style::Stylize;
-                    println!("{}", err.message.red());
-                } else {
-                    println!("{status}: {resp}");
-                }
-            }
-            VmCommand::Status(args) => {
-                let (status, resp) = pipe_client::pipe_request(
-                    &args.pipe,
-                    args.tcp,
-                    Method::GET,
-                    &format!("/vms/{}", args.id),
-                    None,
-                )
-                .await?;
-                if status.is_success() {
-                    if let Ok(info) = serde_json::from_str::<hitz_api::VmInfo>(&resp) {
-                        use comfy_table::presets::NOTHING;
-                        use comfy_table::{Cell, Color, Table};
-
-                        let mut table = Table::new();
-                        let _ = table.load_preset(NOTHING);
-
-                        let state_cell = match info.state {
-                            hitz_api::VmState::Running => Cell::new("Running").fg(Color::Green),
-                            hitz_api::VmState::Stopped => Cell::new("Stopped").fg(Color::Yellow),
-                            hitz_api::VmState::Failed => Cell::new("Failed").fg(Color::Red),
-                            hitz_api::VmState::Created => Cell::new("Created").fg(Color::Cyan),
-                        };
-
-                        let _ = table.add_row(vec![
-                            Cell::new("ID:").add_attribute(comfy_table::Attribute::Bold),
-                            Cell::new(&info.id),
-                        ]);
-                        let _ = table.add_row(vec![
-                            Cell::new("State:").add_attribute(comfy_table::Attribute::Bold),
-                            state_cell,
-                        ]);
-                        let _ = table.add_row(vec![
-                            Cell::new("Kernel:").add_attribute(comfy_table::Attribute::Bold),
-                            Cell::new(info.config.kernel_path.display().to_string()),
-                        ]);
-                        let _ = table.add_row(vec![
-                            Cell::new("RAM:").add_attribute(comfy_table::Attribute::Bold),
-                            Cell::new(format!("{} MiB", info.config.ram_mib)),
-                        ]);
-                        let _ = table.add_row(vec![
-                            Cell::new("CPUs:").add_attribute(comfy_table::Attribute::Bold),
-                            Cell::new(info.config.cpus.to_string()),
-                        ]);
-
-                        if !info.config.ports.is_empty() {
-                            let ports: Vec<String> = info
-                                .config
-                                .ports
-                                .iter()
-                                .map(|p| format!("0.0.0.0:{} -> {}", p.host_port, p.guest_port))
-                                .collect();
-                            let _ = table.add_row(vec![
-                                Cell::new("Ports:").add_attribute(comfy_table::Attribute::Bold),
-                                Cell::new(ports.join(", ")),
-                            ]);
-                        }
-                        if let Some(reason) = &info.exit_reason {
-                            let _ = table.add_row(vec![
-                                Cell::new("Exit:").add_attribute(comfy_table::Attribute::Bold),
-                                Cell::new(reason),
-                            ]);
-                        }
-
-                        println!("{table}");
-                    } else {
-                        println!("{status}: {resp}");
-                    }
-                } else if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(&resp) {
-                    use crossterm::style::Stylize;
-                    println!("{}", err.message.red());
-                } else {
-                    println!("{status}: {resp}");
-                }
-            }
-            VmCommand::List(args) => {
-                let (status, resp) =
-                    pipe_client::pipe_request(&args.pipe, args.tcp, Method::GET, "/vms", None)
-                        .await?;
-                if status.is_success() {
-                    if let Ok(vms) = serde_json::from_str::<Vec<hitz_api::VmInfo>>(&resp) {
-                        use comfy_table::{Cell, Color, Table};
-                        let mut table = Table::new();
-                        let _ = table.set_header(vec![
-                            "ID",
-                            "State",
-                            "RAM (MiB)",
-                            "CPUs",
-                            "Exit Reason",
-                        ]);
-
-                        for info in vms {
-                            let state_cell = match info.state {
-                                hitz_api::VmState::Running => Cell::new("Running").fg(Color::Green),
-                                hitz_api::VmState::Stopped => {
-                                    Cell::new("Stopped").fg(Color::Yellow)
-                                }
-                                hitz_api::VmState::Failed => Cell::new("Failed").fg(Color::Red),
-                                hitz_api::VmState::Created => Cell::new("Created").fg(Color::Cyan),
-                            };
-                            let exit_reason = info.exit_reason.unwrap_or_else(|| "-".to_string());
-                            let _ = table.add_row(vec![
-                                Cell::new(&info.id),
-                                state_cell,
-                                Cell::new(info.config.ram_mib.to_string()),
-                                Cell::new(info.config.cpus.to_string()),
-                                Cell::new(exit_reason),
-                            ]);
-                        }
-                        println!("{table}");
-                    } else {
-                        println!("{status}: {resp}");
-                    }
-                } else if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(&resp) {
-                    use crossterm::style::Stylize;
-                    println!("{}", err.message.red());
-                } else {
-                    println!("{status}: {resp}");
-                }
-            }
-            VmCommand::Delete(args) => {
-                let (status, resp) = pipe_client::pipe_request(
-                    &args.pipe,
-                    args.tcp,
-                    Method::DELETE,
-                    &format!("/vms/{}", args.id),
-                    None,
-                )
-                .await?;
-                if status.is_success() {
-                    println!("deleted {}", args.id);
-                } else if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(&resp) {
-                    use crossterm::style::Stylize;
-                    println!("{}", err.message.red());
-                } else {
-                    println!("{status}: {resp}");
-                }
-            }
-            VmCommand::Serial(args) => {
-                use http_body_util::BodyExt as _;
-
-                let resp = pipe_client::request_stream(
-                    &args.pipe,
-                    args.tcp,
-                    &format!("/vms/{}/serial", args.id),
-                )
-                .await?;
-
-                let status = resp.status();
-                let mut body = resp.into_body();
-
-                if !status.is_success() {
-                    let collected = body.collect().await.context("read error body")?.to_bytes();
-                    let text = String::from_utf8_lossy(&collected);
-                    anyhow::bail!("serial stream failed ({status}): {text}");
-                }
-
-                let mut out = stdout();
-                while let Some(frame_result) = body.frame().await {
-                    match frame_result {
-                        Ok(frame) => {
-                            if let Some(data) = frame.data_ref() {
-                                out.write_all(data)?;
-                                out.flush()?;
-                            }
-                        }
-                        Err(e) => {
-                            eprintln!("stream error: {e}");
-                            break;
-                        }
-                    }
-                }
-            }
-            VmCommand::Metrics(args) => {
-                let (status, resp) = pipe_client::pipe_request(
-                    &args.pipe,
-                    args.tcp,
-                    Method::GET,
-                    &format!("/vms/{}/metrics", args.id),
-                    None,
-                )
-                .await?;
-                if status.is_success() {
-                    let snap: hitz_api::MetricsSnapshot =
-                        serde_json::from_str(&resp).context("failed to parse metrics response")?;
-                    print!("{}", format_metrics_snapshot(&snap));
-                } else {
-                    println!("{status}: {resp}");
-                }
-            }
+            VmCommand::Create(args) => handle_vm_create(&args).await,
+            VmCommand::Clone(args) => handle_vm_clone(&args).await,
+            VmCommand::Start(args) => handle_vm_start(&args).await,
+            VmCommand::Stop(args) => handle_vm_stop(&args).await,
+            VmCommand::Status(args) => handle_vm_status(&args).await,
+            VmCommand::List(args) => handle_vm_list(&args).await,
+            VmCommand::Delete(args) => handle_vm_delete(&args).await,
+            VmCommand::Serial(args) => handle_vm_serial(&args).await,
+            VmCommand::Metrics(args) => handle_vm_metrics(&args).await,
         }
-        Ok(())
     })
 }
 
