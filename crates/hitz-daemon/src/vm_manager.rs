@@ -170,6 +170,42 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
         })
     }
 
+    /// Clones an existing VM configuration into a new VM.
+    ///
+    /// The source VM can be in any state. The new VM will be created in the `Created` state,
+    /// identical in configuration to the source, but with the new `dest_id`.
+    ///
+    /// ## Errors
+    ///
+    /// Returns a [`DaemonError`] if the source VM does not exist, or if the destination
+    /// VM ID already exists.
+    ///
+    /// ## Examples
+    ///
+    /// ```rust,no_run
+    /// # use std::sync::Arc;
+    /// # use std::path::PathBuf;
+    /// # use hitz_daemon::VmManager;
+    /// # use hitz_whp::WhpHypervisor;
+    /// # let hypervisor = Arc::new(WhpHypervisor::new().unwrap());
+    /// # let state_dir = PathBuf::from("C:\\hitz\\vms");
+    /// # let manager = VmManager::new(hypervisor, state_dir).unwrap();
+    /// manager.clone_vm("my-vm", "my-vm-clone").expect("Failed to clone VM");
+    /// ```
+    pub fn clone_vm(&self, src_id: &str, dest_id: &str) -> Result<VmInfo, DaemonError> {
+        let config = {
+            self.vms
+                .lock()
+                .map_err(|e| DaemonError::Internal(e.to_string()))?
+                .get(src_id)
+                .ok_or_else(|| DaemonError::NotFound(src_id.to_string()))?
+                .config
+                .clone()
+        };
+
+        self.create_vm(dest_id.to_string(), &config)
+    }
+
     /// Wires the vsock metrics tasks to stop when a daemon-provided shutdown signal fires.
     ///
     /// **Why do we need a shutdown receiver?**
@@ -927,6 +963,39 @@ mod tests {
         let (mgr, _dir) = make_manager();
         let err = mgr.get_vm("nope").expect_err("should fail");
         assert!(err.to_string().contains("not found"), "got: {err}");
+    }
+
+    #[test]
+    fn clone_vm_success() {
+        let (mgr, _dir) = make_manager();
+        let (config, _tmp) = make_config();
+        mgr.create_vm("src-vm".into(), &config).expect("create");
+
+        let cloned_info = mgr.clone_vm("src-vm", "dest-vm").expect("clone");
+        assert_eq!(cloned_info.id, "dest-vm");
+        assert_eq!(cloned_info.state, VmState::Created);
+        assert_eq!(cloned_info.config.ram_mib, config.ram_mib);
+
+        let list = mgr.list_vms().expect("list");
+        assert_eq!(list.len(), 2);
+    }
+
+    #[test]
+    fn clone_vm_source_not_found() {
+        let (mgr, _dir) = make_manager();
+        let err = mgr.clone_vm("nope", "dest").expect_err("should fail");
+        assert!(err.to_string().contains("not found"), "got: {err}");
+    }
+
+    #[test]
+    fn clone_vm_destination_exists() {
+        let (mgr, _dir) = make_manager();
+        let (config, _tmp) = make_config();
+        mgr.create_vm("src-vm".into(), &config).expect("create src");
+        mgr.create_vm("dest-vm".into(), &config).expect("create dest");
+
+        let err = mgr.clone_vm("src-vm", "dest-vm").expect_err("should fail");
+        assert!(err.to_string().contains("already exists"), "got: {err}");
     }
 
     #[test]

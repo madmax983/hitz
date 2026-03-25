@@ -287,6 +287,13 @@ pub struct ActionVmRequest {
     pub action: VmAction,
 }
 
+/// Request to clone an existing VM.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CloneVmRequest {
+    /// The ID for the new cloned VM.
+    pub dest_id: String,
+}
+
 /// Information about a VM instance returned by the API.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VmInfo {
@@ -533,6 +540,16 @@ mod tests {
         let json = serde_json::to_string(&req).expect("serialize");
         let restored: ActionVmRequest = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(restored.action, VmAction::Stop);
+    }
+
+    #[test]
+    fn clone_vm_request_serde() {
+        let req = CloneVmRequest {
+            dest_id: "new-vm-123".into(),
+        };
+        let json = serde_json::to_string(&req).expect("serialize");
+        let restored: CloneVmRequest = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(restored.dest_id, req.dest_id);
     }
 
     #[test]

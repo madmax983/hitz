@@ -21,7 +21,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use anyhow::{Context, Result};
 use clap::{Args, Parser, Subcommand};
 use hitz_api::{
-    ActionVmRequest, CreateVmRequest, DEFAULT_CMDLINE, DEFAULT_CPUS, DEFAULT_GUEST_CID,
+    ActionVmRequest, CloneVmRequest, CreateVmRequest, DEFAULT_CMDLINE, DEFAULT_CPUS, DEFAULT_GUEST_CID,
     DEFAULT_RAM_MIB, GuestAgentMode, VmAction, VmConfig,
 };
 use hitz_daemon::TelemetryGuard;
@@ -317,6 +317,8 @@ struct DaemonStartArgs {
 enum VmCommand {
     /// Create a VM with the given configuration.
     Create(Box<VmCreateArgs>),
+    /// Clone an existing VM.
+    Clone(Box<VmCloneArgs>),
     /// Start (boot) a previously created VM.
     Start(VmIdArgs),
     /// Stop a running VM.
@@ -331,6 +333,24 @@ enum VmCommand {
     Serial(VmIdArgs),
     /// Display live resource metrics for a running VM.
     Metrics(VmIdArgs),
+}
+
+/// Arguments for `vm clone`.
+#[derive(Parser)]
+struct VmCloneArgs {
+    /// Source VM identifier.
+    src_id: String,
+
+    /// Destination VM identifier.
+    dest_id: String,
+
+    /// Named pipe path.
+    #[arg(long, default_value = DEFAULT_PIPE)]
+    pipe: String,
+
+    /// Connect to daemon via TCP instead of named pipe.
+    #[arg(long)]
+    tcp: Option<std::net::SocketAddr>,
 }
 
 /// Arguments for `vm create`.
@@ -1026,6 +1046,28 @@ fn run_vm_command(cmd: VmCommand) -> Result<()> {
                     println!("{status}: {resp}");
                 }
             }
+            VmCommand::Clone(args) => {
+                let body = serde_json::to_string(&CloneVmRequest {
+                    dest_id: args.dest_id.clone(),
+                })
+                .context("serialize request")?;
+                let (status, resp) = pipe_client::pipe_request(
+                    &args.pipe,
+                    args.tcp,
+                    Method::POST,
+                    &format!("/vms/{}/clone", args.src_id),
+                    Some(&body),
+                )
+                .await?;
+                if status.is_success() {
+                    println!("{status}: {resp}");
+                } else if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(&resp) {
+                    use crossterm::style::Stylize;
+                    println!("{}", err.message.red());
+                } else {
+                    println!("{status}: {resp}");
+                }
+            }
             VmCommand::Start(args) => {
                 let body = serde_json::to_string(&ActionVmRequest {
                     action: VmAction::Start,
@@ -1266,6 +1308,7 @@ fn run_vm_command(cmd: VmCommand) -> Result<()> {
 }
 
 #[cfg(test)]
+#[allow(unsafe_code, clippy::items_after_statements, clippy::ignore_without_reason)]
 mod tests {
     use super::*;
 
