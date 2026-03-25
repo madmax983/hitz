@@ -17,8 +17,7 @@ use hitz_api::{CpuMetrics, MetricsSnapshot, VMADDR_CID_HOST, VSOCK_METRICS_PORT}
 
 mod proc;
 use proc::{
-    CpuSample, cpu_pct, parse_proc_diskstats, parse_proc_meminfo, parse_proc_net_dev,
-    parse_proc_stat_sample,
+    cpu_pct, parse_proc_diskstats, parse_proc_meminfo, parse_proc_net_dev, parse_proc_stat_sample,
 };
 
 const PUSH_INTERVAL_SECS: u64 = 5;
@@ -166,9 +165,10 @@ fn parse_proc_pid_stat(pid: u32, content: &str) -> Option<hitz_api::ProcMetrics>
 #[cfg(unix)]
 fn send_snapshot(stream: &mut vsock::VsockStream, snap: &MetricsSnapshot) -> std::io::Result<()> {
     use std::io::Write;
-    let encoded =
-        rmp_serde::to_vec(snap).map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
-    let len = (encoded.len() as u32).to_le_bytes();
+    let encoded = rmp_serde::to_vec(snap).map_err(std::io::Error::other)?;
+    let len = u32::try_from(encoded.len())
+        .unwrap_or(u32::MAX)
+        .to_le_bytes();
     stream.write_all(&len)?;
     stream.write_all(&encoded)
 }
@@ -196,13 +196,11 @@ fn pull_server() {
                 return;
             }
         };
-    for stream in listener.incoming() {
-        if let Ok(mut stream) = stream {
-            let mut req_byte = [0u8; 1];
-            if stream.read_exact(&mut req_byte).is_ok() {
-                let snap = collect_snapshot();
-                let _ = send_snapshot(&mut stream, &snap);
-            }
+    for mut stream in listener.incoming().flatten() {
+        let mut req_byte = [0u8; 1];
+        if stream.read_exact(&mut req_byte).is_ok() {
+            let snap = collect_snapshot();
+            let _ = send_snapshot(&mut stream, &snap);
         }
     }
 }

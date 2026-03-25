@@ -47,20 +47,18 @@ pub fn parse_proc_stat_sample(content: &str) -> Vec<CpuSample> {
         .lines()
         .filter(|l| l.starts_with("cpu"))
         .map(|line| {
-            let nums: Vec<u64> = line
+            let mut nums = line
                 .split_ascii_whitespace()
                 .skip(1)
-                .take(7)
-                .map(|s| s.parse().unwrap_or(0))
-                .collect();
+                .map(|s| s.parse().unwrap_or(0));
             CpuSample {
-                user: nums.first().copied().unwrap_or(0),
-                nice: nums.get(1).copied().unwrap_or(0),
-                system: nums.get(2).copied().unwrap_or(0),
-                idle: nums.get(3).copied().unwrap_or(0),
-                iowait: nums.get(4).copied().unwrap_or(0),
-                irq: nums.get(5).copied().unwrap_or(0),
-                softirq: nums.get(6).copied().unwrap_or(0),
+                user: nums.next().unwrap_or(0),
+                nice: nums.next().unwrap_or(0),
+                system: nums.next().unwrap_or(0),
+                idle: nums.next().unwrap_or(0),
+                iowait: nums.next().unwrap_or(0),
+                irq: nums.next().unwrap_or(0),
+                softirq: nums.next().unwrap_or(0),
             }
         })
         .collect()
@@ -122,15 +120,15 @@ pub fn parse_proc_diskstats(content: &str) -> Vec<DiskMetrics> {
     content
         .lines()
         .filter_map(|line| {
-            let cols: Vec<&str> = line.split_ascii_whitespace().collect();
-            if cols.len() < 14 {
-                return None;
-            }
-            let name = cols[2].to_string();
-            let reads = cols[3].parse::<u64>().ok()?;
-            let read_sec = cols[5].parse::<u64>().ok()?;
-            let writes = cols[7].parse::<u64>().ok()?;
-            let write_sec = cols[9].parse::<u64>().ok()?;
+            let mut cols = line.split_ascii_whitespace();
+            let name = cols.nth(2)?.to_string();
+            let reads = cols.next()?.parse::<u64>().ok()?;
+            let _reads_merged = cols.next()?;
+            let read_sec = cols.next()?.parse::<u64>().ok()?;
+            let _ms_reading = cols.next()?;
+            let writes = cols.next()?.parse::<u64>().ok()?;
+            let _writes_merged = cols.next()?;
+            let write_sec = cols.next()?.parse::<u64>().ok()?;
             Some(DiskMetrics {
                 name,
                 reads_total: reads,
@@ -156,18 +154,17 @@ pub fn parse_proc_net_dev(content: &str) -> Vec<NetMetrics> {
             if iface == "lo" {
                 return None;
             }
-            let cols: Vec<u64> = stats
+            let mut cols = stats
                 .split_ascii_whitespace()
-                .map(|s| s.parse().unwrap_or(0))
-                .collect();
+                .map(|s| s.parse().unwrap_or(0));
             Some(NetMetrics {
                 interface: iface,
-                rx_bytes: cols.first().copied().unwrap_or(0),
-                rx_packets: cols.get(1).copied().unwrap_or(0),
-                rx_errors: cols.get(2).copied().unwrap_or(0),
-                tx_bytes: cols.get(8).copied().unwrap_or(0),
-                tx_packets: cols.get(9).copied().unwrap_or(0),
-                tx_errors: cols.get(10).copied().unwrap_or(0),
+                rx_bytes: cols.next().unwrap_or(0),
+                rx_packets: cols.next().unwrap_or(0),
+                rx_errors: cols.next().unwrap_or(0),
+                tx_bytes: cols.nth(5).unwrap_or(0),
+                tx_packets: cols.next().unwrap_or(0),
+                tx_errors: cols.next().unwrap_or(0),
             })
         })
         .collect()
@@ -200,14 +197,15 @@ mod tests {
         // Should have total + 2 cores.
         assert_eq!(stats.len(), 3);
         // Total idle ticks.
-        assert_eq!(stats[0].idle, 345678);
+        assert_eq!(stats[0].idle, 345_678);
     }
 
     #[test]
+    #[allow(clippy::expect_used)]
     fn parse_meminfo() {
         let mem = parse_proc_meminfo(PROC_MEMINFO_FIXTURE).expect("parse");
-        assert_eq!(mem.total_bytes, 262144 * 1024);
-        assert_eq!(mem.free_bytes, 131072 * 1024);
+        assert_eq!(mem.total_bytes, 262_144 * 1024);
+        assert_eq!(mem.free_bytes, 131_072 * 1024);
         assert_eq!(mem.swap_total, 0);
     }
 
