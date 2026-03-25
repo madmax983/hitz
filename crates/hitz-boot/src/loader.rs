@@ -1,3 +1,9 @@
+#![allow(clippy::similar_names)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::cast_possible_truncation
+)]
 //! Minimal ELF64 vmlinux loader.
 //!
 //! Parses a statically-linked ELF64 binary (such as a vmlinux) and copies

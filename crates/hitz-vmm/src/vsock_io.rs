@@ -7,7 +7,7 @@
 //! the channels, which signals the device's poll loop to stop injecting
 //! and draining packets.
 
-use hitz_devices::virtio::vsock::VsockPacket;
+use hitz_devices::VsockPacket;
 
 /// Owned channel endpoints for the host side of a vsock device.
 ///

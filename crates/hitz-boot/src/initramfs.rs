@@ -1,3 +1,9 @@
+#![allow(clippy::similar_names)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::cast_possible_truncation
+)]
 //! Initramfs (cpio archive) loading into guest physical memory.
 //!
 //! The kernel unpacks the cpio archive from the address stored in

@@ -16,17 +16,17 @@ use hitz_boot::{
     BOOT_PARAMS_GPA, CMDLINE_GPA, RSDP_GPA, build_boot_params, build_madt, build_page_tables,
     build_rsdp, build_xsdt, load_elf, load_initramfs, set_acpi_rsdp, set_initramfs_params,
 };
+use hitz_devices::MmioBus;
+use hitz_devices::SerialDevice;
+use hitz_devices::VirtioBlockDevice;
+use hitz_devices::VirtioMmioTransport;
+use hitz_devices::VirtioNetDevice;
 use hitz_devices::VirtioVsockDevice;
-use hitz_devices::mmio_bus::MmioBus;
-use hitz_devices::serial::SerialDevice;
-use hitz_devices::virtio::block::VirtioBlockDevice;
-use hitz_devices::virtio::mmio_transport::VirtioMmioTransport;
-use hitz_devices::virtio::net::VirtioNetDevice;
-use hitz_devices::virtio::vsock::VsockPacket;
+use hitz_devices::VsockPacket;
 use hitz_hal::{
     Gpa, GuestMemAccess, Hypervisor, MemFlags, MemSizeMiB, Partition, PartitionConfig, Vcpu, VcpuId,
 };
-use hitz_net::ethernet;
+use hitz_net::{parse_cidr, parse_mac, random_mac};
 
 use crate::boot_regs;
 use crate::memory::GuestMemory;
@@ -261,8 +261,8 @@ pub fn boot_and_run<H: Hypervisor, W: Write + Send + 'static>(
 
     // Append static IP configuration for the guest's network interface.
     if let Some(ref net_cfg) = config.net {
-        let (guest_ip, _) = ethernet::parse_cidr(&net_cfg.guest_ip).map_err(VmError::Config)?;
-        let (gateway_ip, _) = ethernet::parse_cidr(&net_cfg.host_ip).map_err(VmError::Config)?;
+        let (guest_ip, _) = parse_cidr(&net_cfg.guest_ip).map_err(VmError::Config)?;
+        let (gateway_ip, _) = parse_cidr(&net_cfg.host_ip).map_err(VmError::Config)?;
         let _ = write!(
             cmdline,
             " ip={}.{}.{}.{}::{}.{}.{}.{}:255.255.255.0::eth0:off",
@@ -339,13 +339,13 @@ pub fn boot_and_run<H: Hypervisor, W: Write + Send + 'static>(
     // its `Drop` impl signals the I/O thread to stop and joins it.
     let net_io_handle: Option<hitz_net::NetIoHandle> = if let Some(ref net_cfg) = config.net {
         let guest_mac = if let Some(ref mac_str) = net_cfg.mac {
-            ethernet::parse_mac(mac_str).map_err(VmError::Config)?
+            parse_mac(mac_str).map_err(VmError::Config)?
         } else {
-            ethernet::random_mac()
+            random_mac()
         };
 
         let gateway_mac: [u8; 6] = [0xAA, 0xBB, 0xCC, 0x00, 0x00, 0x01];
-        let (gateway_ip, _) = ethernet::parse_cidr(&net_cfg.host_ip).map_err(VmError::Config)?;
+        let (gateway_ip, _) = parse_cidr(&net_cfg.host_ip).map_err(VmError::Config)?;
 
         let (net_dev, tx_receiver, rx_sender) = VirtioNetDevice::new(guest_mac);
 

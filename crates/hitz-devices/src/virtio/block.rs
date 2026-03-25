@@ -249,6 +249,7 @@ mod tests {
             let mut mem = self.inner.lock().unwrap();
             let start = offset as usize;
             mem[start..start + data.len()].copy_from_slice(data);
+            drop(mem);
         }
 
         fn read_bytes(&self, offset: u64, len: usize) -> Vec<u8> {
@@ -270,6 +271,7 @@ mod tests {
                 });
             }
             buf.copy_from_slice(&mem[start..start + buf.len()]);
+            drop(mem);
             Ok(())
         }
 
@@ -284,6 +286,7 @@ mod tests {
                 });
             }
             mem[start..start + data.len()].copy_from_slice(data);
+            drop(mem);
             Ok(())
         }
     }
