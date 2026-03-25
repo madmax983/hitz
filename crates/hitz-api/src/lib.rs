@@ -1,6 +1,20 @@
 //! REST API types for Hitz.
 //!
-//! Request/response types and the `VmAction` enum. No I/O — pure data.
+//! This crate serves as the central vocabulary for the Hitz micro-VM manager.
+//! It defines the pure data structures used for communicating between the
+//! command-line interface, the background daemon, and the guest agents running
+//! inside the micro-VMs.
+//!
+//! By keeping all I/O out of this crate, we ensure these types can be compiled
+//! for any target (including the Linux `musl` guest agents) and serialized
+//! effortlessly across network boundaries.
+//!
+//! ## Core Concepts
+//!
+//! * **Configuration**: [`VmConfig`] describes everything needed to boot a VM.
+//! * **Lifecycle**: [`VmState`] and [`VmAction`] track and control the VM's status.
+//! * **Metrics**: [`MetricsSnapshot`] and its sub-types (like [`CpuMetrics`]) form the
+//!   wire protocol over vsock for extracting real-time telemetry from the guest.
 
 use std::path::PathBuf;
 
@@ -78,7 +92,41 @@ pub enum MetricsRequest {
 
 // ── Metrics snapshot ─────────────────────────────────────────────────────────
 
-/// Full guest resource snapshot, serialized with `MessagePack` over vsock.
+/// Full guest resource snapshot, describing exactly what the VM is doing at
+/// a given millisecond.
+///
+/// This is the response sent by the guest agent when the host requests
+/// telemetry via [`MetricsRequest::Snapshot`]. It contains aggregated CPU,
+/// memory, disk, network, and top process data.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::{MetricsSnapshot, CpuMetrics, MemoryMetrics};
+///
+/// let snap = MetricsSnapshot {
+///     timestamp_ms: 1_700_000_000_000,
+///     cpu: CpuMetrics {
+///         total_pct: 12.5,
+///         per_core: vec![10.0, 15.0],
+///         load_avg: [0.5, 0.4, 0.3],
+///     },
+///     memory: MemoryMetrics {
+///         total_bytes: 256 * 1024 * 1024,
+///         used_bytes: 100 * 1024 * 1024,
+///         free_bytes: 156 * 1024 * 1024,
+///         buffers_bytes: 0,
+///         cached_bytes: 0,
+///         swap_total: 0,
+///         swap_used: 0,
+///     },
+///     disks: vec![],
+///     networks: vec![],
+///     processes: vec![],
+/// };
+///
+/// assert_eq!(snap.memory.free_bytes, 156 * 1024 * 1024);
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MetricsSnapshot {
     /// Unix timestamp in milliseconds.
