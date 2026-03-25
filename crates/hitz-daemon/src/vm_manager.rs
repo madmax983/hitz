@@ -788,7 +788,7 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
 }
 
 #[cfg(test)]
-#[allow(clippy::expect_used, unsafe_code, unused_results)]
+#[allow(clippy::expect_used, clippy::unwrap_used, unsafe_code, unused_results)]
 mod tests {
     use super::*;
     use hitz_api::VmConfig;
@@ -964,6 +964,32 @@ mod tests {
     }
 
     #[test]
+    fn delete_running_vm_fails() {
+        let (mgr, _dir) = make_manager();
+        let (config, _tmp) = make_config();
+        mgr.create_vm("vm1".into(), &config).expect("create");
+        // Force the state to Running to simulate a running VM
+        mgr.vms.lock().unwrap().get_mut("vm1").unwrap().state = VmState::Running;
+
+        let err = mgr.delete_vm("vm1").expect_err("should fail");
+        assert!(
+            matches!(
+                err,
+                DaemonError::InvalidState {
+                    id: _,
+                    state: VmState::Running,
+                    expected: _
+                }
+            ),
+            "got: {err}"
+        );
+        assert!(
+            err.to_string().contains("Created, Stopped, or Failed"),
+            "got: {err}"
+        );
+    }
+
+    #[test]
     fn stop_created_vm_fails() {
         let (mgr, _dir) = make_manager();
         let (config, _tmp) = make_config();
@@ -983,7 +1009,9 @@ mod tests {
         }];
         // config.net is None → port forward should be a no-op.
 
-        let _info = mgr.create_vm("port_fwd_test".into(), &config).expect("create");
+        let _info = mgr
+            .create_vm("port_fwd_test".into(), &config)
+            .expect("create");
         // start_vm fires off an async task; just verify it doesn't panic.
         mgr.start_vm("port_fwd_test").expect("start");
     }
