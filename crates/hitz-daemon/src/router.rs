@@ -9,7 +9,7 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use bytes::Bytes;
-use hitz_api::{ActionVmRequest, ApiError, CreateVmRequest, VmAction};
+use hitz_api::{ActionVmRequest, ApiError, CloneVmRequest, CreateVmRequest, VmAction};
 use hitz_hal::Hypervisor;
 use http_body_util::combinators::BoxBody;
 use http_body_util::{BodyExt, Full};
@@ -108,6 +108,7 @@ where
         (&Method::GET, Some("metrics")) => handle_metrics(id, manager),
         (&Method::DELETE, None) => handle_delete(id, manager),
         (&Method::POST, Some("action")) => handle_action(req, id, manager).await,
+        (&Method::POST, Some("clone")) => handle_clone(req, id, manager).await,
         _ => Ok(error_response(
             StatusCode::METHOD_NOT_ALLOWED,
             "method not allowed",
@@ -191,6 +192,26 @@ where
         VmAction::Stop => manager.stop_vm(id)?,
     };
     json_response(StatusCode::OK, &info)
+}
+
+async fn handle_clone<H>(
+    req: Request<Incoming>,
+    id: &str,
+    manager: &VmManager<H>,
+) -> Result<Response<BoxBody<Bytes, Infallible>>, DaemonError>
+where
+    H: Hypervisor + Send + Sync + 'static,
+{
+    let body = req
+        .into_body()
+        .collect()
+        .await
+        .map_err(|e| DaemonError::Internal(format!("failed to read request body: {e}")))?;
+    let clone_req: CloneVmRequest = serde_json::from_slice(&body.to_bytes())
+        .map_err(|e| DaemonError::Internal(format!("invalid JSON: {e}")))?;
+
+    let info = manager.clone_vm(id, &clone_req.dest_id)?;
+    json_response(StatusCode::CREATED, &info)
 }
 
 fn handle_serial<H>(
