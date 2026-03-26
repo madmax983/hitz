@@ -417,7 +417,7 @@ fn phase1_boot_elf_to_io_port_exit() {
     let boot_params =
         build_boot_params(ram_size, Gpa::new(CMDLINE_GPA)).expect("build_boot_params failed");
     guest_mem
-        .write_obj(Gpa::new(BOOT_PARAMS_GPA), &boot_params)
+        .write_slice(Gpa::new(BOOT_PARAMS_GPA), boot_params.as_bytes())
         .expect("write boot_params failed");
 
     // ── 4. Write command line ──
@@ -500,7 +500,7 @@ fn boot_elf_pipeline(code: &[u8]) -> (crate::WhpPartition, crate::WhpVcpu, hitz_
     let boot_params =
         build_boot_params(ram_size, Gpa::new(CMDLINE_GPA)).expect("build_boot_params failed");
     guest_mem
-        .write_obj(Gpa::new(BOOT_PARAMS_GPA), &boot_params)
+        .write_slice(Gpa::new(BOOT_PARAMS_GPA), boot_params.as_bytes())
         .expect("write boot_params failed");
 
     let cmdline = b"console=ttyS0\0";
@@ -1259,7 +1259,7 @@ fn phase4_boot_real_linux() {
     )
     .expect("set_initramfs_params failed");
     guest_mem
-        .write_obj(Gpa::new(BOOT_PARAMS_GPA), &boot_params)
+        .write_slice(Gpa::new(BOOT_PARAMS_GPA), boot_params.as_bytes())
         .expect("write boot_params failed");
 
     // ── 7. Write command line ──

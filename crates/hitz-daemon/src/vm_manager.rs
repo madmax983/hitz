@@ -954,7 +954,9 @@ mod tests {
         let (config1, _tmp1) = make_config();
         let (config2, _tmp2) = make_config();
         mgr.create_vm("vm1".into(), &config1).expect("create");
-        let err = mgr.create_vm("vm1".into(), &config2).expect_err("should fail");
+        let err = mgr
+            .create_vm("vm1".into(), &config2)
+            .expect_err("should fail");
         assert!(err.to_string().contains("already exists"), "got: {err}");
     }
 
@@ -992,7 +994,8 @@ mod tests {
         let (mgr, _dir) = make_manager();
         let (config, _tmp) = make_config();
         mgr.create_vm("src-vm".into(), &config).expect("create src");
-        mgr.create_vm("dest-vm".into(), &config).expect("create dest");
+        mgr.create_vm("dest-vm".into(), &config)
+            .expect("create dest");
 
         let err = mgr.clone_vm("src-vm", "dest-vm").expect_err("should fail");
         assert!(err.to_string().contains("already exists"), "got: {err}");

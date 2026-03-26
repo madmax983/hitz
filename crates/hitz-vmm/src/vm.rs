@@ -228,7 +228,7 @@ pub fn boot_and_run<H: Hypervisor, W: Write + Send + 'static>(
     }
 
     // ── 7. Write boot_params to guest memory ──
-    guest_mem.write_obj(Gpa::new(BOOT_PARAMS_GPA), &boot_params)?;
+    guest_mem.write_slice(Gpa::new(BOOT_PARAMS_GPA), boot_params.as_bytes())?;
 
     // ── 7b. Write ACPI tables for SMP ──
     if config.cpus > 1 {
@@ -244,7 +244,7 @@ pub fn boot_and_run<H: Hypervisor, W: Write + Send + 'static>(
         set_acpi_rsdp(&mut boot_params, RSDP_GPA);
 
         // Re-write boot_params with the RSDP pointer set.
-        guest_mem.write_obj(Gpa::new(BOOT_PARAMS_GPA), &boot_params)?;
+        guest_mem.write_slice(Gpa::new(BOOT_PARAMS_GPA), boot_params.as_bytes())?;
     }
 
     // ── 8. Write command line ──
