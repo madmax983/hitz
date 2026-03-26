@@ -204,22 +204,28 @@ impl GuestMemory {
     }
 
     /// Write a `Copy` value into guest memory at `gpa`.
-    pub fn write_obj<T: Copy>(&self, gpa: Gpa, val: &T) -> Result<(), MemError> {
-        let size = size_of::<T>();
-        // SAFETY: any Copy type can be viewed as bytes.
-        let bytes = unsafe { std::slice::from_raw_parts(ptr::from_ref(val).cast::<u8>(), size) };
-        self.write_slice(gpa, bytes)
+    /// Write a `u64` value into guest memory at `gpa`.
+    pub fn write_u64(&self, gpa: Gpa, val: u64) -> Result<(), MemError> {
+        self.write_slice(gpa, &val.to_ne_bytes())
     }
 
-    /// Read a `Copy` value from guest memory at `gpa`.
-    pub fn read_obj<T: Copy + Default>(&self, gpa: Gpa) -> Result<T, MemError> {
-        let size = size_of::<T>();
-        let mut val = T::default();
-        // SAFETY: any Copy + Default type can be written to as bytes.
-        let buf =
-            unsafe { std::slice::from_raw_parts_mut(ptr::from_mut(&mut val).cast::<u8>(), size) };
-        self.read_slice(gpa, buf)?;
-        Ok(val)
+    /// Write a `u32` value into guest memory at `gpa`.
+    pub fn write_u32(&self, gpa: Gpa, val: u32) -> Result<(), MemError> {
+        self.write_slice(gpa, &val.to_ne_bytes())
+    }
+
+    /// Read a `u64` value from guest memory at `gpa`.
+    pub fn read_u64(&self, gpa: Gpa) -> Result<u64, MemError> {
+        let mut buf = [0u8; 8];
+        self.read_slice(gpa, &mut buf)?;
+        Ok(u64::from_ne_bytes(buf))
+    }
+
+    /// Read a `u32` value from guest memory at `gpa`.
+    pub fn read_u32(&self, gpa: Gpa) -> Result<u32, MemError> {
+        let mut buf = [0u8; 4];
+        self.read_slice(gpa, &mut buf)?;
+        Ok(u32::from_ne_bytes(buf))
     }
 }
 
@@ -334,16 +340,16 @@ mod tests {
     }
 
     #[test]
-    fn test_write_obj_read_obj() {
+    fn test_write_u64_read_u64() {
         let mut mem = GuestMemory::new();
         mem.add_region(Gpa::new(0), 4096)
             .expect("add_region should succeed");
 
         let val: u64 = 0xDEAD_BEEF_CAFE_BABE;
-        mem.write_obj(Gpa::new(64), &val)
-            .expect("write_obj should succeed");
+        mem.write_u64(Gpa::new(64), val)
+            .expect("write_u64 should succeed");
 
-        let read_back: u64 = mem.read_obj(Gpa::new(64)).expect("read_obj should succeed");
+        let read_back = mem.read_u64(Gpa::new(64)).expect("read_u64 should succeed");
 
         assert_eq!(read_back, val);
     }

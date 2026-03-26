@@ -198,7 +198,7 @@ pub fn write_gdt(mem: &GuestMemory) -> Result<(), MemError> {
     let entries = [GDT_NULL, GDT_CODE64, GDT_DATA64, tss_low, tss_high];
     for (i, &entry) in entries.iter().enumerate() {
         let gpa = Gpa::new(GDT_GPA + (i * GDT_ENTRY_SIZE) as u64);
-        mem.write_obj(gpa, &entry)?;
+        mem.write_u64(gpa, entry)?;
     }
     Ok(())
 }
@@ -358,10 +358,10 @@ mod tests {
         write_gdt(&mem).expect("write_gdt");
 
         // Read back the entries.
-        let null: u64 = mem.read_obj(Gpa::new(GDT_GPA)).expect("read null");
-        let code: u64 = mem.read_obj(Gpa::new(GDT_GPA + 8)).expect("read code");
-        let data: u64 = mem.read_obj(Gpa::new(GDT_GPA + 16)).expect("read data");
-        let tss_lo: u64 = mem.read_obj(Gpa::new(GDT_GPA + 24)).expect("read tss_low");
+        let null: u64 = mem.read_u64(Gpa::new(GDT_GPA)).expect("read null");
+        let code: u64 = mem.read_u64(Gpa::new(GDT_GPA + 8)).expect("read code");
+        let data: u64 = mem.read_u64(Gpa::new(GDT_GPA + 16)).expect("read data");
+        let tss_lo: u64 = mem.read_u64(Gpa::new(GDT_GPA + 24)).expect("read tss_low");
 
         assert_eq!(null, GDT_NULL);
         assert_eq!(code, GDT_CODE64);
