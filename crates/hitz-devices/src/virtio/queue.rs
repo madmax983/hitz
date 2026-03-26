@@ -1,7 +1,23 @@
 //! Custom virtqueue implementation reading all structures from guest memory.
 //!
+//! # Abstract
 //! No dependency on `vm-memory` or `virtio-queue` crates. All descriptor,
 //! available, and used ring accesses go through [`GuestMemAccess`].
+//!
+//! # The Hero's Journey
+//! ```
+//! # use hitz_devices::virtio::queue::VirtQueue;
+//! // 1. Create a queue of a power of two size.
+//! let mut queue = VirtQueue::new(256);
+//!
+//! // 2. Guest sets up GPAs for descriptors, available, and used rings.
+//! queue.set_desc_table(0x1000);
+//! queue.set_avail_ring(0x2000);
+//! queue.set_used_ring(0x3000);
+//!
+//! // 3. Set the queue to ready!
+//! queue.set_ready(true);
+//! ```
 
 use hitz_hal::GuestMemAccess;
 
@@ -36,8 +52,14 @@ pub struct VirtQueue {
 impl VirtQueue {
     /// Create a new virtqueue with the given depth.
     ///
-    /// `size` must be a power of 2 and at most [`MAX_QUEUE_SIZE`].
+    /// `size` must be a power of 2 and at most `MAX_QUEUE_SIZE` (256).
     /// If `size` is 0 or exceeds the maximum, it is clamped to `MAX_QUEUE_SIZE`.
+    ///
+    /// # Examples
+    /// ```
+    /// # use hitz_devices::virtio::queue::VirtQueue;
+    /// let queue = VirtQueue::new(128);
+    /// ```
     #[must_use]
     pub const fn new(size: u16) -> Self {
         let size = if size == 0 || size > MAX_QUEUE_SIZE {

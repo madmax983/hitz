@@ -1,12 +1,35 @@
 //! Shared ring buffer for serial output capture.
 //!
+//! # Abstract
 //! [`SerialBuf`] implements [`std::io::Write`] so it can serve as the output
-//! sink for [`hitz_devices::serial::SerialDevice<SerialBuf>`].  Multiple
+//! sink for `hitz_devices::serial::SerialDevice<SerialBuf>`. Multiple
 //! independent [`SerialReader`]s can be spawned from a single buffer; each
 //! tracks its own read position and is woken via [`tokio::sync::Notify`]
 //! when new data arrives (or the buffer is closed).
 //!
-//! When the ring is full, the oldest bytes are silently overwritten.
+//! # The Hero's Journey
+//! ```
+//! # use hitz_vmm::serial_buf::SerialBuf;
+//! # use std::io::Write;
+//! // 1. Create a new serial buffer.
+//! let mut buf = SerialBuf::new();
+//!
+//! // 2. Spawn a reader to consume the output.
+//! let mut reader = buf.spawn_reader();
+//!
+//! // 3. Write data to the buffer.
+//! buf.write_all(b"Booting hitz VM...").unwrap();
+//!
+//! // 4. The reader can then pull bytes out.
+//! # tokio_test::block_on(async {
+//! let bytes = reader.read_next().await.unwrap();
+//! assert_eq!(&bytes, b"Booting hitz VM...");
+//! # });
+//! ```
+//!
+//! # The Fine Print
+//! * **Overwriting**: When the ring is full, the oldest bytes are silently overwritten.
+//! * **Closing**: Once `close()` is called, all new readers and pending `read_next` calls will return `None`.
 
 use std::io::{self, Write};
 use std::sync::{Arc, Mutex};
@@ -40,7 +63,13 @@ pub struct SerialBuf {
 }
 
 impl SerialBuf {
-    /// Create a ring buffer with the [`DEFAULT_CAPACITY`] (64 KiB).
+    /// Create a ring buffer with the default capacity (64 KiB).
+    ///
+    /// # Examples
+    /// ```
+    /// # use hitz_vmm::serial_buf::SerialBuf;
+    /// let mut buf = SerialBuf::new();
+    /// ```
     #[must_use]
     pub fn new() -> Self {
         Self::with_capacity(DEFAULT_CAPACITY)

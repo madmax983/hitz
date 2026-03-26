@@ -1,8 +1,41 @@
 //! Virtio MMIO transport (version 2).
 //!
+//! # Abstract
 //! Implements the [`MmioDevice`] trait, translating MMIO register reads/writes
 //! into virtqueue operations and device config accesses. This is the "glue"
 //! between the guest driver and a [`VirtioBackend`].
+//!
+//! # The Hero's Journey
+//! ```
+//! # use hitz_devices::virtio::mmio_transport::VirtioMmioTransport;
+//! # use hitz_devices::virtio::VirtioBackend;
+//! # use std::sync::Arc;
+//! # use hitz_hal::GuestMemAccess;
+//! # struct DummyBackend;
+//! # impl VirtioBackend for DummyBackend {
+//! #     fn device_id(&self) -> u32 { 1 }
+//! #     fn device_features(&self) -> u64 { 0 }
+//! #     fn set_driver_features(&mut self, _f: u64) {}
+//! #     fn queue_count(&self) -> usize { 1 }
+//! #     fn process_queue(&mut self, _idx: usize, _q: &mut hitz_devices::virtio::queue::VirtQueue, _mem: &dyn GuestMemAccess) {}
+//! #     fn set_irq_vector(&mut self, _v: u8) {}
+//! #     fn set_status(&mut self, _status: u32) {}
+//! #     fn read_config(&self, _offset: u64, _size: u64) -> u64 { 0 }
+//! #     fn write_config(&mut self, _offset: u64, _size: u64, _value: u64) {}
+//! #     fn ack_interrupt(&mut self) -> u32 { 0 }
+//! # }
+//! # struct DummyMem;
+//! # impl GuestMemAccess for DummyMem {
+//! #     fn read_guest(&self, _gpa: u64, _buf: &mut [u8]) -> Result<(), hitz_hal::HalError> { Ok(()) }
+//! #     fn write_guest(&self, _gpa: u64, _data: &[u8]) -> Result<(), hitz_hal::HalError> { Ok(()) }
+//! # }
+//! // 1. Instantiate your backend device and memory.
+//! let backend = DummyBackend;
+//! let mem = Arc::new(DummyMem);
+//!
+//! // 2. Wrap the backend in the transport layer and give it an IRQ number.
+//! let transport = VirtioMmioTransport::new(backend, mem, 5);
+//! ```
 
 use std::sync::Arc;
 
@@ -189,7 +222,7 @@ pub struct VirtioMmioTransport<D: VirtioBackend> {
 impl<D: VirtioBackend> VirtioMmioTransport<D> {
     /// Create a new MMIO transport for the given backend.
     ///
-    /// Allocates one [`QueueState`] per queue reported by
+    /// Allocates one internal queue state per queue reported by
     /// [`VirtioBackend::queue_count`].
     ///
     /// * `device` -- the virtio backend (block, net, etc.)
