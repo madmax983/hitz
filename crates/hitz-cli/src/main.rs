@@ -21,8 +21,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use anyhow::{Context, Result};
 use clap::{Args, Parser, Subcommand};
 use hitz_api::{
-    ActionVmRequest, CloneVmRequest, CreateVmRequest, DEFAULT_CMDLINE, DEFAULT_CPUS, DEFAULT_GUEST_CID,
-    DEFAULT_RAM_MIB, GuestAgentMode, VmAction, VmConfig,
+    ActionVmRequest, CloneVmRequest, CreateVmRequest, DEFAULT_CMDLINE, DEFAULT_CPUS,
+    DEFAULT_GUEST_CID, DEFAULT_RAM_MIB, GuestAgentMode, VmAction, VmConfig,
 };
 use hitz_daemon::TelemetryGuard;
 use hitz_vmm::ExitReason;
@@ -996,6 +996,24 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
 
 /// Execute a `vm` subcommand by talking to the daemon over the named pipe.
 #[allow(clippy::too_many_lines)]
+fn print_api_error(status: hyper::StatusCode, resp: &str) {
+    if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(resp) {
+        use crossterm::style::Stylize;
+        println!("{}", err.message.red());
+    } else {
+        println!("{status}: {resp}");
+    }
+}
+
+fn handle_generic_response(status: hyper::StatusCode, resp: &str) {
+    if status.is_success() {
+        println!("{status}: {resp}");
+    } else {
+        print_api_error(status, resp);
+    }
+}
+
+#[allow(clippy::too_many_lines)]
 fn run_vm_command(cmd: VmCommand) -> Result<()> {
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -1037,14 +1055,7 @@ fn run_vm_command(cmd: VmCommand) -> Result<()> {
                     Some(&body),
                 )
                 .await?;
-                if status.is_success() {
-                    println!("{status}: {resp}");
-                } else if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(&resp) {
-                    use crossterm::style::Stylize;
-                    println!("{}", err.message.red());
-                } else {
-                    println!("{status}: {resp}");
-                }
+                handle_generic_response(status, &resp);
             }
             VmCommand::Clone(args) => {
                 let body = serde_json::to_string(&CloneVmRequest {
@@ -1059,14 +1070,7 @@ fn run_vm_command(cmd: VmCommand) -> Result<()> {
                     Some(&body),
                 )
                 .await?;
-                if status.is_success() {
-                    println!("{status}: {resp}");
-                } else if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(&resp) {
-                    use crossterm::style::Stylize;
-                    println!("{}", err.message.red());
-                } else {
-                    println!("{status}: {resp}");
-                }
+                handle_generic_response(status, &resp);
             }
             VmCommand::Start(args) => {
                 let body = serde_json::to_string(&ActionVmRequest {
@@ -1081,14 +1085,7 @@ fn run_vm_command(cmd: VmCommand) -> Result<()> {
                     Some(&body),
                 )
                 .await?;
-                if status.is_success() {
-                    println!("{status}: {resp}");
-                } else if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(&resp) {
-                    use crossterm::style::Stylize;
-                    println!("{}", err.message.red());
-                } else {
-                    println!("{status}: {resp}");
-                }
+                handle_generic_response(status, &resp);
             }
             VmCommand::Stop(args) => {
                 let body = serde_json::to_string(&ActionVmRequest {
@@ -1103,14 +1100,7 @@ fn run_vm_command(cmd: VmCommand) -> Result<()> {
                     Some(&body),
                 )
                 .await?;
-                if status.is_success() {
-                    println!("{status}: {resp}");
-                } else if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(&resp) {
-                    use crossterm::style::Stylize;
-                    println!("{}", err.message.red());
-                } else {
-                    println!("{status}: {resp}");
-                }
+                handle_generic_response(status, &resp);
             }
             VmCommand::Status(args) => {
                 let (status, resp) = pipe_client::pipe_request(
@@ -1178,13 +1168,10 @@ fn run_vm_command(cmd: VmCommand) -> Result<()> {
 
                         println!("{table}");
                     } else {
-                        println!("{status}: {resp}");
+                        print_api_error(status, &resp);
                     }
-                } else if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(&resp) {
-                    use crossterm::style::Stylize;
-                    println!("{}", err.message.red());
                 } else {
-                    println!("{status}: {resp}");
+                    print_api_error(status, &resp);
                 }
             }
             VmCommand::List(args) => {
@@ -1223,13 +1210,10 @@ fn run_vm_command(cmd: VmCommand) -> Result<()> {
                         }
                         println!("{table}");
                     } else {
-                        println!("{status}: {resp}");
+                        print_api_error(status, &resp);
                     }
-                } else if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(&resp) {
-                    use crossterm::style::Stylize;
-                    println!("{}", err.message.red());
                 } else {
-                    println!("{status}: {resp}");
+                    print_api_error(status, &resp);
                 }
             }
             VmCommand::Delete(args) => {
@@ -1243,11 +1227,8 @@ fn run_vm_command(cmd: VmCommand) -> Result<()> {
                 .await?;
                 if status.is_success() {
                     println!("deleted {}", args.id);
-                } else if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(&resp) {
-                    use crossterm::style::Stylize;
-                    println!("{}", err.message.red());
                 } else {
-                    println!("{status}: {resp}");
+                    print_api_error(status, &resp);
                 }
             }
             VmCommand::Serial(args) => {
@@ -1299,7 +1280,7 @@ fn run_vm_command(cmd: VmCommand) -> Result<()> {
                         serde_json::from_str(&resp).context("failed to parse metrics response")?;
                     print!("{}", format_metrics_snapshot(&snap));
                 } else {
-                    println!("{status}: {resp}");
+                    print_api_error(status, &resp);
                 }
             }
         }
@@ -1308,7 +1289,11 @@ fn run_vm_command(cmd: VmCommand) -> Result<()> {
 }
 
 #[cfg(test)]
-#[allow(unsafe_code, clippy::items_after_statements, clippy::ignore_without_reason)]
+#[allow(
+    unsafe_code,
+    clippy::items_after_statements,
+    clippy::ignore_without_reason
+)]
 mod tests {
     use super::*;
 
@@ -1587,8 +1572,14 @@ mod tests {
         );
         assert!(output.contains("vda"), "missing disk: {output}");
         assert!(output.contains("eth0"), "missing network: {output}");
-        assert!(output.contains("System:"), "missing system header: {output}");
+        assert!(
+            output.contains("System:"),
+            "missing system header: {output}"
+        );
         assert!(output.contains("Disks:"), "missing disks header: {output}");
-        assert!(output.contains("Networks:"), "missing networks header: {output}");
+        assert!(
+            output.contains("Networks:"),
+            "missing networks header: {output}"
+        );
     }
 }
