@@ -1,9 +1,37 @@
 //! Guest physical memory backed by `VirtualAlloc` on Windows.
 //!
+//! # Abstract
 //! Because the upstream `vm-memory` crate does not compile on Windows
 //! (libc `read`/`write` signature mismatches), we roll our own minimal
 //! guest memory abstraction using the Win32 `VirtualAlloc` / `VirtualFree`
 //! APIs directly.
+//!
+//! This module translates between Guest Physical Addresses (GPA) and Host
+//! Virtual Addresses (HVA).
+//!
+//! # The Hero's Journey
+//! ```
+//! # use hitz_vmm::memory::GuestMemory;
+//! # use hitz_hal::Gpa;
+//! // 1. Create the empty memory manager.
+//! let mut mem = GuestMemory::new();
+//!
+//! // 2. Add 4 KiB of memory at GPA 0x1000.
+//! mem.add_region(Gpa::new(0x1000), 4096).unwrap();
+//!
+//! // 3. Write data to the guest memory.
+//! mem.write_slice(Gpa::new(0x1000), b"Hello Guest!").unwrap();
+//!
+//! // 4. Read it back out.
+//! let mut buf = [0u8; 12];
+//! mem.read_slice(Gpa::new(0x1000), &mut buf).unwrap();
+//! assert_eq!(&buf, b"Hello Guest!");
+//! ```
+//!
+//! # The Fine Print
+//! * **Page Alignment**: Memory blocks must be added in multiples of 4 KiB.
+//! * **Windows Specific**: Behind the scenes, we use `VirtualAlloc` directly to ensure
+//!   memory is physically committed and un-pageable if required by the hypervisor.
 
 use std::ptr;
 
@@ -52,9 +80,17 @@ impl Drop for GuestRegion {
 
 /// Guest physical memory manager.
 ///
-/// Maintains a sorted list of [`GuestRegion`]s and provides typed
+/// Maintains a sorted list of internal regions and provides typed
 /// read/write access by guest physical address. Regions can be mapped
 /// into a HAL [`Partition`] for the hypervisor to wire up.
+///
+/// # Examples
+/// ```
+/// # use hitz_vmm::memory::GuestMemory;
+/// # use hitz_hal::Gpa;
+/// let mut mem = GuestMemory::new();
+/// mem.add_region(Gpa::new(0x1000), 4096).unwrap();
+/// ```
 pub struct GuestMemory {
     /// Regions sorted by `gpa_start` (ascending).
     regions: Vec<GuestRegion>,
@@ -67,6 +103,12 @@ unsafe impl Sync for GuestMemory {}
 
 impl GuestMemory {
     /// Create an empty guest memory with no regions.
+    ///
+    /// # Examples
+    /// ```
+    /// # use hitz_vmm::memory::GuestMemory;
+    /// let mem = GuestMemory::new();
+    /// ```
     #[must_use]
     pub const fn new() -> Self {
         Self {
@@ -176,6 +218,15 @@ impl GuestMemory {
     }
 
     /// Copy `data` into guest memory starting at `gpa`.
+    ///
+    /// # Examples
+    /// ```
+    /// # use hitz_vmm::memory::GuestMemory;
+    /// # use hitz_hal::Gpa;
+    /// let mut mem = GuestMemory::new();
+    /// mem.add_region(Gpa::new(0), 4096).unwrap();
+    /// mem.write_slice(Gpa::new(0), b"hitz rules").unwrap();
+    /// ```
     pub fn write_slice(&self, gpa: Gpa, data: &[u8]) -> Result<(), MemError> {
         if data.is_empty() {
             return Ok(());
@@ -190,6 +241,18 @@ impl GuestMemory {
     }
 
     /// Read `buf.len()` bytes from guest memory at `gpa` into `buf`.
+    ///
+    /// # Examples
+    /// ```
+    /// # use hitz_vmm::memory::GuestMemory;
+    /// # use hitz_hal::Gpa;
+    /// let mut mem = GuestMemory::new();
+    /// mem.add_region(Gpa::new(0), 4096).unwrap();
+    /// mem.write_slice(Gpa::new(0), b"test").unwrap();
+    /// let mut out = [0u8; 4];
+    /// mem.read_slice(Gpa::new(0), &mut out).unwrap();
+    /// assert_eq!(&out, b"test");
+    /// ```
     pub fn read_slice(&self, gpa: Gpa, buf: &mut [u8]) -> Result<(), MemError> {
         if buf.is_empty() {
             return Ok(());
