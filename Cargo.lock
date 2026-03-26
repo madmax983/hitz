@@ -667,6 +667,7 @@ name = "hitz-guest-agent"
 version = "0.1.0"
 dependencies = [
  "hitz-api",
+ "proptest",
  "rmp-serde",
  "serde",
  "vsock",
@@ -703,6 +704,7 @@ dependencies = [
  "hitz-hal",
  "hitz-net",
  "opentelemetry",
+ "proptest",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",

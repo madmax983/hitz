@@ -431,7 +431,7 @@ impl BootParams {
     /// and does not expose uninitialized padding bytes (there are none).
     #[allow(unsafe_code)]
     #[must_use]
-    pub fn as_bytes(&self) -> &[u8] {
+    pub const fn as_bytes(&self) -> &[u8] {
         unsafe {
             std::slice::from_raw_parts(
                 std::ptr::from_ref(self).cast::<u8>(),
