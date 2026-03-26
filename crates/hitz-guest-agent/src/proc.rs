@@ -253,4 +253,28 @@ mod tests {
         // Busy delta = 250, total delta = 1000, so 25%.
         assert!((pct - 25.0_f32).abs() < 1.0);
     }
+
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn havoc_fuzz_parse_proc_stat(s in ".*") {
+            let _ = parse_proc_stat_sample(&s);
+        }
+
+        #[test]
+        fn havoc_fuzz_parse_proc_meminfo(s in ".*") {
+            let _ = parse_proc_meminfo(&s);
+        }
+
+        #[test]
+        fn havoc_fuzz_parse_proc_diskstats(s in ".*") {
+            let _ = parse_proc_diskstats(&s);
+        }
+
+        #[test]
+        fn havoc_fuzz_parse_proc_net_dev(s in ".*") {
+            let _ = parse_proc_net_dev(&s);
+        }
+    }
 }

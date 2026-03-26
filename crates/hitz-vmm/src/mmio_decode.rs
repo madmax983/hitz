@@ -498,4 +498,13 @@ mod tests {
             assert_eq!(register_value(&regs, i), 0);
         }
     }
+
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn havoc_fuzz_decode_mmio_instruction(bytes in proptest::collection::vec(any::<u8>(), 0..15)) {
+            let _ = decode_mmio_instruction(&bytes);
+        }
+    }
 }

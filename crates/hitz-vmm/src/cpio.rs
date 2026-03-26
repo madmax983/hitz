@@ -142,4 +142,17 @@ mod tests {
         assert!(archive_str.contains("sbin/hitz-agent"));
         assert!(archive_str.contains("S99hitz-agent"));
     }
+
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn havoc_fuzz_cpio_builder(
+            path in ".*",
+            content in proptest::collection::vec(any::<u8>(), 0..1000),
+            mode in any::<u32>(),
+        ) {
+            let _ = CpioBuilder::new().add_file(&path, &content, mode).finish();
+        }
+    }
 }
