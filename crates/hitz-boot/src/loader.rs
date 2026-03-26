@@ -243,6 +243,12 @@ pub fn load_elf(
 // ---- Tests ----------------------------------------------------------------
 
 #[cfg(test)]
+#[allow(
+    clippy::expect_used,
+    clippy::unwrap_used,
+    clippy::cast_possible_truncation,
+    clippy::similar_names
+)]
 mod tests {
     use std::cell::RefCell;
 

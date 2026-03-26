@@ -149,7 +149,7 @@ mod tests {
         }
     }
 
-    /// Stub GuestMemAccess for testing.
+    /// Stub `GuestMemAccess` for testing.
     struct StubMem;
     impl GuestMemAccess for StubMem {
         fn read_guest(&self, _gpa: u64, _buf: &mut [u8]) -> Result<(), HalError> {

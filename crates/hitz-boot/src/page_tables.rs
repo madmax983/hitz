@@ -129,6 +129,7 @@ fn write_entry(table: &mut [u8], index: usize, value: u64) {
 
 /// Read a 64-bit little-endian value from the `index`-th slot of a page table.
 #[cfg(test)]
+#[allow(clippy::expect_used)]
 fn read_entry(table: &[u8], index: usize) -> u64 {
     let offset = index * 8;
     u64::from_le_bytes(table[offset..offset + 8].try_into().expect("8 bytes"))
@@ -139,6 +140,12 @@ fn read_entry(table: &[u8], index: usize) -> u64 {
 // ---------------------------------------------------------------------------
 
 #[cfg(test)]
+#[allow(
+    clippy::expect_used,
+    clippy::unwrap_used,
+    clippy::cast_possible_truncation,
+    clippy::identity_op
+)]
 mod tests {
     use super::*;
 

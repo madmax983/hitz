@@ -275,6 +275,7 @@ pub const fn set_acpi_rsdp(bp: &mut BootParams, rsdp_gpa: u64) {
 // ---- Tests ----------------------------------------------------------------
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
 

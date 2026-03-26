@@ -1961,6 +1961,11 @@ fn phase9_multi_vcpu_cancel() {
 #[test]
 #[ignore = "requires WHP enabled (Hyper-V) and HITZ_TEST_INITRAMFS env var"]
 fn phase10_port_forward_tcp() {
+    use hitz_api::{DEFAULT_GUEST_IP, DEFAULT_HOST_IP, NetConfig, PortForward, VmConfig};
+    use hitz_vmm::ExitReason;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
     let initramfs_path = match std::env::var("HITZ_TEST_INITRAMFS") {
         Ok(p) => std::path::PathBuf::from(p),
         Err(_) => {
@@ -1968,12 +1973,6 @@ fn phase10_port_forward_tcp() {
             return;
         }
     };
-
-    use std::sync::Arc;
-    use std::sync::atomic::{AtomicBool, Ordering};
-
-    use hitz_api::{DEFAULT_GUEST_IP, DEFAULT_HOST_IP, NetConfig, PortForward, VmConfig};
-    use hitz_vmm::ExitReason;
 
     let hv = WhpHypervisor::new().expect("WHP not available");
     let stop_flag = Arc::new(AtomicBool::new(false));
@@ -2037,7 +2036,7 @@ fn phase10_port_forward_tcp() {
 /// This is a compile + behavior test, not a metric correctness test.
 /// Run with: cargo test -p hitz-whp -- --ignored phase11
 #[test]
-#[ignore]
+#[ignore = "needs whp"]
 fn phase11_otel_noop_boot() {
     // No TelemetryGuard initialised → global providers are no-ops.
     // This ensures our instrumentation doesn't add any required setup steps.

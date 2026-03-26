@@ -59,6 +59,7 @@ pub fn load_initramfs(
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used, clippy::similar_names)]
 mod tests {
     use std::cell::RefCell;
 

@@ -260,6 +260,7 @@ pub fn build_madt(cpu_count: u32) -> Result<Vec<u8>, BootError> {
 // ---- Tests ----------------------------------------------------------------
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
 
