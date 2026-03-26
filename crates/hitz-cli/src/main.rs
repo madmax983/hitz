@@ -10,6 +10,7 @@
 #![allow(clippy::expect_used)]
 
 mod pipe_client;
+mod tui;
 
 use std::ffi::OsString;
 use std::io::{BufWriter, Write, stdout};
@@ -21,8 +22,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use anyhow::{Context, Result};
 use clap::{Args, Parser, Subcommand};
 use hitz_api::{
-    ActionVmRequest, CloneVmRequest, CreateVmRequest, DEFAULT_CMDLINE, DEFAULT_CPUS, DEFAULT_GUEST_CID,
-    DEFAULT_RAM_MIB, GuestAgentMode, VmAction, VmConfig,
+    ActionVmRequest, CloneVmRequest, CreateVmRequest, DEFAULT_CMDLINE, DEFAULT_CPUS,
+    DEFAULT_GUEST_CID, DEFAULT_RAM_MIB, GuestAgentMode, VmAction, VmConfig,
 };
 use hitz_daemon::TelemetryGuard;
 use hitz_vmm::ExitReason;
@@ -332,7 +333,7 @@ enum VmCommand {
     /// Stream serial console output.
     Serial(VmIdArgs),
     /// Display live resource metrics for a running VM.
-    Metrics(VmIdArgs),
+    Metrics(VmMetricsArgs),
 }
 
 /// Arguments for `vm clone`.
@@ -414,17 +415,36 @@ struct VmCreateArgs {
 
 /// Arguments that take just a VM ID.
 #[derive(Parser)]
-struct VmIdArgs {
+pub struct VmIdArgs {
     /// VM identifier.
-    id: String,
+    pub id: String,
 
     /// Named pipe path.
     #[arg(long, default_value = DEFAULT_PIPE)]
-    pipe: String,
+    pub pipe: String,
 
     /// Connect to daemon via TCP instead of named pipe.
     #[arg(long)]
-    tcp: Option<std::net::SocketAddr>,
+    pub tcp: Option<std::net::SocketAddr>,
+}
+
+/// Arguments for `vm metrics`.
+#[derive(Parser)]
+pub struct VmMetricsArgs {
+    /// VM identifier.
+    pub id: String,
+
+    /// Named pipe path.
+    #[arg(long, default_value = DEFAULT_PIPE)]
+    pub pipe: String,
+
+    /// Connect to daemon via TCP instead of named pipe.
+    #[arg(long)]
+    pub tcp: Option<std::net::SocketAddr>,
+
+    /// Run the interactive TUI metrics dashboard.
+    #[arg(long)]
+    pub tui: bool,
 }
 
 /// Arguments for `vm list`.
@@ -1286,20 +1306,24 @@ fn run_vm_command(cmd: VmCommand) -> Result<()> {
                 }
             }
             VmCommand::Metrics(args) => {
-                let (status, resp) = pipe_client::pipe_request(
-                    &args.pipe,
-                    args.tcp,
-                    Method::GET,
-                    &format!("/vms/{}/metrics", args.id),
-                    None,
-                )
-                .await?;
-                if status.is_success() {
-                    let snap: hitz_api::MetricsSnapshot =
-                        serde_json::from_str(&resp).context("failed to parse metrics response")?;
-                    print!("{}", format_metrics_snapshot(&snap));
+                if args.tui {
+                    crate::tui::run_metrics_tui(&args).await?;
                 } else {
-                    println!("{status}: {resp}");
+                    let (status, resp) = pipe_client::pipe_request(
+                        &args.pipe,
+                        args.tcp,
+                        Method::GET,
+                        &format!("/vms/{}/metrics", args.id),
+                        None,
+                    )
+                    .await?;
+                    if status.is_success() {
+                        let snap: hitz_api::MetricsSnapshot = serde_json::from_str(&resp)
+                            .context("failed to parse metrics response")?;
+                        print!("{}", format_metrics_snapshot(&snap));
+                    } else {
+                        println!("{status}: {resp}");
+                    }
                 }
             }
         }
@@ -1308,7 +1332,11 @@ fn run_vm_command(cmd: VmCommand) -> Result<()> {
 }
 
 #[cfg(test)]
-#[allow(unsafe_code, clippy::items_after_statements, clippy::ignore_without_reason)]
+#[allow(
+    unsafe_code,
+    clippy::items_after_statements,
+    clippy::ignore_without_reason
+)]
 mod tests {
     use super::*;
 
@@ -1543,6 +1571,43 @@ mod tests {
     }
 
     #[test]
+    fn parse_metrics_tui_flag() {
+        let args_vec = vec![
+            std::ffi::OsString::from("hitz"),
+            std::ffi::OsString::from("vm"),
+            std::ffi::OsString::from("metrics"),
+            std::ffi::OsString::from("vm-123"),
+            std::ffi::OsString::from("--tui"),
+        ];
+        let cli = Cli::try_parse_from(args_vec).expect("parse failed");
+        match cli.command {
+            Command::Vm(VmCommand::Metrics(parsed)) => {
+                assert_eq!(parsed.id, "vm-123");
+                assert!(parsed.tui, "--tui should be true");
+            }
+            _ => panic!("Expected vm metrics command"),
+        }
+    }
+
+    #[test]
+    fn parse_metrics_no_tui_flag() {
+        let args_vec = vec![
+            std::ffi::OsString::from("hitz"),
+            std::ffi::OsString::from("vm"),
+            std::ffi::OsString::from("metrics"),
+            std::ffi::OsString::from("vm-123"),
+        ];
+        let cli = Cli::try_parse_from(args_vec).expect("parse failed");
+        match cli.command {
+            Command::Vm(VmCommand::Metrics(parsed)) => {
+                assert_eq!(parsed.id, "vm-123");
+                assert!(!parsed.tui, "--tui should be false by default");
+            }
+            _ => panic!("Expected vm metrics command"),
+        }
+    }
+
+    #[test]
     fn metrics_output_formats_snapshot() {
         use hitz_api::{CpuMetrics, DiskMetrics, MemoryMetrics, MetricsSnapshot, NetMetrics};
         let snap = MetricsSnapshot {
@@ -1587,8 +1652,14 @@ mod tests {
         );
         assert!(output.contains("vda"), "missing disk: {output}");
         assert!(output.contains("eth0"), "missing network: {output}");
-        assert!(output.contains("System:"), "missing system header: {output}");
+        assert!(
+            output.contains("System:"),
+            "missing system header: {output}"
+        );
         assert!(output.contains("Disks:"), "missing disks header: {output}");
-        assert!(output.contains("Networks:"), "missing networks header: {output}");
+        assert!(
+            output.contains("Networks:"),
+            "missing networks header: {output}"
+        );
     }
 }
