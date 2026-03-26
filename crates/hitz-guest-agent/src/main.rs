@@ -131,11 +131,20 @@ fn parse_proc_pid_stat(pid: u32, content: &str) -> Option<hitz_api::ProcMetrics>
     let open = content.find('(')?;
     let close = content.rfind(')')?;
     let name = content[open + 1..close].to_string();
-    let rest: Vec<&str> = content[close + 2..].split_ascii_whitespace().collect();
-    let state = rest.first()?.chars().next().unwrap_or('?');
-    let utime: u64 = rest.get(11)?.parse().ok()?;
-    let stime: u64 = rest.get(12)?.parse().ok()?;
-    let rss_pages: u64 = rest.get(21)?.parse().ok()?;
+    let mut iter = content[close + 2..].split_ascii_whitespace();
+
+    // According to proc(5) for /proc/[pid]/stat:
+    // (1) pid
+    // (2) comm
+    // (3) state (rest[0] after our split)
+    let state = iter.next()?.chars().next().unwrap_or('?');
+
+    // (4) ppid to (13) minflt -> 10 fields to skip to get to utime
+    let utime: u64 = iter.nth(10)?.parse().ok()?; // (14) utime
+    let stime: u64 = iter.next()?.parse().ok()?; // (15) stime
+
+    // (16) cutime to (23) vsize -> 8 fields to skip to get to rss
+    let rss_pages: u64 = iter.nth(8)?.parse().ok()?; // (24) rss
     // cpu_pct: lifetime CPU fraction as a percentage.
     // Computed as (lifetime_ticks / USER_HZ) / uptime_secs * 100, capped at 100%.
     // USER_HZ = 100 on all Linux targets.
