@@ -34,3 +34,49 @@ pub enum MemError {
     #[error("HAL error: {0}")]
     Hal(#[from] hitz_hal::HalError),
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn should_format_alloc_failed() {
+        let err = MemError::AllocFailed {
+            gpa: 0x1000,
+            size: 4096,
+        };
+        assert_eq!(
+            err.to_string(),
+            "allocation failed for 4096 bytes at GPA 0x1000"
+        );
+    }
+
+    #[test]
+    fn should_format_not_mapped() {
+        let err = MemError::NotMapped {
+            gpa: 0x2000,
+            len: 128,
+        };
+        assert_eq!(err.to_string(), "GPA 0x2000 + 128 bytes is not mapped");
+    }
+
+    #[test]
+    fn should_format_out_of_bounds() {
+        let err = MemError::OutOfBounds {
+            gpa: 0x3000,
+            len: 256,
+        };
+        assert_eq!(err.to_string(), "GPA 0x3000 + 256 overflows region boundary");
+    }
+
+    #[test]
+    fn should_format_hal() {
+        // Create a dummy HalError to test the display formatting
+        let hal_err = hitz_hal::HalError::CreatePartition("dummy reason".to_string());
+        let err = MemError::Hal(hal_err);
+        assert_eq!(
+            err.to_string(),
+            "HAL error: failed to create partition: dummy reason"
+        );
+    }
+}
