@@ -230,20 +230,22 @@ pub fn random_mac() -> [u8; 6] {
 
 /// Parse a MAC address string in "AA:BB:CC:DD:EE:FF" format.
 ///
+/// ⚡ Bolt: Iterates over split parts directly instead of collecting into an intermediate `Vec<&str>`, avoiding heap allocations on the hot path.
+///
 /// # Errors
 ///
 /// Returns an error string if the format is invalid.
 pub fn parse_mac(s: &str) -> Result<[u8; 6], String> {
-    let parts: Vec<&str> = s.split(':').collect();
-    if parts.len() != 6 {
-        return Err(format!(
-            "expected 6 colon-separated octets, got {}",
-            parts.len()
-        ));
+    let parts = s.split(':');
+
+    // Quick length check before allocating or parsing.
+    let count = parts.clone().count();
+    if count != 6 {
+        return Err(format!("expected 6 colon-separated octets, got {count}"));
     }
 
     let mut mac = [0u8; 6];
-    for (i, part) in parts.iter().enumerate() {
+    for (i, part) in parts.enumerate() {
         mac[i] =
             u8::from_str_radix(part, 16).map_err(|e| format!("invalid hex octet '{part}': {e}"))?;
     }
@@ -253,33 +255,38 @@ pub fn parse_mac(s: &str) -> Result<[u8; 6], String> {
 
 /// Parse a CIDR notation string like "192.168.100.1/24".
 ///
+/// ⚡ Bolt: Consumes iterators directly instead of collecting into `Vec<&str>`, removing unnecessary heap allocations.
+///
 /// Returns the IPv4 address and prefix length.
 ///
 /// # Errors
 ///
 /// Returns an error string if the format is invalid.
 pub fn parse_cidr(s: &str) -> Result<([u8; 4], u8), String> {
-    let parts: Vec<&str> = s.splitn(2, '/').collect();
-    if parts.len() != 2 {
-        return Err("expected format: A.B.C.D/prefix".to_string());
-    }
+    let mut parts = s.splitn(2, '/');
+    let ip_str = parts
+        .next()
+        .ok_or_else(|| "expected format: A.B.C.D/prefix".to_string())?;
+    let prefix_str = parts
+        .next()
+        .ok_or_else(|| "expected format: A.B.C.D/prefix".to_string())?;
 
-    let octets: Vec<&str> = parts[0].split('.').collect();
-    if octets.len() != 4 {
-        return Err(format!("expected 4 octets, got {}", octets.len()));
+    let octets = ip_str.split('.');
+    let count = octets.clone().count();
+    if count != 4 {
+        return Err(format!("expected 4 octets, got {count}"));
     }
 
     let mut ip = [0u8; 4];
-    for (i, octet) in octets.iter().enumerate() {
+    for (i, octet) in octets.enumerate() {
         ip[i] = octet
             .parse::<u8>()
             .map_err(|e| format!("invalid octet '{octet}': {e}"))?;
     }
 
-    let prefix: u8 = parts[1].parse().map_err(|e| {
-        let p = parts[1];
-        format!("invalid prefix length '{p}': {e}")
-    })?;
+    let prefix: u8 = prefix_str
+        .parse()
+        .map_err(|e| format!("invalid prefix length '{prefix_str}': {e}"))?;
 
     if prefix > 32 {
         return Err(format!("prefix length {prefix} exceeds 32"));

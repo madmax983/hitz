@@ -21,8 +21,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use anyhow::{Context, Result};
 use clap::{Args, Parser, Subcommand};
 use hitz_api::{
-    ActionVmRequest, CloneVmRequest, CreateVmRequest, DEFAULT_CMDLINE, DEFAULT_CPUS, DEFAULT_GUEST_CID,
-    DEFAULT_RAM_MIB, GuestAgentMode, VmAction, VmConfig,
+    ActionVmRequest, CloneVmRequest, CreateVmRequest, DEFAULT_CMDLINE, DEFAULT_CPUS,
+    DEFAULT_GUEST_CID, DEFAULT_RAM_MIB, GuestAgentMode, VmAction, VmConfig,
 };
 use hitz_daemon::TelemetryGuard;
 use hitz_vmm::ExitReason;
@@ -1308,7 +1308,11 @@ fn run_vm_command(cmd: VmCommand) -> Result<()> {
 }
 
 #[cfg(test)]
-#[allow(unsafe_code, clippy::items_after_statements, clippy::ignore_without_reason)]
+#[allow(
+    unsafe_code,
+    clippy::items_after_statements,
+    clippy::ignore_without_reason
+)]
 mod tests {
     use super::*;
 
@@ -1587,8 +1591,14 @@ mod tests {
         );
         assert!(output.contains("vda"), "missing disk: {output}");
         assert!(output.contains("eth0"), "missing network: {output}");
-        assert!(output.contains("System:"), "missing system header: {output}");
+        assert!(
+            output.contains("System:"),
+            "missing system header: {output}"
+        );
         assert!(output.contains("Disks:"), "missing disks header: {output}");
-        assert!(output.contains("Networks:"), "missing networks header: {output}");
+        assert!(
+            output.contains("Networks:"),
+            "missing networks header: {output}"
+        );
     }
 }
