@@ -474,7 +474,12 @@ impl<D: VirtioBackend> MmioDevice for VirtioMmioTransport<D> {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used, clippy::cast_possible_truncation, unused_results)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::cast_possible_truncation,
+    unused_results
+)]
 mod tests {
     use super::*;
     use std::sync::Mutex;
