@@ -333,6 +333,8 @@ enum VmCommand {
     Serial(VmIdArgs),
     /// Display live resource metrics for a running VM.
     Metrics(VmIdArgs),
+    /// Display live interactive resource dashboard.
+    Top(VmIdArgs),
 }
 
 /// Arguments for `vm clone`.
@@ -1293,6 +1295,259 @@ async fn handle_vm_serial(args: &VmIdArgs) -> Result<()> {
     Ok(())
 }
 
+async fn handle_vm_top(args: &VmIdArgs) -> Result<()> {
+    use crossterm::{
+        event::{self, Event, KeyCode},
+        execute,
+        terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
+    };
+    use ratatui::{
+        Terminal,
+        backend::CrosstermBackend,
+        layout::{Constraint, Direction, Layout},
+        style::{Color, Modifier, Style},
+        widgets::{Block, Borders, Gauge, Paragraph, Row, Table},
+    };
+    use std::time::{Duration, Instant};
+
+    enable_raw_mode().context("failed to enable raw mode")?;
+    let mut stdout = std::io::stdout();
+    execute!(stdout, EnterAlternateScreen).context("failed to enter alternate screen")?;
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal = Terminal::new(backend).context("failed to create terminal")?;
+
+    let res = async {
+        let tick_rate = Duration::from_secs(1);
+        let mut last_tick = Instant::now();
+        let mut last_snap: Option<hitz_api::MetricsSnapshot> = None;
+        let mut last_err: Option<String> = None;
+
+        loop {
+            // Draw UI
+            let _ = terminal.draw(|f| {
+                let size = f.area();
+                let main_chunks = Layout::default()
+                    .direction(Direction::Vertical)
+                    .constraints([
+                        Constraint::Length(3), // Header
+                        Constraint::Length(4), // CPU & Mem Gauges
+                        Constraint::Min(5),    // Main content (Tables)
+                    ])
+                    .split(size);
+
+                // Header
+                let header = Paragraph::new(format!("Hitz Top - VM: {}", args.id))
+                    .style(
+                        Style::default()
+                            .fg(Color::Cyan)
+                            .add_modifier(Modifier::BOLD),
+                    )
+                    .block(Block::default().borders(Borders::ALL));
+                f.render_widget(header, main_chunks[0]);
+
+                if let Some(ref err) = last_err {
+                    let err_p = Paragraph::new(err.clone())
+                        .style(Style::default().fg(Color::Red))
+                        .block(Block::default().borders(Borders::ALL).title("Error"));
+                    f.render_widget(err_p, main_chunks[1]);
+                    return;
+                }
+
+                if let Some(ref snap) = last_snap {
+                    let top_chunks = Layout::default()
+                        .direction(Direction::Horizontal)
+                        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+                        .split(main_chunks[1]);
+
+                    // CPU Gauge
+                    let cpu_label = format!(
+                        "{:.1}% (Load: {:.2}, {:.2}, {:.2})",
+                        snap.cpu.total_pct,
+                        snap.cpu.load_avg[0],
+                        snap.cpu.load_avg[1],
+                        snap.cpu.load_avg[2]
+                    );
+                    let cpu_gauge = Gauge::default()
+                        .block(Block::default().title("CPU").borders(Borders::ALL))
+                        .gauge_style(Style::default().fg(Color::Green))
+                        .percent((snap.cpu.total_pct as u16).min(100))
+                        .label(cpu_label);
+                    f.render_widget(cpu_gauge, top_chunks[0]);
+
+                    // Memory Gauge
+                    let used_mb = snap.memory.used_bytes / (1024 * 1024);
+                    let total_mb = snap.memory.total_bytes / (1024 * 1024);
+                    let mem_pct = if total_mb > 0 {
+                        ((used_mb as f64 / total_mb as f64) * 100.0) as u16
+                    } else {
+                        0
+                    };
+                    let mem_label = format!("{} MB / {} MB", used_mb, total_mb);
+                    let mem_gauge = Gauge::default()
+                        .block(Block::default().title("Memory").borders(Borders::ALL))
+                        .gauge_style(Style::default().fg(Color::Yellow))
+                        .percent(mem_pct.min(100))
+                        .label(mem_label);
+                    f.render_widget(mem_gauge, top_chunks[1]);
+
+                    let bottom_chunks = Layout::default()
+                        .direction(Direction::Horizontal)
+                        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+                        .split(main_chunks[2]);
+
+                    let io_chunks = Layout::default()
+                        .direction(Direction::Vertical)
+                        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+                        .split(bottom_chunks[0]);
+
+                    // Disk Table
+                    let disk_rows: Vec<Row> = snap
+                        .disks
+                        .iter()
+                        .map(|d| {
+                            Row::new(vec![
+                                d.name.clone(),
+                                format!("{}", d.read_bytes / 1024),
+                                format!("{}", d.write_bytes / 1024),
+                            ])
+                        })
+                        .collect();
+                    let disk_table = Table::new(
+                        disk_rows,
+                        [
+                            Constraint::Percentage(40),
+                            Constraint::Percentage(30),
+                            Constraint::Percentage(30),
+                        ],
+                    )
+                    .header(
+                        Row::new(vec!["Device", "Read KB", "Write KB"])
+                            .style(Style::default().add_modifier(Modifier::BOLD)),
+                    )
+                    .block(Block::default().title("Disks").borders(Borders::ALL));
+                    f.render_widget(disk_table, io_chunks[0]);
+
+                    // Network Table
+                    let net_rows: Vec<Row> = snap
+                        .networks
+                        .iter()
+                        .map(|n| {
+                            Row::new(vec![
+                                n.interface.clone(),
+                                format!("{}", n.rx_bytes / 1024),
+                                format!("{}", n.tx_bytes / 1024),
+                            ])
+                        })
+                        .collect();
+                    let net_table = Table::new(
+                        net_rows,
+                        [
+                            Constraint::Percentage(40),
+                            Constraint::Percentage(30),
+                            Constraint::Percentage(30),
+                        ],
+                    )
+                    .header(
+                        Row::new(vec!["Interface", "Rx KB", "Tx KB"])
+                            .style(Style::default().add_modifier(Modifier::BOLD)),
+                    )
+                    .block(Block::default().title("Networks").borders(Borders::ALL));
+                    f.render_widget(net_table, io_chunks[1]);
+
+                    // Processes Table
+                    let proc_rows: Vec<Row> = snap
+                        .processes
+                        .iter()
+                        .map(|p| {
+                            Row::new(vec![
+                                p.pid.to_string(),
+                                p.name.clone(),
+                                format!("{:.1}%", p.cpu_pct),
+                                format!("{} MB", p.rss_bytes / (1024 * 1024)),
+                            ])
+                        })
+                        .collect();
+                    let proc_table = Table::new(
+                        proc_rows,
+                        [
+                            Constraint::Percentage(15),
+                            Constraint::Percentage(45),
+                            Constraint::Percentage(20),
+                            Constraint::Percentage(20),
+                        ],
+                    )
+                    .header(
+                        Row::new(vec!["PID", "Name", "CPU", "RSS"])
+                            .style(Style::default().add_modifier(Modifier::BOLD)),
+                    )
+                    .block(
+                        Block::default()
+                            .title("Top Processes")
+                            .borders(Borders::ALL),
+                    );
+                    f.render_widget(proc_table, bottom_chunks[1]);
+                } else if last_err.is_none() {
+                    let loading = Paragraph::new("Loading metrics...")
+                        .block(Block::default().borders(Borders::ALL));
+                    f.render_widget(loading, main_chunks[1]);
+                }
+            })?;
+
+            // Event handling
+            let timeout = tick_rate
+                .checked_sub(last_tick.elapsed())
+                .unwrap_or_else(|| Duration::from_secs(0));
+            if crossterm::event::poll(timeout)? {
+                if let Event::Key(key) = event::read()? {
+                    if key.code == KeyCode::Char('q') || key.code == KeyCode::Esc {
+                        break;
+                    } else if key.code == KeyCode::Char('c')
+                        && key.modifiers.contains(event::KeyModifiers::CONTROL)
+                    {
+                        break;
+                    }
+                }
+            }
+
+            if last_tick.elapsed() >= tick_rate {
+                last_tick = Instant::now();
+                // Fetch metrics
+                let (status, resp) = pipe_client::pipe_request(
+                    &args.pipe,
+                    args.tcp,
+                    Method::GET,
+                    &format!("/vms/{}/metrics", args.id),
+                    None,
+                )
+                .await?;
+
+                if status.is_success() {
+                    match serde_json::from_str::<hitz_api::MetricsSnapshot>(&resp) {
+                        Ok(snap) => {
+                            last_snap = Some(snap);
+                            last_err = None;
+                        }
+                        Err(e) => {
+                            last_err = Some(format!("Parse error: {}", e));
+                        }
+                    }
+                } else {
+                    last_err = Some(format!("{}: {}", status, resp));
+                }
+            }
+        }
+        Ok::<(), anyhow::Error>(())
+    }
+    .await;
+
+    // Restore terminal
+    disable_raw_mode().context("failed to disable raw mode")?;
+    execute!(terminal.backend_mut(), LeaveAlternateScreen)
+        .context("failed to leave alternate screen")?;
+    terminal.show_cursor().context("failed to show cursor")?;
+
+    res
+}
 async fn handle_vm_metrics(args: &VmIdArgs) -> Result<()> {
     let (status, resp) = pipe_client::pipe_request(
         &args.pipe,
@@ -1330,6 +1585,7 @@ fn run_vm_command(cmd: VmCommand) -> Result<()> {
             VmCommand::Delete(args) => handle_vm_delete(&args).await,
             VmCommand::Serial(args) => handle_vm_serial(&args).await,
             VmCommand::Metrics(args) => handle_vm_metrics(&args).await,
+            VmCommand::Top(args) => handle_vm_top(&args).await,
         }
     })
 }
@@ -1627,5 +1883,22 @@ mod tests {
             output.contains("Networks:"),
             "missing networks header: {output}"
         );
+    }
+}
+
+#[cfg(test)]
+mod top_tests {
+    use crate::VmIdArgs;
+    // Just a sanity check to verify the compiler parses everything.
+    // Testing terminal UI without a real terminal attached can block/panic,
+    // so we just assert our command layout exists and compiles correctly.
+    #[test]
+    fn run_vm_top_command_definition_compiles() {
+        let _args = VmIdArgs {
+            id: "test".to_string(),
+            pipe: "pipe".to_string(),
+            tcp: None,
+        };
+        assert!(true);
     }
 }
