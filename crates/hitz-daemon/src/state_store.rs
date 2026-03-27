@@ -247,4 +247,32 @@ mod tests {
         let raw_after = store.load_raw_state("vm1").unwrap();
         assert_eq!(raw_before.created_at, raw_after.created_at);
     }
+
+    #[test]
+    fn load_all_skips_non_directories() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = StateStore::new(dir.path().to_path_buf()).unwrap();
+
+        // Add a valid VM
+        store.save_config("valid_vm", &make_config()).unwrap();
+
+        // Add a file in the base directory
+        let file_path = dir.path().join("some_file.txt");
+        std::fs::write(file_path, b"not a directory").unwrap();
+
+        let results = store.load_all().unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].0, "valid_vm");
+    }
+
+    #[test]
+    fn test_now_ms() {
+        // Just verify it returns a reasonable timestamp and doesn't panic
+        let t1 = now_ms();
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        let t2 = now_ms();
+        assert!(t2 >= t1);
+        assert!(t1 > 0);
+        assert!(t1 < u64::MAX);
+    }
 }
