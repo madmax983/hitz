@@ -873,7 +873,7 @@ fn run_daemon(args: &DaemonStartArgs) -> Result<()> {
 /// Format a [`hitz_api::MetricsSnapshot`] into a human-readable string for CLI display.
 #[allow(clippy::too_many_lines)]
 fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
-    use comfy_table::presets::NOTHING;
+    use comfy_table::presets::UTF8_FULL;
     use comfy_table::{Attribute, Cell, Table};
     use std::fmt::Write as _;
 
@@ -881,7 +881,7 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
 
     // ── System ──
     let mut sys_table = Table::new();
-    let _ = sys_table.load_preset(NOTHING);
+    let _ = sys_table.load_preset(UTF8_FULL);
 
     let cores: Vec<String> = snap
         .cpu
@@ -917,7 +917,7 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
     if !snap.disks.is_empty() {
         let _ = writeln!(out);
         let mut disk_table = Table::new();
-        let _ = disk_table.load_preset(NOTHING);
+        let _ = disk_table.load_preset(UTF8_FULL);
         let _ = disk_table.set_header(vec![
             Cell::new("Disk").add_attribute(Attribute::Bold),
             Cell::new("Reads").add_attribute(Attribute::Bold),
@@ -944,7 +944,7 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
     if !snap.networks.is_empty() {
         let _ = writeln!(out);
         let mut net_table = Table::new();
-        let _ = net_table.load_preset(NOTHING);
+        let _ = net_table.load_preset(UTF8_FULL);
         let _ = net_table.set_header(vec![
             Cell::new("Interface").add_attribute(Attribute::Bold),
             Cell::new("RX KB").add_attribute(Attribute::Bold),
@@ -971,7 +971,7 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
     if !snap.processes.is_empty() {
         let _ = writeln!(out);
         let mut proc_table = Table::new();
-        let _ = proc_table.load_preset(NOTHING);
+        let _ = proc_table.load_preset(UTF8_FULL);
         let _ = proc_table.set_header(vec![
             Cell::new("PID").add_attribute(Attribute::Bold),
             Cell::new("Name").add_attribute(Attribute::Bold),
@@ -1137,11 +1137,11 @@ async fn handle_vm_status(args: &VmIdArgs) -> Result<()> {
     .await?;
     if status.is_success() {
         if let Ok(info) = serde_json::from_str::<hitz_api::VmInfo>(&resp) {
-            use comfy_table::presets::NOTHING;
+            use comfy_table::presets::UTF8_FULL;
             use comfy_table::{Cell, Color, Table};
 
             let mut table = Table::new();
-            let _ = table.load_preset(NOTHING);
+            let _ = table.load_preset(UTF8_FULL);
 
             let state_cell = match info.state {
                 hitz_api::VmState::Running => Cell::new("Running").fg(Color::Green),
@@ -1208,8 +1208,10 @@ async fn handle_vm_list(args: &VmListArgs) -> Result<()> {
         pipe_client::pipe_request(&args.pipe, args.tcp, Method::GET, "/vms", None).await?;
     if status.is_success() {
         if let Ok(vms) = serde_json::from_str::<Vec<hitz_api::VmInfo>>(&resp) {
+            use comfy_table::presets::UTF8_FULL;
             use comfy_table::{Cell, Color, Table};
             let mut table = Table::new();
+            let _ = table.load_preset(UTF8_FULL);
             let _ = table.set_header(vec!["ID", "State", "RAM (MiB)", "CPUs", "Exit Reason"]);
 
             for info in vms {
@@ -1298,6 +1300,14 @@ async fn handle_vm_serial(args: &VmIdArgs) -> Result<()> {
     Ok(())
 }
 
+#[allow(
+    clippy::too_many_lines,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    clippy::collapsible_if,
+    clippy::if_same_then_else
+)]
 async fn handle_vm_top(args: &VmIdArgs) -> Result<()> {
     use crossterm::{
         event::{self, Event, KeyCode},
@@ -1385,7 +1395,7 @@ async fn handle_vm_top(args: &VmIdArgs) -> Result<()> {
                     } else {
                         0
                     };
-                    let mem_label = format!("{} MB / {} MB", used_mb, total_mb);
+                    let mem_label = format!("{used_mb} MB / {total_mb} MB");
                     let mem_gauge = Gauge::default()
                         .block(Block::default().title("Memory").borders(Borders::ALL))
                         .gauge_style(Style::default().fg(Color::Yellow))
@@ -1531,11 +1541,11 @@ async fn handle_vm_top(args: &VmIdArgs) -> Result<()> {
                             last_err = None;
                         }
                         Err(e) => {
-                            last_err = Some(format!("Parse error: {}", e));
+                            last_err = Some(format!("Parse error: {e}"));
                         }
                     }
                 } else {
-                    last_err = Some(format!("{}: {}", status, resp));
+                    last_err = Some(format!("{status}: {resp}"));
                 }
             }
         }
@@ -1896,6 +1906,7 @@ mod top_tests {
     // Testing terminal UI without a real terminal attached can block/panic,
     // so we just assert our command layout exists and compiles correctly.
     #[test]
+    #[allow(clippy::assertions_on_constants)]
     fn run_vm_top_command_definition_compiles() {
         let _args = VmIdArgs {
             id: "test".to_string(),
