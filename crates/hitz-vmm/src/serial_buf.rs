@@ -70,14 +70,23 @@ impl SerialBuf {
     /// # use hitz_vmm::serial_buf::SerialBuf;
     /// let mut buf = SerialBuf::new();
     /// ```
+    ///
+    /// # Panics
+    ///
+    /// Panics if `capacity` is 0.
     #[must_use]
     pub fn new() -> Self {
         Self::with_capacity(DEFAULT_CAPACITY)
     }
 
     /// Create a ring buffer with an explicit capacity in bytes.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `capacity` is 0.
     #[must_use]
     pub fn with_capacity(capacity: usize) -> Self {
+        assert!(capacity > 0, "capacity must be greater than 0");
         Self {
             inner: Arc::new(Mutex::new(Inner {
                 buf: vec![0u8; capacity],
@@ -92,9 +101,13 @@ impl SerialBuf {
     /// Spawn an independent reader starting from the current write position.
     ///
     /// Each reader maintains its own cursor and can be polled independently.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `capacity` is 0.
     #[must_use]
     pub fn reader(&self) -> SerialReader {
-        let read_pos = self.inner.lock().map(|i| i.total_written).unwrap_or(0);
+        let read_pos = self.inner.lock().map_or(0, |i| i.total_written);
         SerialReader {
             inner: self.inner.clone(),
             notify: self.notify.clone(),
