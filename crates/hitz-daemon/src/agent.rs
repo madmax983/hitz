@@ -51,6 +51,7 @@ pub fn resolve_agent_bytes(mode: &GuestAgentMode) -> Option<Vec<u8>> {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used)]
 mod tests {
     use super::*;
 

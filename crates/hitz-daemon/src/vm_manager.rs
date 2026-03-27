@@ -366,25 +366,7 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
         self.store.save_state(id, VmState::Running)?;
 
         // Inject guest agent overlay into initramfs if agent is enabled.
-        let boot_config =
-            if let Some(agent_bytes) = crate::agent::resolve_agent_bytes(&config.guest_agent) {
-                let overlay = crate::agent::build_agent_overlay(&agent_bytes);
-                let mut combined = config
-                    .initramfs_path
-                    .as_ref()
-                    .map_or_else(Vec::new, |path| std::fs::read(path).unwrap_or_default());
-                combined.extend_from_slice(&overlay);
-                let tmp = std::env::temp_dir().join(format!("hitz-initrd-{id}.cpio"));
-                if std::fs::write(&tmp, &combined).is_ok() {
-                    let mut patched = config.clone();
-                    patched.initramfs_path = Some(tmp);
-                    patched
-                } else {
-                    config.clone()
-                }
-            } else {
-                config.clone()
-            };
+        let boot_config = inject_guest_agent(&config, id);
 
         // Record guest RAM size as a one-shot gauge.
         {
@@ -448,28 +430,7 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
             let _boot_enter = boot_span.enter();
 
             // Start port forwarders if networking is configured and rules exist.
-            let _port_fwd = if let Some(ref net) = boot_config.net {
-                if boot_config.ports.is_empty() {
-                    None
-                } else {
-                    let guest_ip = net
-                        .guest_ip
-                        .split('/')
-                        .next()
-                        .and_then(|s| s.parse::<std::net::Ipv4Addr>().ok());
-                    if let Some(ip) = guest_ip {
-                        Some(
-                            crate::port_forward::PortForwardManager::start(ip, &boot_config.ports)
-                                .await,
-                        )
-                    } else {
-                        tracing::warn!("could not parse guest IP from {}", net.guest_ip);
-                        None
-                    }
-                }
-            } else {
-                None
-            };
+            let _port_fwd = start_port_forwarding(&boot_config).await;
 
             let result = tokio::task::spawn_blocking(move || {
                 hitz_vmm::boot_and_run(&*hv, &boot_config, serial_buf, stop_flag, extras)
@@ -822,6 +783,52 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
     ) -> Option<hitz_api::MetricsSnapshot> {
         None
     }
+}
+
+/// Helper function to inject guest agent into initramfs
+fn inject_guest_agent(config: &VmConfig, id: &str) -> VmConfig {
+    let Some(agent_bytes) = crate::agent::resolve_agent_bytes(&config.guest_agent) else {
+        return config.clone();
+    };
+
+    let overlay = crate::agent::build_agent_overlay(&agent_bytes);
+    let mut combined = config
+        .initramfs_path
+        .as_ref()
+        .map_or_else(Vec::new, |path| std::fs::read(path).unwrap_or_default());
+    combined.extend_from_slice(&overlay);
+    let tmp = std::env::temp_dir().join(format!("hitz-initrd-{id}.cpio"));
+    if std::fs::write(&tmp, &combined).is_ok() {
+        let mut patched = config.clone();
+        patched.initramfs_path = Some(tmp);
+        patched
+    } else {
+        config.clone()
+    }
+}
+
+/// Helper function to set up port forwarding for a VM
+async fn start_port_forwarding(
+    boot_config: &VmConfig,
+) -> Option<crate::port_forward::PortForwardManager> {
+    let net = boot_config.net.as_ref()?;
+
+    if boot_config.ports.is_empty() {
+        return None;
+    }
+
+    let guest_ip = net
+        .guest_ip
+        .split('/')
+        .next()
+        .and_then(|s| s.parse::<std::net::Ipv4Addr>().ok());
+
+    let Some(ip) = guest_ip else {
+        tracing::warn!("could not parse guest IP from {}", net.guest_ip);
+        return None;
+    };
+
+    Some(crate::port_forward::PortForwardManager::start(ip, &boot_config.ports).await)
 }
 
 #[cfg(test)]
