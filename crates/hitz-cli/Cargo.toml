@@ -31,3 +31,4 @@ ctrlc.workspace = true
 windows-service.workspace = true
 comfy-table = { version = "7.2.2", features = ["custom_styling"] }
 crossterm = "0.29.0"
+ratatui = "0.29.0"

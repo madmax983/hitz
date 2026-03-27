@@ -72,7 +72,11 @@ mod tests {
     #[test]
     fn should_return_none_when_disabled() {
         let mode = GuestAgentMode::Disabled;
-        assert_eq!(resolve_agent_bytes(&mode), None, "Disabled mode should return None");
+        assert_eq!(
+            resolve_agent_bytes(&mode),
+            None,
+            "Disabled mode should return None"
+        );
     }
 
     #[test]
@@ -80,9 +84,16 @@ mod tests {
         let mode = GuestAgentMode::Auto;
         let bytes = resolve_agent_bytes(&mode);
         if AGENT_BYTES.is_empty() {
-            assert_eq!(bytes, None, "Auto mode with empty AGENT_BYTES should return None");
+            assert_eq!(
+                bytes, None,
+                "Auto mode with empty AGENT_BYTES should return None"
+            );
         } else {
-            assert_eq!(bytes, Some(AGENT_BYTES.to_vec()), "Auto mode with non-empty AGENT_BYTES should return Some");
+            assert_eq!(
+                bytes,
+                Some(AGENT_BYTES.to_vec()),
+                "Auto mode with non-empty AGENT_BYTES should return Some"
+            );
         }
     }
 
@@ -93,7 +104,11 @@ mod tests {
         std::fs::write(&agent_path, b"CUSTOM_AGENT").expect("Failed to write custom agent file");
 
         let mode = GuestAgentMode::Custom(agent_path);
-        assert_eq!(resolve_agent_bytes(&mode), Some(b"CUSTOM_AGENT".to_vec()), "Custom mode should read the agent file");
+        assert_eq!(
+            resolve_agent_bytes(&mode),
+            Some(b"CUSTOM_AGENT".to_vec()),
+            "Custom mode should read the agent file"
+        );
     }
 
     #[test]
@@ -102,6 +117,10 @@ mod tests {
         let agent_path = temp_dir.path().join("missing-agent");
 
         let mode = GuestAgentMode::Custom(agent_path);
-        assert_eq!(resolve_agent_bytes(&mode), None, "Custom mode with missing file should return None");
+        assert_eq!(
+            resolve_agent_bytes(&mode),
+            None,
+            "Custom mode with missing file should return None"
+        );
     }
 }
