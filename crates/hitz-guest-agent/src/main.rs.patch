@@ -1,0 +1,53 @@
+<<<<<<< SEARCH
+fn collect_top_procs(n: usize) -> Vec<hitz_api::ProcMetrics> {
+    let mut procs = Vec::new();
+    if let Ok(entries) = std::fs::read_dir("/proc") {
+        for entry in entries.filter_map(std::result::Result::ok) {
+            let path = entry.path();
+            if let Some(pid_str) = path.file_name().and_then(|n| n.to_str())
+                && let Ok(pid) = pid_str.parse::<u32>()
+            {
+                let stat_path = format!("/proc/{pid}/stat");
+                if let Ok(stat) = std::fs::read_to_string(&stat_path)
+                    && let Some(p) = parse_proc_pid_stat(pid, &stat)
+                {
+                    procs.push(p);
+                }
+            }
+        }
+    }
+    procs.sort_by(|a, b| {
+=======
+/// Collects process metrics while minimizing heap allocations.
+/// Reusing path and stat buffers prevents `2 * N` allocations
+/// per frame, where N is the number of running processes.
+fn collect_top_procs(n: usize) -> Vec<hitz_api::ProcMetrics> {
+    let mut procs = Vec::with_capacity(256);
+    let mut path_buf = String::with_capacity(32);
+    let mut stat_buf = String::with_capacity(1024);
+
+    if let Ok(entries) = std::fs::read_dir("/proc") {
+        for entry in entries.filter_map(std::result::Result::ok) {
+            let file_name = entry.file_name();
+            if let Some(pid_str) = file_name.to_str()
+                && let Ok(pid) = pid_str.parse::<u32>()
+            {
+                use std::fmt::Write;
+                use std::io::Read;
+
+                path_buf.clear();
+                let _ = write!(path_buf, "/proc/{pid}/stat");
+
+                stat_buf.clear();
+                if let Ok(mut f) = std::fs::File::open(&path_buf) {
+                    if f.read_to_string(&mut stat_buf).is_ok() {
+                        if let Some(p) = parse_proc_pid_stat(pid, &stat_buf) {
+                            procs.push(p);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    procs.sort_by(|a, b| {
+>>>>>>> REPLACE
