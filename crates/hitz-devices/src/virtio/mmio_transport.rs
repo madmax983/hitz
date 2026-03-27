@@ -1,7 +1,7 @@
 //! Virtio MMIO transport (version 2).
 //!
 //! # Abstract
-//! Implements the [`MmioDevice`] trait, translating MMIO register reads/writes
+//! Implements the `MmioDevice` trait, translating MMIO register reads/writes
 //! into virtqueue operations and device config accesses. This is the "glue"
 //! between the guest driver and a [`VirtioBackend`].
 //!
@@ -191,9 +191,9 @@ struct QueueState {
 
 /// Virtio MMIO transport wrapping a backend device.
 ///
-/// Implements [`MmioDevice`] and manages the MMIO register file,
+/// Implements `MmioDevice` and manages the MMIO register file,
 /// virtqueue configuration, and device status state machine. Supports
-/// multiple virtqueues as reported by [`VirtioBackend::queue_count`].
+/// multiple virtqueues as reported by `VirtioBackend::queue_count`.
 pub struct VirtioMmioTransport<D: VirtioBackend> {
     /// The backend device.
     device: D,
@@ -223,7 +223,7 @@ impl<D: VirtioBackend> VirtioMmioTransport<D> {
     /// Create a new MMIO transport for the given backend.
     ///
     /// Allocates one internal queue state per queue reported by
-    /// [`VirtioBackend::queue_count`].
+    /// `VirtioBackend::queue_count`.
     ///
     /// * `device` -- the virtio backend (block, net, etc.)
     /// * `mem` -- shared reference to guest memory

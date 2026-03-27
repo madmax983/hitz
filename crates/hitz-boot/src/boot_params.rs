@@ -275,6 +275,26 @@ pub const fn set_acpi_rsdp(bp: &mut BootParams, rsdp_gpa: u64) {
 
 // ---- Tests ----------------------------------------------------------------
 
+impl BootParams {
+    /// Return the byte representation of the boot parameters struct.
+    ///
+    /// # Safety
+    ///
+    /// `BootParams` is `repr(C, packed)` and consists solely of primitive types
+    /// and arrays. Therefore, casting it to a slice of bytes is perfectly safe
+    /// and does not expose uninitialized padding bytes (there are none).
+    #[allow(unsafe_code)]
+    #[must_use]
+    pub const fn as_bytes(&self) -> &[u8] {
+        unsafe {
+            std::slice::from_raw_parts(
+                std::ptr::from_ref(self).cast::<u8>(),
+                std::mem::size_of::<Self>(),
+            )
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -418,25 +438,5 @@ mod tests {
             0x070,
             "acpi_rsdp_addr must be at offset 0x070"
         );
-    }
-}
-
-impl BootParams {
-    /// Return the byte representation of the boot parameters struct.
-    ///
-    /// # Safety
-    ///
-    /// `BootParams` is `repr(C, packed)` and consists solely of primitive types
-    /// and arrays. Therefore, casting it to a slice of bytes is perfectly safe
-    /// and does not expose uninitialized padding bytes (there are none).
-    #[allow(unsafe_code)]
-    #[must_use]
-    pub const fn as_bytes(&self) -> &[u8] {
-        unsafe {
-            std::slice::from_raw_parts(
-                std::ptr::from_ref(self).cast::<u8>(),
-                std::mem::size_of::<Self>(),
-            )
-        }
     }
 }

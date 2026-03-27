@@ -328,7 +328,7 @@ pub fn exit_context_to_hal(ctx: &WHV_RUN_VP_EXIT_CONTEXT) -> Result<VcpuExit, Ha
 
 /// Check if a memory access is a write.
 ///
-/// `WHV_MEMORY_ACCESS_INFO.AccessType` is a 2-bit field in bits [0:1]:
+/// `WHV_MEMORY_ACCESS_INFO.AccessType` is a 2-bit field in bits \[0:1\]:
 ///   0 = Read, 1 = Write, 2 = Execute.
 const fn is_memory_write(info: WHV_MEMORY_ACCESS_INFO_0) -> bool {
     (info._bitfield & 0b11) == 1
