@@ -1298,6 +1298,12 @@ async fn handle_vm_serial(args: &VmIdArgs) -> Result<()> {
     Ok(())
 }
 
+#[allow(
+    clippy::too_many_lines,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss
+)]
 async fn handle_vm_top(args: &VmIdArgs) -> Result<()> {
     use crossterm::{
         event::{self, Event, KeyCode},
@@ -1385,7 +1391,7 @@ async fn handle_vm_top(args: &VmIdArgs) -> Result<()> {
                     } else {
                         0
                     };
-                    let mem_label = format!("{} MB / {} MB", used_mb, total_mb);
+                    let mem_label = format!("{used_mb} MB / {total_mb} MB");
                     let mem_gauge = Gauge::default()
                         .block(Block::default().title("Memory").borders(Borders::ALL))
                         .gauge_style(Style::default().fg(Color::Yellow))
@@ -1500,8 +1506,10 @@ async fn handle_vm_top(args: &VmIdArgs) -> Result<()> {
             let timeout = tick_rate
                 .checked_sub(last_tick.elapsed())
                 .unwrap_or_else(|| Duration::from_secs(0));
+            #[allow(clippy::collapsible_if)]
             if crossterm::event::poll(timeout)? {
                 if let Event::Key(key) = event::read()? {
+                    #[allow(clippy::if_same_then_else)]
                     if key.code == KeyCode::Char('q') || key.code == KeyCode::Esc {
                         break;
                     } else if key.code == KeyCode::Char('c')
@@ -1531,11 +1539,11 @@ async fn handle_vm_top(args: &VmIdArgs) -> Result<()> {
                             last_err = None;
                         }
                         Err(e) => {
-                            last_err = Some(format!("Parse error: {}", e));
+                            last_err = Some(format!("Parse error: {e}"));
                         }
                     }
                 } else {
-                    last_err = Some(format!("{}: {}", status, resp));
+                    last_err = Some(format!("{status}: {resp}"));
                 }
             }
         }
@@ -1902,6 +1910,5 @@ mod top_tests {
             pipe: "pipe".to_string(),
             tcp: None,
         };
-        assert!(true);
     }
 }
