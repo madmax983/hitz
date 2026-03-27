@@ -14,3 +14,4 @@ pub use error::DaemonError;
 pub use server::run_server;
 pub use telemetry::TelemetryGuard;
 pub use vm_manager::VmManager;
+mod tests;

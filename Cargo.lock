@@ -807,7 +807,6 @@ dependencies = [
  "anyhow",
  "hitz-api",
  "hitz-boot",
- "hitz-daemon",
  "hitz-devices",
  "hitz-hal",
  "hitz-vmm",

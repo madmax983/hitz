@@ -20,7 +20,6 @@ hitz-api.workspace = true
 hitz-boot.workspace = true
 hitz-devices.workspace = true
 hitz-vmm.workspace = true
-hitz-daemon.workspace = true
 tokio.workspace = true
 opentelemetry.workspace = true
 tempfile = "3"
