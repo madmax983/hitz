@@ -1057,7 +1057,10 @@ async fn handle_vm_clone(args: &VmCloneArgs) -> Result<()> {
     )
     .await?;
     if status.is_success() {
-        let msg = format!("✓ Successfully cloned VM {} to {}", args.src_id, args.dest_id);
+        let msg = format!(
+            "✓ Successfully cloned VM {} to {}",
+            args.src_id, args.dest_id
+        );
         println!("{}", msg.green());
     } else if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(&resp) {
         let msg = format!("✗ Failed to clone VM {}: {}", args.src_id, err.message);

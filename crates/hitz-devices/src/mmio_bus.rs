@@ -117,6 +117,7 @@ mod tests {
         last_write_data: Vec<u8>,
         read_value: u32,
         irq_on_write: Option<u8>,
+        irq_on_poll_rx: Option<u8>,
     }
 
     impl StubDevice {
@@ -126,6 +127,7 @@ mod tests {
                 last_write_data: Vec::new(),
                 read_value,
                 irq_on_write: None,
+                irq_on_poll_rx: None,
             }
         }
     }
@@ -146,6 +148,10 @@ mod tests {
             self.last_write_offset = offset;
             self.last_write_data = data.to_vec();
             self.irq_on_write
+        }
+
+        fn poll_rx(&mut self) -> Option<u8> {
+            self.irq_on_poll_rx
         }
     }
 
@@ -211,5 +217,46 @@ mod tests {
         let data = [0u8; 4];
         let irq = bus.write(0xD000_0000, &data, &mem);
         assert_eq!(irq, Some(5));
+    }
+
+    #[test]
+    fn poll_devices_returns_none_when_empty() {
+        let mut bus = MmioBus::new();
+        assert_eq!(bus.poll_devices(), None);
+    }
+
+    #[test]
+    fn poll_devices_returns_none_when_no_device_has_data() {
+        let mut bus = MmioBus::new();
+        bus.register(0xD000_0000, 0x1000, Box::new(StubDevice::new(0)));
+        assert_eq!(bus.poll_devices(), None);
+    }
+
+    #[test]
+    fn poll_devices_returns_irq() {
+        let mut bus = MmioBus::new();
+        let mut dev = StubDevice::new(0);
+        dev.irq_on_poll_rx = Some(7);
+        bus.register(0xD000_0000, 0x1000, Box::new(dev));
+
+        assert_eq!(bus.poll_devices(), Some(7));
+    }
+
+    #[test]
+    fn poll_devices_returns_first_irq() {
+        let mut bus = MmioBus::new();
+        let dev1 = StubDevice::new(0); // No IRQ
+        let mut dev2 = StubDevice::new(0);
+        dev2.irq_on_poll_rx = Some(5);
+        let mut dev3 = StubDevice::new(0);
+        dev3.irq_on_poll_rx = Some(9);
+
+        bus.register(0xD000_0000, 0x1000, Box::new(dev1));
+        bus.register(0xD000_1000, 0x1000, Box::new(dev2));
+        bus.register(0xD000_2000, 0x1000, Box::new(dev3));
+
+        // Should return the IRQ from the first device in the slots list
+        // that has an IRQ pending (dev2 in this case).
+        assert_eq!(bus.poll_devices(), Some(5));
     }
 }
