@@ -60,7 +60,7 @@
 
 pub(crate) mod mmio_bus;
 pub(crate) mod serial;
-pub(crate) mod virtio;
+pub mod virtio;
 
 pub use mmio_bus::MmioBus;
 pub use serial::SerialDevice;

@@ -11,9 +11,7 @@
 //! let mut queue = VirtQueue::new(256);
 //!
 //! // 2. Guest sets up GPAs for descriptors, available, and used rings.
-//! queue.set_desc_table(0x1000);
-//! queue.set_avail_ring(0x2000);
-//! queue.set_used_ring(0x3000);
+//! queue.configure(0x1000, 0x2000, 0x3000);
 //!
 //! // 3. Set the queue to ready!
 //! queue.set_ready(true);
@@ -537,12 +535,95 @@ mod tests {
 
         // Fill and drain queue multiple times to exercise wrapping.
         for i in 0u16..8 {
-            write_desc(&mem, i % 4, 0x5000, 64, 0, 0);
+            write_desc(&mem, i % 4, u64::from(i % 4) + 0x5000, 64, 0, 0);
             write_avail_entry(&mem, i % 4, i % 4);
             set_avail_idx(&mem, i + 1);
 
             let chain = q.pop_chain(&mem).expect("should pop");
             assert_eq!(chain.head_index(), i % 4);
         }
+    }
+
+    #[test]
+    fn virtqueue_new_clamps_size() {
+        let q1 = VirtQueue::new(0);
+        assert_eq!(q1.size(), MAX_QUEUE_SIZE);
+
+        let q2 = VirtQueue::new(MAX_QUEUE_SIZE + 1);
+        assert_eq!(q2.size(), MAX_QUEUE_SIZE);
+
+        let q3 = VirtQueue::new(128);
+        assert_eq!(q3.size(), 128);
+    }
+
+    #[test]
+    fn pop_chain_avail_idx_read_fails() {
+        // Create memory too small to read avail_idx (at AVAIL_BASE + 2)
+        let mem = MockMem::new(0x1000); // 4096 bytes, AVAIL_BASE is 0x1000
+        let mut q = VirtQueue::new(16);
+        q.configure(DESC_BASE, AVAIL_BASE, USED_BASE);
+        q.set_ready(true);
+
+        assert!(q.pop_chain(&mem).is_none());
+    }
+
+    #[test]
+    fn pop_chain_head_idx_read_fails() {
+        // Memory big enough for avail_idx but too small for avail_ring entry
+        let mem = MockMem::new(0x1004); // Can read AVAIL_BASE + 2, but not + 4
+        let mut q = VirtQueue::new(16);
+        q.configure(DESC_BASE, AVAIL_BASE, USED_BASE);
+        q.set_ready(true);
+        // We write directly to the buffer because set_avail_idx expects mem to be big enough
+        mem.inner.lock().unwrap()[0x1002..0x1004].copy_from_slice(&1u16.to_le_bytes());
+
+        assert!(q.pop_chain(&mem).is_none());
+    }
+
+    #[test]
+    fn next_descriptor_read_fails() {
+        // Set up avail ring to point to a descriptor index that is within queue size
+        // but its backing memory is intentionally unreadable or partially mapped
+        // Here we just make memory small.
+        let small_mem = MockMem::new(0x1004); // Can read avail index but not descriptor base
+        small_mem.inner.lock().unwrap()[0x1002..0x1004].copy_from_slice(&1u16.to_le_bytes());
+        // Head index 0 at offset + 4
+        small_mem.inner.lock().unwrap().resize(0x1006, 0); // Need to read head index 0 at 0x1004
+        small_mem.inner.lock().unwrap()[0x1004..0x1006].copy_from_slice(&0u16.to_le_bytes());
+
+        let mut q2 = VirtQueue::new(16);
+        q2.configure(0x2000, AVAIL_BASE, USED_BASE); // DESC_BASE is 0x2000, beyond memory size
+        q2.set_ready(true);
+
+        let mut chain = q2.pop_chain(&small_mem).expect("should pop chain");
+        assert!(chain.next_descriptor(&small_mem).is_none());
+    }
+
+    #[test]
+    fn next_descriptor_out_of_bounds_idx() {
+        let mem = MockMem::new(0x4000);
+        let mut q = make_ready_queue(&mem);
+
+        // Chain points to an invalid descriptor index >= queue_size (16)
+        write_desc(&mem, 0, 0x5000, 16, VIRTQ_DESC_F_NEXT, 32); // 32 >= 16
+
+        write_avail_entry(&mem, 0, 0);
+        set_avail_idx(&mem, 1);
+
+        let mut chain = q.pop_chain(&mem).expect("should pop chain");
+        assert!(chain.next_descriptor(&mem).is_some()); // first desc reads fine
+        assert!(chain.next_descriptor(&mem).is_none()); // second desc fails bounds check
+    }
+
+    #[test]
+    fn push_used_idx_read_fails() {
+        // Memory too small to read used_idx at USED_BASE + 2
+        let mem = MockMem::new(0x2000); // Only goes up to 0x1FFF, USED_BASE is 0x2000
+        let mut q = VirtQueue::new(16);
+        q.configure(DESC_BASE, AVAIL_BASE, USED_BASE);
+        q.set_ready(true);
+
+        // Call push_used. It shouldn't panic, but rather return early.
+        q.push_used(&mem, 0, 512);
     }
 }

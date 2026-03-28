@@ -15,14 +15,12 @@
 //! # impl VirtioBackend for DummyBackend {
 //! #     fn device_id(&self) -> u32 { 1 }
 //! #     fn device_features(&self) -> u64 { 0 }
-//! #     fn set_driver_features(&mut self, _f: u64) {}
+//!     fn driver_features_accepted(&mut self, _f: u64) {}
 //! #     fn queue_count(&self) -> usize { 1 }
-//! #     fn process_queue(&mut self, _idx: usize, _q: &mut hitz_devices::virtio::queue::VirtQueue, _mem: &dyn GuestMemAccess) {}
-//! #     fn set_irq_vector(&mut self, _v: u8) {}
-//! #     fn set_status(&mut self, _status: u32) {}
-//! #     fn read_config(&self, _offset: u64, _size: u64) -> u64 { 0 }
-//! #     fn write_config(&mut self, _offset: u64, _size: u64, _value: u64) {}
-//! #     fn ack_interrupt(&mut self) -> u32 { 0 }
+//!     fn process_queue(&mut self, _idx: u16, _q: &mut hitz_devices::virtio::queue::VirtQueue, _mem: &dyn GuestMemAccess) {}
+//!     fn set_status(&mut self, _status: u8) {}
+//!     fn read_config(&self, _offset: u64, _data: &mut [u8]) {}
+//!     fn write_config(&mut self, _offset: u64, _data: &[u8]) {}
 //! # }
 //! # struct DummyMem;
 //! # impl GuestMemAccess for DummyMem {
