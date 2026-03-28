@@ -1614,7 +1614,10 @@ async fn handle_vm_export_metrics(args: &VmExportArgs) -> Result<()> {
             serde_json::from_str(&resp).context("failed to parse metrics response")?;
         let json = serde_json::to_string_pretty(&snap).context("failed to serialize metrics")?;
         std::fs::write(&args.out, json).context("failed to write metrics export to file")?;
-        println!("{}", format!("✓ Exported metrics to {}", args.out.display()).green());
+        println!(
+            "{}",
+            format!("✓ Exported metrics to {}", args.out.display()).green()
+        );
     } else {
         println!("{status}: {resp}");
     }
