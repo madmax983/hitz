@@ -134,70 +134,7 @@ pub fn run_vcpu_loop<V: Vcpu, W: Write>(
 
             VcpuExit::Mmio(mmio) => {
                 record_exit(&exit_counter, "Mmio");
-                let decoded = mmio_decode::decode_mmio_instruction(
-                    &mmio.instruction_bytes[..usize::from(mmio.instruction_byte_count)],
-                );
-
-                if let Some(decoded) = decoded {
-                    // WHP does NOT populate InstructionLength for MMIO exits
-                    // (it's always 0). Use the decoder-computed length instead.
-                    let instr_len = decoded.instruction_len;
-
-                    if mmio.is_write {
-                        let mut data = [0u8; 4];
-                        let value = if let Some(imm) = decoded.immediate {
-                            u64::from(imm)
-                        } else {
-                            let regs = vcpu.get_regs()?;
-                            mmio_decode::register_value(&regs, decoded.register)
-                        };
-                        let size = usize::from(decoded.size);
-                        data[..size].copy_from_slice(&value.to_le_bytes()[..size]);
-
-                        // Lock → device write → unlock, then handle IRQ.
-                        let irq = {
-                            let mut devs = devices.lock().expect("device lock poisoned");
-                            devs.mmio_bus.write(mmio.gpa.as_u64(), &data[..size], mem)
-                        };
-                        advance_rip(vcpu, instr_len)?;
-                        if let Some(vector) = irq {
-                            // Try to inject immediately. If the guest has IF=0
-                            // (interrupts disabled) or is in interrupt shadow,
-                            // WHP rejects the injection — stash the IRQ and
-                            // request an interrupt window exit.
-                            if vcpu.inject_interrupt(vector).is_err() {
-                                pending_irq = Some(vector);
-                                vcpu.request_interrupt_window()?;
-                                tracing::debug!(
-                                    vector,
-                                    "interrupt deferred, requested interrupt window"
-                                );
-                            }
-                        }
-                    } else {
-                        // Read: lock → device read → unlock, then update registers.
-                        let size = usize::from(decoded.size);
-                        let mut data = [0u8; 8];
-                        {
-                            let mut devs = devices.lock().expect("device lock poisoned");
-                            devs.mmio_bus.read(mmio.gpa.as_u64(), &mut data[..size]);
-                        }
-                        let value = u64::from_le_bytes(data);
-
-                        let mut regs = vcpu.get_regs()?;
-                        mmio_decode::set_register(&mut regs, decoded.register, value);
-                        regs.rip += u64::from(instr_len);
-                        vcpu.set_regs(&regs)?;
-                    }
-                } else {
-                    tracing::warn!(
-                        gpa = %mmio.gpa,
-                        bytes = ?&mmio.instruction_bytes[..usize::from(mmio.instruction_byte_count)],
-                        "undecodable MMIO instruction, skipping"
-                    );
-                    // Last resort: use WHP's instruction_len (may be 0).
-                    advance_rip(vcpu, mmio.instruction_len)?;
-                }
+                handle_mmio(vcpu, devices, mem, &mmio, &mut pending_irq)?;
             }
 
             VcpuExit::InterruptWindow => {
@@ -228,6 +165,80 @@ pub fn run_vcpu_loop<V: Vcpu, W: Write>(
             }
         }
     }
+}
+
+/// Dispatch an MMIO exit to the appropriate device handler.
+#[allow(clippy::expect_used)]
+fn handle_mmio<V: Vcpu, W: Write>(
+    vcpu: &mut V,
+    devices: &Mutex<SharedDevices<W>>,
+    mem: &dyn GuestMemAccess,
+    mmio: &hitz_hal::MmioExit,
+    pending_irq: &mut Option<u8>,
+) -> Result<(), HalError> {
+    let decoded = mmio_decode::decode_mmio_instruction(
+        &mmio.instruction_bytes[..usize::from(mmio.instruction_byte_count)],
+    );
+
+    let Some(decoded) = decoded else {
+        tracing::warn!(
+            gpa = %mmio.gpa,
+            bytes = ?&mmio.instruction_bytes[..usize::from(mmio.instruction_byte_count)],
+            "undecodable MMIO instruction, skipping"
+        );
+        // Last resort: use WHP's instruction_len (may be 0).
+        return advance_rip(vcpu, mmio.instruction_len);
+    };
+
+    // WHP does NOT populate InstructionLength for MMIO exits
+    // (it's always 0). Use the decoder-computed length instead.
+    let instr_len = decoded.instruction_len;
+
+    if mmio.is_write {
+        let mut data = [0u8; 4];
+        let value = if let Some(imm) = decoded.immediate {
+            u64::from(imm)
+        } else {
+            let regs = vcpu.get_regs()?;
+            mmio_decode::register_value(&regs, decoded.register)
+        };
+        let size = usize::from(decoded.size);
+        data[..size].copy_from_slice(&value.to_le_bytes()[..size]);
+
+        // Lock → device write → unlock, then handle IRQ.
+        let irq = {
+            let mut devs = devices.lock().expect("device lock poisoned");
+            devs.mmio_bus.write(mmio.gpa.as_u64(), &data[..size], mem)
+        };
+        advance_rip(vcpu, instr_len)?;
+        if let Some(vector) = irq {
+            // Try to inject immediately. If the guest has IF=0
+            // (interrupts disabled) or is in interrupt shadow,
+            // WHP rejects the injection — stash the IRQ and
+            // request an interrupt window exit.
+            if vcpu.inject_interrupt(vector).is_err() {
+                *pending_irq = Some(vector);
+                vcpu.request_interrupt_window()?;
+                tracing::debug!(vector, "interrupt deferred, requested interrupt window");
+            }
+        }
+    } else {
+        // Read: lock → device read → unlock, then update registers.
+        let size = usize::from(decoded.size);
+        let mut data = [0u8; 8];
+        {
+            let mut devs = devices.lock().expect("device lock poisoned");
+            devs.mmio_bus.read(mmio.gpa.as_u64(), &mut data[..size]);
+        }
+        let value = u64::from_le_bytes(data);
+
+        let mut regs = vcpu.get_regs()?;
+        mmio_decode::set_register(&mut regs, decoded.register, value);
+        regs.rip += u64::from(instr_len);
+        vcpu.set_regs(&regs)?;
+    }
+
+    Ok(())
 }
 
 /// Dispatch an I/O port exit to the appropriate device handler.
