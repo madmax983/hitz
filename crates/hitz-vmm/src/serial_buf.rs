@@ -313,4 +313,37 @@ mod tests {
             assert_eq!(c2, b"shared");
         });
     }
+
+    #[test]
+    fn ring_buffer_exact_lap() {
+        let rt = test_rt();
+        rt.block_on(async {
+            let cap = 16;
+            let mut buf = SerialBuf::with_capacity(cap);
+            let mut reader = buf.reader();
+
+            // Write exactly the capacity.
+            let data: Vec<u8> = (0..16).collect();
+            buf.write_all(&data).expect("write");
+
+            let chunk = tokio::time::timeout(Duration::from_millis(100), reader.read_chunk())
+                .await
+                .expect("timeout")
+                .expect("should not be None");
+
+            assert_eq!(chunk.len(), cap);
+            assert_eq!(chunk, data);
+
+            // Write exact capacity again
+            buf.write_all(&data).expect("write");
+
+            let chunk2 = tokio::time::timeout(Duration::from_millis(100), reader.read_chunk())
+                .await
+                .expect("timeout")
+                .expect("should not be None");
+
+            assert_eq!(chunk2.len(), cap);
+            assert_eq!(chunk2, data);
+        });
+    }
 }
