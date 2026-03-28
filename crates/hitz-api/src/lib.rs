@@ -44,6 +44,26 @@ pub const VSOCK_METRICS_PORT: u32 = 52355;
 pub const VMADDR_CID_HOST: u32 = 2;
 
 /// Network configuration for a VM.
+///
+/// This structure defines how the micro-VM connects to the host network.
+/// By default, Hitz sets up a point-to-point interface (like `WinTun` on Windows
+/// or `TAP` on Linux) to allow network traffic between the host and the guest.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::NetConfig;
+///
+/// let net = NetConfig {
+///     mac: Some("AA:BB:CC:DD:EE:FF".to_string()),
+///     host_ip: "192.168.100.1/24".to_string(),
+///     guest_ip: "192.168.100.2/24".to_string(),
+///     adapter_name: Some("hitz-dev-01".to_string()),
+/// };
+///
+/// assert_eq!(net.host_ip, "192.168.100.1/24");
+/// assert_eq!(net.guest_ip, "192.168.100.2/24");
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NetConfig {
     /// Guest MAC address (e.g. "AA:BB:CC:DD:EE:FF"). Random if `None`.
@@ -69,6 +89,25 @@ pub struct PortForward {
 // ── Guest agent mode ─────────────────────────────────────────────────────────
 
 /// Controls whether and which guest metrics agent is injected into the initramfs.
+///
+/// Hitz supports injecting a lightweight agent into the guest environment to
+/// extract process and resource usage telemetry. By default, it auto-injects
+/// the bundled `hitz-guest-agent`.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::GuestAgentMode;
+/// use std::path::PathBuf;
+///
+/// // The default mode uses the built-in guest agent (if available).
+/// let default_mode = GuestAgentMode::default();
+/// assert_eq!(default_mode, GuestAgentMode::Auto);
+///
+/// // You can also supply a custom static binary for testing or
+/// // specialized data collection.
+/// let custom_mode = GuestAgentMode::Custom(PathBuf::from("/usr/local/bin/my-agent"));
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(tag = "mode", content = "path", rename_all = "lowercase")]
 pub enum GuestAgentMode {
@@ -235,6 +274,29 @@ const fn default_guest_cid() -> u32 {
 /// VM configuration — everything needed to boot a micro-VM.
 ///
 /// Serializable for the future daemon REST API (Phase 6).
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::{VmConfig, GuestAgentMode};
+/// use std::path::PathBuf;
+///
+/// let config = VmConfig {
+///     kernel_path: PathBuf::from("/boot/vmlinux"),
+///     initramfs_path: Some(PathBuf::from("/boot/init.cpio")),
+///     disk_path: None,
+///     ram_mib: 512,
+///     cpus: 2,
+///     cmdline: Some("console=ttyS0 quiet".to_string()),
+///     net: None,
+///     ports: vec![],
+///     guest_cid: 4,
+///     guest_agent: GuestAgentMode::Auto,
+/// };
+///
+/// assert_eq!(config.ram_mib, 512);
+/// assert_eq!(config.cpus, 2);
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct VmConfig {
     /// Path to the kernel ELF binary (vmlinux).
@@ -300,6 +362,22 @@ impl VmConfig {
 }
 
 /// Action that can be performed on a running VM.
+///
+/// This enum represents the discrete commands that can be issued to
+/// the daemon to control a micro-VM's lifecycle over the REST API.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::VmAction;
+///
+/// let action = VmAction::Start;
+///
+/// match action {
+///     VmAction::Start => println!("Starting the VM..."),
+///     VmAction::Stop => println!("Stopping the VM..."),
+/// }
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum VmAction {
     /// Start (resume) a created or stopped VM.
@@ -309,6 +387,24 @@ pub enum VmAction {
 }
 
 /// Current lifecycle state of a VM.
+///
+/// This tracks the operational status of a micro-VM from its initial
+/// creation, through active execution, until it is gracefully stopped
+/// or encounters a fatal error.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::VmState;
+///
+/// let state = VmState::Running;
+///
+/// assert!(matches!(state, VmState::Running));
+///
+/// if state == VmState::Failed {
+///     println!("The VM encountered a fatal error.");
+/// }
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum VmState {
     /// VM has been created but not yet started.
