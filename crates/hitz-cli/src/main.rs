@@ -904,12 +904,19 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
     let mut sys_table = Table::new();
     let _ = sys_table.load_preset(NOTHING);
 
-    let cores: Vec<String> = snap
-        .cpu
-        .per_core
-        .iter()
-        .map(|p| format!("{p:.1}%"))
-        .collect();
+    // Pre-allocating a single `String` buffer with estimated capacity
+    // and using `write!` macro directly removes the intermediate heap
+    // allocations for formatting strings into a `Vec` and then calling
+    // `.join()`. This eliminates unnecessary allocations on the hot path
+    // when formatting CLI output.
+    let mut cores_str = String::with_capacity(snap.cpu.per_core.len() * 8);
+    for (i, p) in snap.cpu.per_core.iter().enumerate() {
+        if i > 0 {
+            cores_str.push_str(", ");
+        }
+        let _ = write!(cores_str, "{p:.1}%");
+    }
+
     let cpu_load = format!(
         "{:.2} / {:.2} / {:.2}",
         snap.cpu.load_avg[0], snap.cpu.load_avg[1], snap.cpu.load_avg[2]
@@ -923,7 +930,7 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
         Cell::new("CPU Total").add_attribute(Attribute::Bold),
         Cell::new(format!("{:.1}%", snap.cpu.total_pct)),
         Cell::new("Cores").add_attribute(Attribute::Bold),
-        Cell::new(cores.join(", ")),
+        Cell::new(cores_str),
     ]);
     let _ = sys_table.add_row(vec![
         Cell::new("CPU Load").add_attribute(Attribute::Bold),
@@ -1193,15 +1200,21 @@ async fn handle_vm_status(args: &VmIdArgs) -> Result<()> {
             ]);
 
             if !info.config.ports.is_empty() {
-                let ports: Vec<String> = info
-                    .config
-                    .ports
-                    .iter()
-                    .map(|p| format!("0.0.0.0:{} -> {}", p.host_port, p.guest_port))
-                    .collect();
+                use std::fmt::Write as _;
+                // Using a pre-allocated single string buffer and directly
+                // appending with the `write!` macro removes the need to allocate
+                // intermediate `String` items in a `Vec` and then `join()` them
+                // later, saving multiple allocations per row rendering.
+                let mut ports_str = String::with_capacity(info.config.ports.len() * 24);
+                for (i, p) in info.config.ports.iter().enumerate() {
+                    if i > 0 {
+                        ports_str.push_str(", ");
+                    }
+                    let _ = write!(ports_str, "0.0.0.0:{} -> {}", p.host_port, p.guest_port);
+                }
                 let _ = table.add_row(vec![
                     Cell::new("Ports:").add_attribute(comfy_table::Attribute::Bold),
-                    Cell::new(ports.join(", ")),
+                    Cell::new(ports_str),
                 ]);
             }
             if let Some(reason) = &info.exit_reason {
