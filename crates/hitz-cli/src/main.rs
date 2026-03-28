@@ -1581,6 +1581,7 @@ async fn handle_vm_top(args: &VmIdArgs) -> Result<()> {
     res
 }
 async fn handle_vm_metrics(args: &VmIdArgs) -> Result<()> {
+    use crossterm::style::Stylize;
     let (status, resp) = pipe_client::pipe_request(
         &args.pipe,
         args.tcp,
@@ -1594,12 +1595,15 @@ async fn handle_vm_metrics(args: &VmIdArgs) -> Result<()> {
             serde_json::from_str(&resp).context("failed to parse metrics response")?;
         print!("{}", format_metrics_snapshot(&snap));
     } else {
-        println!("{status}: {resp}");
+        let msg = format!("✗ Failed to get metrics ({status}): {resp}");
+        println!("{}", msg.red());
     }
     Ok(())
 }
 
 async fn handle_vm_export_metrics(args: &VmExportArgs) -> Result<()> {
+    use comfy_table::presets::NOTHING;
+    use comfy_table::{Cell, Table};
     use crossterm::style::Stylize;
     let (status, resp) = pipe_client::pipe_request(
         &args.pipe,
@@ -1612,11 +1616,32 @@ async fn handle_vm_export_metrics(args: &VmExportArgs) -> Result<()> {
     if status.is_success() {
         let snap: hitz_api::MetricsSnapshot =
             serde_json::from_str(&resp).context("failed to parse metrics response")?;
+
         let json = serde_json::to_string_pretty(&snap).context("failed to serialize metrics")?;
+        let bytes = json.len();
         std::fs::write(&args.out, json).context("failed to write metrics export to file")?;
-        println!("{}", format!("✓ Exported metrics to {}", args.out.display()).green());
+
+        let mut table = Table::new();
+        let _ = table.load_preset(NOTHING);
+
+        let _ = table.add_row(vec![
+            Cell::new("Target File:").add_attribute(comfy_table::Attribute::Bold),
+            Cell::new(args.out.display().to_string()),
+        ]);
+        let _ = table.add_row(vec![
+            Cell::new("File Size:").add_attribute(comfy_table::Attribute::Bold),
+            Cell::new(format!("{bytes} bytes")),
+        ]);
+        let _ = table.add_row(vec![
+            Cell::new("Timestamp:").add_attribute(comfy_table::Attribute::Bold),
+            Cell::new(snap.timestamp_ms.to_string()),
+        ]);
+
+        println!("{}", "✓ Successfully exported metrics\n".green());
+        println!("{table}");
     } else {
-        println!("{status}: {resp}");
+        let msg = format!("✗ Failed to export metrics ({status}): {resp}");
+        println!("{}", msg.red());
     }
     Ok(())
 }
