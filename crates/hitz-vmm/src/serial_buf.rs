@@ -218,6 +218,7 @@ impl SerialReader {
 #[cfg(test)]
 #[allow(clippy::expect_used)]
 mod tests {
+    use proptest::prelude::*;
     use std::time::Duration;
 
     use super::*;
@@ -312,5 +313,32 @@ mod tests {
             assert_eq!(c1, b"shared");
             assert_eq!(c2, b"shared");
         });
+    }
+
+    proptest! {
+        #[test]
+        #[allow(clippy::unwrap_used)]
+        fn havoc_fuzz_serial_buf_read_write(capacity in 1..1000usize, write_size in 1..5000usize) {
+            let rt = test_rt();
+            rt.block_on(async {
+                let mut buf = SerialBuf::with_capacity(capacity);
+                let mut reader = buf.reader();
+
+                let data = vec![42u8; write_size];
+                buf.write_all(&data).unwrap();
+
+                let chunk_opt = tokio::time::timeout(Duration::from_millis(50), reader.read_chunk()).await;
+
+                if let Ok(Some(chunk)) = chunk_opt {
+                    assert!(chunk.len() <= capacity);
+                }
+            });
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "capacity must be greater than 0")]
+    fn havoc_capacity_zero_panic() {
+        let _ = SerialBuf::with_capacity(0);
     }
 }

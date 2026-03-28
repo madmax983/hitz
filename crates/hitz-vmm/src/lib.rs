@@ -78,5 +78,3 @@ pub use run_loop::{ExitReason, SharedDevices, run_vcpu_loop};
 pub use serial_buf::{SerialBuf, SerialReader};
 pub use vm::{BootExtras, VmError, VmRunResult, boot_and_run, validate_config};
 pub use vsock_io::VsockIoHandle;
-/// havoc
-pub mod havoc;
