@@ -335,6 +335,8 @@ enum VmCommand {
     Metrics(VmIdArgs),
     /// Display live interactive resource dashboard.
     Top(VmIdArgs),
+    /// Export metrics to JSON format.
+    ExportMetrics(Box<VmExportArgs>),
 }
 
 /// Arguments for `vm clone`.
@@ -412,6 +414,25 @@ struct VmCreateArgs {
     /// TCP port forwards HOST:GUEST (e.g. `--port 2222:22`). Repeatable.
     #[arg(long = "port", value_name = "HOST:GUEST", value_parser = parse_port_forward)]
     ports: Vec<hitz_api::PortForward>,
+}
+
+/// Arguments for `vm export-metrics`.
+#[derive(Parser)]
+struct VmExportArgs {
+    /// VM identifier.
+    id: String,
+
+    /// Path to export the metrics to (JSON).
+    #[arg(short, long)]
+    out: PathBuf,
+
+    /// Named pipe path.
+    #[arg(long, default_value = DEFAULT_PIPE)]
+    pipe: String,
+
+    /// Connect to daemon via TCP instead of named pipe.
+    #[arg(long)]
+    tcp: Option<std::net::SocketAddr>,
 }
 
 /// Arguments that take just a VM ID.
@@ -1578,6 +1599,28 @@ async fn handle_vm_metrics(args: &VmIdArgs) -> Result<()> {
     Ok(())
 }
 
+async fn handle_vm_export_metrics(args: &VmExportArgs) -> Result<()> {
+    use crossterm::style::Stylize;
+    let (status, resp) = pipe_client::pipe_request(
+        &args.pipe,
+        args.tcp,
+        Method::GET,
+        &format!("/vms/{}/metrics", args.id),
+        None,
+    )
+    .await?;
+    if status.is_success() {
+        let snap: hitz_api::MetricsSnapshot =
+            serde_json::from_str(&resp).context("failed to parse metrics response")?;
+        let json = serde_json::to_string_pretty(&snap).context("failed to serialize metrics")?;
+        std::fs::write(&args.out, json).context("failed to write metrics export to file")?;
+        println!("{}", format!("✓ Exported metrics to {}", args.out.display()).green());
+    } else {
+        println!("{status}: {resp}");
+    }
+    Ok(())
+}
+
 /// Execute a `vm` subcommand by talking to the daemon over the named pipe.
 fn run_vm_command(cmd: VmCommand) -> Result<()> {
     let rt = tokio::runtime::Builder::new_current_thread()
@@ -1597,6 +1640,7 @@ fn run_vm_command(cmd: VmCommand) -> Result<()> {
             VmCommand::Serial(args) => handle_vm_serial(&args).await,
             VmCommand::Metrics(args) => handle_vm_metrics(&args).await,
             VmCommand::Top(args) => handle_vm_top(&args).await,
+            VmCommand::ExportMetrics(args) => handle_vm_export_metrics(&args).await,
         }
     })
 }
@@ -1899,16 +1943,31 @@ mod tests {
 
 #[cfg(test)]
 mod top_tests {
-    use crate::VmIdArgs;
+    use crate::{VmExportArgs, VmIdArgs};
+    use std::path::PathBuf;
+
     // Just a sanity check to verify the compiler parses everything.
     // Testing terminal UI without a real terminal attached can block/panic,
     // so we just assert our command layout exists and compiles correctly.
     #[test]
+    #[allow(clippy::assertions_on_constants)]
     fn run_vm_top_command_definition_compiles() {
         let _args = VmIdArgs {
             id: "test".to_string(),
             pipe: "pipe".to_string(),
             tcp: None,
         };
+    }
+
+    #[test]
+    #[allow(clippy::assertions_on_constants)]
+    fn run_vm_export_metrics_command_definition_compiles() {
+        let _args = VmExportArgs {
+            id: "test".to_string(),
+            out: PathBuf::from("metrics.json"),
+            pipe: "pipe".to_string(),
+            tcp: None,
+        };
+        assert!(true);
     }
 }
