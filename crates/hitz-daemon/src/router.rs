@@ -190,6 +190,7 @@ where
     let info = match action_req.action {
         VmAction::Start => manager.start_vm(id)?,
         VmAction::Stop => manager.stop_vm(id)?,
+        VmAction::Restart => manager.restart_vm(id).await?,
     };
     json_response(StatusCode::OK, &info)
 }

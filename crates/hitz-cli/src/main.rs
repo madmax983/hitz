@@ -323,6 +323,8 @@ enum VmCommand {
     Start(VmIdArgs),
     /// Stop a running VM.
     Stop(VmIdArgs),
+    /// Restart a running VM.
+    Restart(VmIdArgs),
     /// Get VM status.
     Status(VmIdArgs),
     /// List all VMs.
@@ -1127,6 +1129,33 @@ async fn handle_vm_start(args: &VmIdArgs) -> Result<()> {
     Ok(())
 }
 
+async fn handle_vm_restart(args: &VmIdArgs) -> Result<()> {
+    use crossterm::style::Stylize;
+    let body = serde_json::to_string(&ActionVmRequest {
+        action: VmAction::Restart,
+    })
+    .context("serialize request")?;
+    let (status, resp) = pipe_client::pipe_request(
+        &args.pipe,
+        args.tcp,
+        Method::POST,
+        &format!("/vms/{}/action", args.id),
+        Some(&body),
+    )
+    .await?;
+    if status.is_success() {
+        let msg = format!("✓ Successfully restarted VM {}", args.id);
+        println!("{}", msg.green());
+    } else if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(&resp) {
+        let msg = format!("✗ Failed to restart VM {}: {}", args.id, err.message);
+        println!("{}", msg.red());
+    } else {
+        let msg = format!("✗ Failed to restart VM {} ({status}): {resp}", args.id);
+        println!("{}", msg.red());
+    }
+    Ok(())
+}
+
 async fn handle_vm_stop(args: &VmIdArgs) -> Result<()> {
     use crossterm::style::Stylize;
     let body = serde_json::to_string(&ActionVmRequest {
@@ -1650,6 +1679,7 @@ fn run_vm_command(cmd: VmCommand) -> Result<()> {
             VmCommand::Clone(args) => handle_vm_clone(&args).await,
             VmCommand::Start(args) => handle_vm_start(&args).await,
             VmCommand::Stop(args) => handle_vm_stop(&args).await,
+            VmCommand::Restart(args) => handle_vm_restart(&args).await,
             VmCommand::Status(args) => handle_vm_status(&args).await,
             VmCommand::List(args) => handle_vm_list(&args).await,
             VmCommand::Delete(args) => handle_vm_delete(&args).await,

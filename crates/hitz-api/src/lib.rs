@@ -384,6 +384,8 @@ pub enum VmAction {
     Start,
     /// Stop (pause/shutdown) a running VM.
     Stop,
+    /// Restart a running VM by stopping it and then starting it.
+    Restart,
 }
 
 /// Current lifecycle state of a VM.
@@ -616,7 +618,7 @@ mod tests {
 
     #[test]
     fn vm_action_serde_roundtrip() {
-        for action in [VmAction::Start, VmAction::Stop] {
+        for action in [VmAction::Start, VmAction::Stop, VmAction::Restart] {
             let json = serde_json::to_string(&action).expect("serialize");
             let restored: VmAction = serde_json::from_str(&json).expect("deserialize");
             assert_eq!(restored, action);
