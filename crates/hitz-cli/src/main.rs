@@ -661,43 +661,31 @@ fn main() -> ExitCode {
     let cli = Cli::parse();
 
     match cli.command {
-        Command::Run(args) => match run_vm(args) {
-            Ok(code) => code,
-            Err(e) => {
+        Command::Run(args) => run_vm(args).unwrap_or_else(|e| {
+            eprintln!("error: {e:#}");
+            ExitCode::FAILURE
+        }),
+        Command::Daemon(cmd) => {
+            let result = match cmd {
+                DaemonCommand::Start(ref args) => run_daemon(args),
+                DaemonCommand::Install(ref args) => install_service(args),
+                DaemonCommand::Remove => remove_service(),
+            };
+            result.map_or_else(
+                |e| {
+                    eprintln!("error: {e:#}");
+                    ExitCode::FAILURE
+                },
+                |()| ExitCode::SUCCESS,
+            )
+        }
+        Command::Vm(cmd) => run_vm_command(cmd).map_or_else(
+            |e| {
                 eprintln!("error: {e:#}");
                 ExitCode::FAILURE
-            }
-        },
-        Command::Daemon(cmd) => match cmd {
-            DaemonCommand::Start(ref args) => match run_daemon(args) {
-                Ok(()) => ExitCode::SUCCESS,
-                Err(e) => {
-                    eprintln!("error: {e:#}");
-                    ExitCode::FAILURE
-                }
             },
-            DaemonCommand::Install(ref args) => match install_service(args) {
-                Ok(()) => ExitCode::SUCCESS,
-                Err(e) => {
-                    eprintln!("error: {e:#}");
-                    ExitCode::FAILURE
-                }
-            },
-            DaemonCommand::Remove => match remove_service() {
-                Ok(()) => ExitCode::SUCCESS,
-                Err(e) => {
-                    eprintln!("error: {e:#}");
-                    ExitCode::FAILURE
-                }
-            },
-        },
-        Command::Vm(cmd) => match run_vm_command(cmd) {
-            Ok(()) => ExitCode::SUCCESS,
-            Err(e) => {
-                eprintln!("error: {e:#}");
-                ExitCode::FAILURE
-            }
-        },
+            |()| ExitCode::SUCCESS,
+        ),
     }
 }
 
