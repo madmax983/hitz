@@ -296,6 +296,9 @@ fn daemon_error_response(err: &DaemonError) -> Response<BoxBody<Bytes, Infallibl
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use hitz_api::VmState;
+
     /// Compile guard: the `route()` function's span instrumentation must not
     /// break its infallible return type, and must compile with tracing imports.
     #[tokio::test]
@@ -304,5 +307,104 @@ mod tests {
         // We can't call route() without a real VmManager, so we test the
         // imports compile by referencing the span name as a constant.
         let _ = "daemon.request";
+    }
+
+    async fn extract_body_string(body: BoxBody<Bytes, Infallible>) -> String {
+        use http_body_util::BodyExt;
+        let collected = body.collect().await.expect("collect body");
+        let bytes = collected.to_bytes();
+        String::from_utf8(bytes.to_vec()).expect("valid utf8")
+    }
+
+    #[tokio::test]
+    async fn should_format_error_response() {
+        let resp = error_response(StatusCode::BAD_REQUEST, "invalid input data");
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(
+            resp.headers()
+                .get("content-type")
+                .expect("content type header missing")
+                .to_str()
+                .expect("content type is valid string"),
+            "application/json"
+        );
+
+        let body_str = extract_body_string(resp.into_body()).await;
+        assert_eq!(body_str, r#"{"message":"invalid input data"}"#);
+    }
+
+    #[tokio::test]
+    async fn should_map_daemon_errors_to_status_codes() {
+        struct TestCase {
+            err: DaemonError,
+            expected_status: StatusCode,
+            expected_message_contains: &'static str,
+        }
+
+        let cases = vec![
+            TestCase {
+                err: DaemonError::NotFound("vm-1".to_string()),
+                expected_status: StatusCode::NOT_FOUND,
+                expected_message_contains: "VM not found: vm-1",
+            },
+            TestCase {
+                err: DaemonError::AlreadyExists("vm-1".to_string()),
+                expected_status: StatusCode::CONFLICT,
+                expected_message_contains: "VM already exists: vm-1",
+            },
+            TestCase {
+                err: DaemonError::InvalidState {
+                    id: "vm-1".to_string(),
+                    state: VmState::Running,
+                    expected: "Stopped".to_string(),
+                },
+                expected_status: StatusCode::CONFLICT,
+                expected_message_contains: "VM \\\"vm-1\\\" is Running, expected Stopped",
+            },
+            TestCase {
+                err: DaemonError::Vmm(hitz_vmm::VmError::Config("bad config".to_string())),
+                expected_status: StatusCode::BAD_REQUEST,
+                expected_message_contains: "VMM error: Invalid configuration: bad config",
+            },
+            TestCase {
+                err: DaemonError::Vmm(hitz_vmm::VmError::Io(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    "disk missing",
+                ))),
+                expected_status: StatusCode::INTERNAL_SERVER_ERROR,
+                expected_message_contains: "VMM error: I/O error: disk missing",
+            },
+            TestCase {
+                err: DaemonError::Io(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    "file missing",
+                )),
+                expected_status: StatusCode::INTERNAL_SERVER_ERROR,
+                expected_message_contains: "I/O error: file missing",
+            },
+            TestCase {
+                err: DaemonError::Internal("something exploded".to_string()),
+                expected_status: StatusCode::INTERNAL_SERVER_ERROR,
+                expected_message_contains: "internal error: something exploded",
+            },
+        ];
+
+        for case in cases {
+            let resp = daemon_error_response(&case.err);
+            assert_eq!(
+                resp.status(),
+                case.expected_status,
+                "Failed on error: {:?}",
+                case.err
+            );
+
+            let body_str = extract_body_string(resp.into_body()).await;
+            assert!(
+                body_str.contains(case.expected_message_contains),
+                "Expected body to contain '{}', but got: {}",
+                case.expected_message_contains,
+                body_str
+            );
+        }
     }
 }
