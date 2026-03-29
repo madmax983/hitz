@@ -237,18 +237,21 @@ pub fn parse_mac(s: &str) -> Result<[u8; 6], String> {
     if s.len() > 17 {
         return Err(format!("input too long for MAC address (len {})", s.len()));
     }
-    let parts: Vec<&str> = s.split(':').collect();
-    if parts.len() != 6 {
-        return Err(format!(
-            "expected 6 colon-separated octets, got {}",
-            parts.len()
-        ));
+    // Removing intermediate `.collect::<Vec<_>>()` allocation by iterating directly over `split`.
+    let mut parts = s.split(':');
+    let mut mac = [0u8; 6];
+
+    for (i, byte) in mac.iter_mut().enumerate() {
+        if let Some(part) = parts.next() {
+            *byte = u8::from_str_radix(part, 16)
+                .map_err(|e| format!("invalid hex octet '{part}': {e}"))?;
+        } else {
+            return Err(format!("expected 6 colon-separated octets, got {i}"));
+        }
     }
 
-    let mut mac = [0u8; 6];
-    for (i, part) in parts.iter().enumerate() {
-        mac[i] =
-            u8::from_str_radix(part, 16).map_err(|e| format!("invalid hex octet '{part}': {e}"))?;
+    if parts.next().is_some() {
+        return Err("expected 6 colon-separated octets, got >6".to_string());
     }
 
     Ok(mac)
@@ -265,27 +268,35 @@ pub fn parse_cidr(s: &str) -> Result<([u8; 4], u8), String> {
     if s.len() > 18 {
         return Err(format!("input too long for CIDR (len {})", s.len()));
     }
-    let parts: Vec<&str> = s.splitn(2, '/').collect();
-    if parts.len() != 2 {
-        return Err("expected format: A.B.C.D/prefix".to_string());
-    }
+    // Removing intermediate `.collect::<Vec<_>>()` allocation by iterating directly over `splitn`.
+    let mut parts = s.splitn(2, '/');
+    let ip_str = parts
+        .next()
+        .ok_or_else(|| "expected format: A.B.C.D/prefix".to_string())?;
+    let prefix_str = parts
+        .next()
+        .ok_or_else(|| "expected format: A.B.C.D/prefix".to_string())?;
 
-    let octets: Vec<&str> = parts[0].split('.').collect();
-    if octets.len() != 4 {
-        return Err(format!("expected 4 octets, got {}", octets.len()));
-    }
-
+    let mut octets = ip_str.split('.');
     let mut ip = [0u8; 4];
-    for (i, octet) in octets.iter().enumerate() {
-        ip[i] = octet
-            .parse::<u8>()
-            .map_err(|e| format!("invalid octet '{octet}': {e}"))?;
+
+    for (i, byte) in ip.iter_mut().enumerate() {
+        if let Some(octet) = octets.next() {
+            *byte = octet
+                .parse::<u8>()
+                .map_err(|e| format!("invalid octet '{octet}': {e}"))?;
+        } else {
+            return Err(format!("expected 4 octets, got {i}"));
+        }
     }
 
-    let prefix: u8 = parts[1].parse().map_err(|e| {
-        let p = parts[1];
-        format!("invalid prefix length '{p}': {e}")
-    })?;
+    if octets.next().is_some() {
+        return Err("expected 4 octets, got >4".to_string());
+    }
+
+    let prefix: u8 = prefix_str
+        .parse()
+        .map_err(|e| format!("invalid prefix length '{prefix_str}': {e}"))?;
 
     if prefix > 32 {
         return Err(format!("prefix length {prefix} exceeds 32"));
