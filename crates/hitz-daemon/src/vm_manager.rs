@@ -536,6 +536,29 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
         Ok(info)
     }
 
+    /// Restarts a running VM by stopping it, waiting for it to stop, and then starting it again.
+    pub async fn restart_vm(&self, id: &str) -> Result<VmInfo, DaemonError> {
+        let _ = self.stop_vm(id)?;
+
+        let mut stopped = false;
+        for _ in 0..50 {
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            let info = self.get_vm(id)?;
+            if info.state == VmState::Stopped || info.state == VmState::Failed {
+                stopped = true;
+                break;
+            }
+        }
+
+        if !stopped {
+            return Err(DaemonError::Internal(format!(
+                "VM {id} failed to stop within 5 seconds for restart"
+            )));
+        }
+
+        self.start_vm(id)
+    }
+
     /// Gets a serial output reader for a running VM.
     ///
     /// Returns a [`SerialReader`] that can be polled for chunks of serial output.
