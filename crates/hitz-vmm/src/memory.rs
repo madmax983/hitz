@@ -324,10 +324,19 @@ impl hitz_boot::GuestMemWriter for GuestMemory {
             .map_err(|e| hitz_boot::BootError::WriteFailed(e.to_string()))
     }
 
-    fn write_zeroes(&self, gpa: Gpa, len: usize) -> Result<(), hitz_boot::BootError> {
-        let zeroes = vec![0u8; len];
-        self.write_slice(gpa, &zeroes)
-            .map_err(|e| hitz_boot::BootError::WriteFailed(e.to_string()))
+    fn write_zeroes(&self, mut gpa: Gpa, mut len: usize) -> Result<(), hitz_boot::BootError> {
+        // Removed unnecessary heap allocation when zeroing memory.
+        // We use a fixed-size stack buffer and loop to avoid `unsafe` and handle arbitrarily large regions.
+        const CHUNK_SIZE: usize = 4096;
+        let zeroes = [0u8; CHUNK_SIZE];
+        while len > 0 {
+            let chunk = len.min(CHUNK_SIZE);
+            self.write_slice(gpa, &zeroes[..chunk])
+                .map_err(|e| hitz_boot::BootError::WriteFailed(e.to_string()))?;
+            gpa = Gpa::new(gpa.as_u64() + chunk as u64);
+            len -= chunk;
+        }
+        Ok(())
     }
 }
 
