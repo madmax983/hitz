@@ -44,6 +44,24 @@ pub const VSOCK_METRICS_PORT: u32 = 52355;
 pub const VMADDR_CID_HOST: u32 = 2;
 
 /// Network configuration for a VM.
+///
+/// This specifies how the VM integrates with the host's networking stack, allowing
+/// the micro-VM to communicate with the outside world.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::NetConfig;
+///
+/// let config = NetConfig {
+///     mac: Some("AA:BB:CC:DD:EE:FF".to_string()),
+///     host_ip: "192.168.100.1/24".to_string(),
+///     guest_ip: "192.168.100.2/24".to_string(),
+///     adapter_name: Some("hitz-test".to_string()),
+/// };
+///
+/// assert_eq!(config.host_ip, "192.168.100.1/24");
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NetConfig {
     /// Guest MAC address (e.g. "AA:BB:CC:DD:EE:FF"). Random if `None`.
@@ -58,6 +76,23 @@ pub struct NetConfig {
 
 /// A single TCP port forward rule: `host_port` on the host forwards to
 /// `guest_port` inside the VM.
+///
+/// This structure acts as a mapping allowing external host traffic to reach
+/// internal micro-VM services securely.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::PortForward;
+///
+/// let port_forward = PortForward {
+///     host_port: 8080,
+///     guest_port: 80,
+/// };
+///
+/// assert_eq!(port_forward.host_port, 8080);
+/// assert_eq!(port_forward.guest_port, 80);
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PortForward {
     /// Port to listen on the host (e.g. `2222`).
@@ -69,6 +104,22 @@ pub struct PortForward {
 // ── Guest agent mode ─────────────────────────────────────────────────────────
 
 /// Controls whether and which guest metrics agent is injected into the initramfs.
+///
+/// The guest agent handles internal VM health telemetry. This mode determines
+/// if the built-in, a custom, or no agent is provided to the VM during boot.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::GuestAgentMode;
+/// use std::path::PathBuf;
+///
+/// let auto_agent = GuestAgentMode::Auto;
+/// let custom_agent = GuestAgentMode::Custom(PathBuf::from("/usr/local/bin/agent"));
+/// let disabled_agent = GuestAgentMode::Disabled;
+///
+/// assert_eq!(auto_agent, GuestAgentMode::default());
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(tag = "mode", content = "path", rename_all = "lowercase")]
 pub enum GuestAgentMode {
@@ -300,6 +351,20 @@ impl VmConfig {
 }
 
 /// Action that can be performed on a running VM.
+///
+/// Use this enum to request state changes, such as starting a stopped VM
+/// or gracefully stopping a running one.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::VmAction;
+///
+/// let start_action = VmAction::Start;
+/// let stop_action = VmAction::Stop;
+///
+/// assert_ne!(start_action, stop_action);
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum VmAction {
     /// Start (resume) a created or stopped VM.
@@ -309,6 +374,20 @@ pub enum VmAction {
 }
 
 /// Current lifecycle state of a VM.
+///
+/// Indicates whether the VM is booting, running normally, stopped gracefully,
+/// or has encountered a fatal error.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::VmState;
+///
+/// let running = VmState::Running;
+/// let failed = VmState::Failed;
+///
+/// assert_ne!(running, failed);
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum VmState {
     /// VM has been created but not yet started.
