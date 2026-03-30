@@ -314,7 +314,7 @@ mod tests {
         mem.write_bytes(AVAIL_BASE + 2, &idx.to_le_bytes());
     }
 
-    /// Write a VirtioBlkReqHeader to guest memory.
+    /// Write a `VirtioBlkReqHeader` to guest memory.
     fn write_blk_header(mem: &MockMem, gpa: u64, req_type: u32, sector: u64) {
         let mut hdr = [0u8; 16];
         hdr[0..4].copy_from_slice(&req_type.to_le_bytes());

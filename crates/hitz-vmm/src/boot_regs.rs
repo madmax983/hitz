@@ -395,9 +395,9 @@ mod tests {
         assert_eq!(seg.limit, 0);
     }
 
-    /// Smoke test: configure_regs builds a valid StandardRegs.
+    /// Smoke test: `configure_regs` builds a valid `StandardRegs`.
     ///
-    /// We can't call set_regs without a real vCPU, but we can verify the
+    /// We can't call `set_regs` without a real vCPU, but we can verify the
     /// values that would be set by calling the same logic directly.
     #[test]
     fn standard_regs_values() {

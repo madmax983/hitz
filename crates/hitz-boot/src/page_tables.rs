@@ -183,7 +183,7 @@ mod tests {
         let pd0 = &writes[2];
         assert_eq!(pd0.gpa, Gpa::new(PD_BASE_GPA));
         assert_eq!(pd0.data.len(), PAGE_SIZE);
-        assert_eq!(read_entry(&pd0.data, 0), 0x0 | HUGE_PAGE_FLAGS);
+        assert_eq!(read_entry(&pd0.data, 0), HUGE_PAGE_FLAGS);
         assert_eq!(read_entry(&pd0.data, 1), HUGE_PAGE_SIZE | HUGE_PAGE_FLAGS);
         assert_eq!(
             read_entry(&pd0.data, 511),

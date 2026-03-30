@@ -31,8 +31,8 @@ pub async fn run_metrics_task(
         // Non-blocking receive: if the channel has a packet, process it.
         // If empty, check shutdown and loop again.
         match tx_rx.try_recv() {
-            Ok((hdr, payload)) => {
-                handle_packet(&vm_id, &hdr, &payload, &rx_tx, &mut fwd_cnt);
+            Ok((hdr, ref payload)) => {
+                handle_packet(&vm_id, &hdr, payload, &rx_tx, &mut fwd_cnt);
             }
             Err(crossbeam_channel::TryRecvError::Empty) => {
                 // No packet yet — wait for either a packet or shutdown.
@@ -47,8 +47,8 @@ pub async fn run_metrics_task(
                     }
                 };
                 match packet_result {
-                    Ok(Ok((hdr, payload))) => {
-                        handle_packet(&vm_id, &hdr, &payload, &rx_tx, &mut fwd_cnt);
+                    Ok(Ok((hdr, ref payload))) => {
+                        handle_packet(&vm_id, &hdr, payload, &rx_tx, &mut fwd_cnt);
                     }
                     _ => break,
                 }

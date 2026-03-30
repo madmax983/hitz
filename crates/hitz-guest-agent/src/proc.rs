@@ -177,12 +177,12 @@ pub fn parse_proc_net_dev(content: &str) -> Vec<NetMetrics> {
 mod tests {
     use super::*;
 
-    const PROC_STAT_FIXTURE: &str = "cpu  12345 678 9012 345678 123 0 456 0 0 0\n\
+    const PROC_STAT_FIXTURE: &str = "cpu  12345 678 9012 345_678 123 0 456 0 0 0\n\
          cpu0 6000 300 4000 170000 60 0 200 0 0 0\n\
          cpu1 6345 378 5012 175678 63 0 256 0 0 0\n";
 
-    const PROC_MEMINFO_FIXTURE: &str = "MemTotal:        262144 kB\n\
-         MemFree:         131072 kB\n\
+    const PROC_MEMINFO_FIXTURE: &str = "MemTotal:        262_144 kB\n\
+         MemFree:         131_072 kB\n\
          Buffers:          10240 kB\n\
          Cached:           20480 kB\n\
          SwapTotal:            0 kB\n\
@@ -200,14 +200,14 @@ mod tests {
         // Should have total + 2 cores.
         assert_eq!(stats.len(), 3);
         // Total idle ticks.
-        assert_eq!(stats[0].idle, 345678);
+        assert_eq!(stats[0].idle, 345_678);
     }
 
     #[test]
     fn parse_meminfo() {
         let mem = parse_proc_meminfo(PROC_MEMINFO_FIXTURE).expect("parse");
-        assert_eq!(mem.total_bytes, 262144 * 1024);
-        assert_eq!(mem.free_bytes, 131072 * 1024);
+        assert_eq!(mem.total_bytes, 262_144 * 1024);
+        assert_eq!(mem.free_bytes, 131_072 * 1024);
         assert_eq!(mem.swap_total, 0);
     }
 
