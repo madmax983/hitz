@@ -134,21 +134,46 @@ impl Default for SerialBuf {
 }
 
 impl Write for SerialBuf {
+    /// Writes data to the circular buffer.
+    ///
+    /// ⚡ Bolt Optimization:
+    /// Instead of writing byte-by-byte in a loop, this implementation uses
+    /// `copy_from_slice` for bulk memory copies. This eliminates repetitive bounds
+    /// checking and loop overhead, turning a linear O(N) operation into O(1)
+    /// (or O(2) if the write wraps around the end of the ring).
     fn write(&mut self, data: &[u8]) -> io::Result<usize> {
         let mut inner = self
             .inner
             .lock()
             .map_err(|e| io::Error::other(e.to_string()))?;
         let cap = inner.buf.len();
-        for &byte in data {
-            let pos = inner.write_pos;
-            inner.buf[pos] = byte;
-            inner.write_pos = (pos + 1) % cap;
+        let len = data.len();
+
+        let data_to_write = if len > cap { &data[len - cap..] } else { data };
+        let write_len = data_to_write.len();
+
+        // If we skipped bytes because len > cap, the starting write position
+        // in the ring buffer must mathematically advance to simulate those
+        // skipped writes.
+        let skipped = len.saturating_sub(cap);
+        let pos = (inner.write_pos + skipped) % cap;
+
+        let space_to_end = cap - pos;
+        if write_len <= space_to_end {
+            // The new data fits entirely before the physical end of the buffer.
+            inner.buf[pos..pos + write_len].copy_from_slice(data_to_write);
+            inner.write_pos = (pos + write_len) % cap;
+        } else {
+            // The new data wraps around the end of the buffer.
+            inner.buf[pos..].copy_from_slice(&data_to_write[..space_to_end]);
+            let remaining = write_len - space_to_end;
+            inner.buf[..remaining].copy_from_slice(&data_to_write[space_to_end..]);
+            inner.write_pos = remaining;
         }
-        inner.total_written += data.len() as u64;
+        inner.total_written += len as u64;
         drop(inner);
         self.notify.notify_waiters();
-        Ok(data.len())
+        Ok(len)
     }
 
     fn flush(&mut self) -> io::Result<()> {
