@@ -15,14 +15,14 @@
 //! let mut buf = SerialBuf::new();
 //!
 //! // 2. Spawn a reader to consume the output.
-//! let mut reader = buf.spawn_reader();
+//! let mut reader = buf.reader();
 //!
 //! // 3. Write data to the buffer.
 //! buf.write_all(b"Booting hitz VM...").unwrap();
 //!
 //! // 4. The reader can then pull bytes out.
-//! # tokio_test::block_on(async {
-//! let bytes = reader.read_next().await.unwrap();
+//! # tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap().block_on(async {
+//! let bytes = reader.read_chunk().await.unwrap();
 //! assert_eq!(&bytes, b"Booting hitz VM...");
 //! # });
 //! ```

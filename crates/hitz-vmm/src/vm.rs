@@ -559,80 +559,91 @@ mod tests {
     }
 
     #[test]
-    fn validate_config_missing_kernel() {
-        let cfg = valid_config("nonexistent_kernel".into());
-        let err = validate_config(&cfg).expect_err("should return error");
-        assert!(
-            err.to_string().contains("kernel not found"),
-            "unexpected: {err}"
-        );
-    }
-
-    #[test]
-    fn validate_config_missing_initramfs() {
+    fn validate_config_table_driven() {
         let tmp = tempfile::NamedTempFile::new().expect("create temp file");
-        let mut cfg = valid_config(tmp.path().to_path_buf());
-        cfg.initramfs_path = Some("nonexistent_initramfs.cpio".into());
-        let err = validate_config(&cfg).expect_err("should return error");
-        assert!(
-            err.to_string().contains("initramfs not found"),
-            "unexpected: {err}"
-        );
-    }
+        let valid_path = tmp.path().to_path_buf();
 
-    #[test]
-    fn validate_config_missing_disk() {
-        let tmp = tempfile::NamedTempFile::new().expect("create temp file");
-        let mut cfg = valid_config(tmp.path().to_path_buf());
-        cfg.disk_path = Some("nonexistent_disk.img".into());
-        let err = validate_config(&cfg).expect_err("should return error");
-        assert!(
-            err.to_string().contains("disk image not found"),
-            "unexpected: {err}"
-        );
-    }
+        struct TestCase {
+            name: &'static str,
+            config: VmConfig,
+            expected_error: Option<&'static str>,
+        }
 
-    #[test]
-    fn validate_config_ram_too_small() {
-        let tmp = tempfile::NamedTempFile::new().expect("create temp file");
-        let mut cfg = valid_config(tmp.path().to_path_buf());
-        cfg.ram_mib = 1;
-        let err = validate_config(&cfg).expect_err("should return error");
-        assert!(
-            err.to_string().contains("at least 2 MiB"),
-            "unexpected: {err}"
-        );
-    }
+        let cases = vec![
+            TestCase {
+                name: "Valid minimal config",
+                config: valid_config(valid_path.clone()),
+                expected_error: None,
+            },
+            TestCase {
+                name: "Missing kernel",
+                config: valid_config("nonexistent_kernel".into()),
+                expected_error: Some("kernel not found"),
+            },
+            TestCase {
+                name: "Missing initramfs",
+                config: {
+                    let mut c = valid_config(valid_path.clone());
+                    c.initramfs_path = Some("nonexistent_initramfs.cpio".into());
+                    c
+                },
+                expected_error: Some("initramfs not found"),
+            },
+            TestCase {
+                name: "Missing disk",
+                config: {
+                    let mut c = valid_config(valid_path.clone());
+                    c.disk_path = Some("nonexistent_disk.img".into());
+                    c
+                },
+                expected_error: Some("disk image not found"),
+            },
+            TestCase {
+                name: "RAM too small",
+                config: {
+                    let mut c = valid_config(valid_path.clone());
+                    c.ram_mib = 1;
+                    c
+                },
+                expected_error: Some("at least 2 MiB"),
+            },
+            TestCase {
+                name: "Zero CPUs",
+                config: {
+                    let mut c = valid_config(valid_path.clone());
+                    c.cpus = 0;
+                    c
+                },
+                expected_error: Some("cpus must be"),
+            },
+            TestCase {
+                name: "Too many CPUs",
+                config: {
+                    let mut c = valid_config(valid_path.clone());
+                    c.cpus = 256;
+                    c
+                },
+                expected_error: Some("cpus must be"),
+            },
+        ];
 
-    #[test]
-    fn validate_config_cpus_zero() {
-        let tmp = tempfile::NamedTempFile::new().expect("create temp file");
-        let mut cfg = valid_config(tmp.path().to_path_buf());
-        cfg.cpus = 0;
-        let err = validate_config(&cfg).expect_err("should return error");
-        assert!(
-            err.to_string().contains("cpus must be"),
-            "unexpected: {err}"
-        );
-    }
-
-    #[test]
-    fn validate_config_cpus_too_many() {
-        let tmp = tempfile::NamedTempFile::new().expect("create temp file");
-        let mut cfg = valid_config(tmp.path().to_path_buf());
-        cfg.cpus = 256;
-        let err = validate_config(&cfg).expect_err("should return error");
-        assert!(
-            err.to_string().contains("cpus must be"),
-            "unexpected: {err}"
-        );
-    }
-
-    #[test]
-    fn validate_config_ok() {
-        let tmp = tempfile::NamedTempFile::new().expect("create temp file");
-        let cfg = valid_config(tmp.path().to_path_buf());
-        validate_config(&cfg).expect("valid config should pass");
+        for case in cases {
+            let result = validate_config(&case.config);
+            match case.expected_error {
+                Some(err_msg) => {
+                    let err = result.expect_err(&format!("{} should have failed", case.name));
+                    assert!(
+                        err.to_string().contains(err_msg),
+                        "{}: unexpected error message: {}",
+                        case.name,
+                        err
+                    );
+                }
+                None => {
+                    result.expect(&format!("{} should have succeeded", case.name));
+                }
+            }
+        }
     }
 
     #[test]

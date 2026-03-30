@@ -63,10 +63,10 @@
 pub(crate) mod boot_regs;
 pub(crate) mod cpio;
 pub(crate) mod error;
-pub(crate) mod memory;
+pub mod memory;
 pub(crate) mod mmio_decode;
 pub(crate) mod run_loop;
-pub(crate) mod serial_buf;
+pub mod serial_buf;
 pub(crate) mod vm;
 pub(crate) mod vsock_io;
 
