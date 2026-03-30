@@ -661,9 +661,7 @@ mod tests {
         while let Some(_desc) = chain.next_descriptor(&mem) {
             count += 1;
             // Failsafe in case the bug is present
-            if count > 100 {
-                panic!("Infinite loop detected!");
-            }
+            assert!(count <= 100, "Infinite loop detected!");
         }
 
         // It should process exactly 16 descriptors (the queue size) before aborting
