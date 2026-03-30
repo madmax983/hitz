@@ -1461,19 +1461,17 @@ async fn handle_vm_top(args: &VmIdArgs) -> Result<()> {
                         .split(bottom_chunks[0]);
 
                     // Disk Table
-                    let disk_rows: Vec<Row> = snap
-                        .disks
-                        .iter()
-                        .map(|d| {
+                    // Removed intermediate `.collect::<Vec<_>>()` allocation by passing
+                    // the iterator directly to `Table::new`, which accepts `IntoIterator`.
+                    // This avoids heap allocations per frame.
+                    let disk_table = Table::new(
+                        snap.disks.iter().map(|d| {
                             Row::new(vec![
                                 d.name.clone(),
                                 format!("{}", d.read_bytes / 1024),
                                 format!("{}", d.write_bytes / 1024),
                             ])
-                        })
-                        .collect();
-                    let disk_table = Table::new(
-                        disk_rows,
+                        }),
                         [
                             Constraint::Percentage(40),
                             Constraint::Percentage(30),
@@ -1488,19 +1486,15 @@ async fn handle_vm_top(args: &VmIdArgs) -> Result<()> {
                     f.render_widget(disk_table, io_chunks[0]);
 
                     // Network Table
-                    let net_rows: Vec<Row> = snap
-                        .networks
-                        .iter()
-                        .map(|n| {
+                    // Removed intermediate `.collect::<Vec<_>>()` allocation.
+                    let net_table = Table::new(
+                        snap.networks.iter().map(|n| {
                             Row::new(vec![
                                 n.interface.clone(),
                                 format!("{}", n.rx_bytes / 1024),
                                 format!("{}", n.tx_bytes / 1024),
                             ])
-                        })
-                        .collect();
-                    let net_table = Table::new(
-                        net_rows,
+                        }),
                         [
                             Constraint::Percentage(40),
                             Constraint::Percentage(30),
@@ -1515,20 +1509,16 @@ async fn handle_vm_top(args: &VmIdArgs) -> Result<()> {
                     f.render_widget(net_table, io_chunks[1]);
 
                     // Processes Table
-                    let proc_rows: Vec<Row> = snap
-                        .processes
-                        .iter()
-                        .map(|p| {
+                    // Removed intermediate `.collect::<Vec<_>>()` allocation.
+                    let proc_table = Table::new(
+                        snap.processes.iter().map(|p| {
                             Row::new(vec![
                                 p.pid.to_string(),
                                 p.name.clone(),
                                 format!("{:.1}%", p.cpu_pct),
                                 format!("{} MB", p.rss_bytes / (1024 * 1024)),
                             ])
-                        })
-                        .collect();
-                    let proc_table = Table::new(
-                        proc_rows,
+                        }),
                         [
                             Constraint::Percentage(15),
                             Constraint::Percentage(45),

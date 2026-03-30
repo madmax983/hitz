@@ -560,14 +560,14 @@ mod tests {
 
     #[test]
     fn validate_config_table_driven() {
-        let tmp = tempfile::NamedTempFile::new().expect("create temp file");
-        let valid_path = tmp.path().to_path_buf();
-
         struct TestCase {
             name: &'static str,
             config: VmConfig,
             expected_error: Option<&'static str>,
         }
+
+        let tmp = tempfile::NamedTempFile::new().expect("create temp file");
+        let valid_path = tmp.path().to_path_buf();
 
         let cases = vec![
             TestCase {
@@ -619,7 +619,7 @@ mod tests {
             TestCase {
                 name: "Too many CPUs",
                 config: {
-                    let mut c = valid_config(valid_path.clone());
+                    let mut c = valid_config(valid_path);
                     c.cpus = 256;
                     c
                 },
@@ -631,16 +631,19 @@ mod tests {
             let result = validate_config(&case.config);
             match case.expected_error {
                 Some(err_msg) => {
-                    let err = result.expect_err(&format!("{} should have failed", case.name));
-                    assert!(
-                        err.to_string().contains(err_msg),
-                        "{}: unexpected error message: {}",
-                        case.name,
-                        err
-                    );
+                    if let Err(err) = result {
+                        assert!(
+                            err.to_string().contains(err_msg),
+                            "{}: unexpected error message: {}",
+                            case.name,
+                            err
+                        );
+                    } else {
+                        panic!("{} should have failed", case.name);
+                    }
                 }
                 None => {
-                    result.expect(&format!("{} should have succeeded", case.name));
+                    result.unwrap_or_else(|_| panic!("{} should have succeeded", case.name));
                 }
             }
         }
