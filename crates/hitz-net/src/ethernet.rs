@@ -230,6 +230,10 @@ pub fn random_mac() -> [u8; 6] {
 
 /// Parse a MAC address string in "AA:BB:CC:DD:EE:FF" format.
 ///
+/// **Why this is optimized:** Uses a zero-allocation iterator over `s.split(':')`
+/// instead of `.collect::<Vec<_>>()`, eliminating an intermediate heap allocation
+/// on the networking configuration path.
+///
 /// # Errors
 ///
 /// Returns an error string if the format is invalid.
@@ -237,24 +241,30 @@ pub fn parse_mac(s: &str) -> Result<[u8; 6], String> {
     if s.len() > 17 {
         return Err(format!("input too long for MAC address (len {})", s.len()));
     }
-    let parts: Vec<&str> = s.split(':').collect();
-    if parts.len() != 6 {
-        return Err(format!(
-            "expected 6 colon-separated octets, got {}",
-            parts.len()
-        ));
-    }
 
     let mut mac = [0u8; 6];
-    for (i, part) in parts.iter().enumerate() {
+    let mut count = 0;
+    for (i, part) in s.split(':').enumerate() {
+        if i >= 6 {
+            return Err("expected 6 colon-separated octets, got more".to_string());
+        }
         mac[i] =
             u8::from_str_radix(part, 16).map_err(|e| format!("invalid hex octet '{part}': {e}"))?;
+        count += 1;
+    }
+
+    if count != 6 {
+        return Err(format!("expected 6 colon-separated octets, got {count}"));
     }
 
     Ok(mac)
 }
 
 /// Parse a CIDR notation string like "192.168.100.1/24".
+///
+/// **Why this is optimized:** Uses `split_once` and a zero-allocation iterator over
+/// `.split('.')` instead of `.collect::<Vec<_>>()`, eliminating two intermediate
+/// heap allocations on the networking configuration path.
 ///
 /// Returns the IPv4 address and prefix length.
 ///
@@ -265,27 +275,30 @@ pub fn parse_cidr(s: &str) -> Result<([u8; 4], u8), String> {
     if s.len() > 18 {
         return Err(format!("input too long for CIDR (len {})", s.len()));
     }
-    let parts: Vec<&str> = s.splitn(2, '/').collect();
-    if parts.len() != 2 {
-        return Err("expected format: A.B.C.D/prefix".to_string());
-    }
 
-    let octets: Vec<&str> = parts[0].split('.').collect();
-    if octets.len() != 4 {
-        return Err(format!("expected 4 octets, got {}", octets.len()));
-    }
+    let (ip_str, prefix_str) = s
+        .split_once('/')
+        .ok_or_else(|| "expected format: A.B.C.D/prefix".to_string())?;
 
     let mut ip = [0u8; 4];
-    for (i, octet) in octets.iter().enumerate() {
+    let mut count = 0;
+    for (i, octet) in ip_str.split('.').enumerate() {
+        if i >= 4 {
+            return Err("expected 4 octets, got more".to_string());
+        }
         ip[i] = octet
             .parse::<u8>()
             .map_err(|e| format!("invalid octet '{octet}': {e}"))?;
+        count += 1;
     }
 
-    let prefix: u8 = parts[1].parse().map_err(|e| {
-        let p = parts[1];
-        format!("invalid prefix length '{p}': {e}")
-    })?;
+    if count != 4 {
+        return Err(format!("expected 4 octets, got {count}"));
+    }
+
+    let prefix: u8 = prefix_str
+        .parse()
+        .map_err(|e| format!("invalid prefix length '{prefix_str}': {e}"))?;
 
     if prefix > 32 {
         return Err(format!("prefix length {prefix} exceeds 32"));

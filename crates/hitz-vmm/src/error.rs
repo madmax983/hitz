@@ -66,7 +66,10 @@ mod tests {
             gpa: 0x3000,
             len: 256,
         };
-        assert_eq!(err.to_string(), "GPA 0x3000 + 256 overflows region boundary");
+        assert_eq!(
+            err.to_string(),
+            "GPA 0x3000 + 256 overflows region boundary"
+        );
     }
 
     #[test]

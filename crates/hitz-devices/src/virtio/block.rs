@@ -227,7 +227,12 @@ impl VirtioBackend for VirtioBlockDevice {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used, clippy::cast_possible_truncation, clippy::significant_drop_tightening)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::cast_possible_truncation,
+    clippy::significant_drop_tightening
+)]
 mod tests {
     use super::*;
     use std::io::{Seek, Write as IoWrite};
