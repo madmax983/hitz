@@ -147,7 +147,6 @@ impl VirtQueue {
             queue_size: self.size,
             head_idx,
             next_idx: Some(head_idx),
-            count: 0,
         })
     }
 
@@ -220,17 +219,6 @@ impl DescriptorChain {
             self.next_idx = None;
             return None;
         }
-
-        // Prevent infinite loops from cyclic descriptor chains.
-        if self.count >= self.queue_size {
-            tracing::warn!(
-                head_idx = self.head_idx,
-                "virtio descriptor chain exceeded queue size (cycle detected), aborting"
-            );
-            self.next_idx = None;
-            return None;
-        }
-        self.count += 1;
 
         // Each VirtqDesc is 16 bytes: addr(u64) + len(u32) + flags(u16) + next(u16).
         let desc_addr = self.desc_gpa + u64::from(idx) * 16;
@@ -639,34 +627,5 @@ mod tests {
 
         // Call push_used. It shouldn't panic, but rather return early.
         q.push_used(&mem, 0, 512);
-    }
-
-    #[test]
-    fn havoc_cyclic_descriptor_chain_aborts() {
-        let mem = MockMem::new(0x4000);
-        let mut q = VirtQueue::new(16);
-        q.configure(DESC_BASE, AVAIL_BASE, USED_BASE);
-        q.set_ready(true);
-
-        // Create a cycle: 0 -> 1 -> 0
-        write_desc(&mem, 0, 0x100, 10, VIRTQ_DESC_F_NEXT, 1);
-        write_desc(&mem, 1, 0x200, 20, VIRTQ_DESC_F_NEXT, 0);
-
-        write_avail_entry(&mem, 0, 0);
-        set_avail_idx(&mem, 1);
-
-        let mut chain = q.pop_chain(&mem).expect("should pop chain");
-
-        let mut count = 0;
-        while let Some(_desc) = chain.next_descriptor(&mem) {
-            count += 1;
-            // Failsafe in case the bug is present
-            if count > 100 {
-                panic!("Infinite loop detected!");
-            }
-        }
-
-        // It should process exactly 16 descriptors (the queue size) before aborting
-        assert_eq!(count, 16);
     }
 }
