@@ -78,6 +78,21 @@ pub struct NetConfig {
 
 /// A single TCP port forward rule: `host_port` on the host forwards to
 /// `guest_port` inside the VM.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::PortForward;
+///
+/// // Forward host port 8080 to guest port 80
+/// let rule = PortForward {
+///     host_port: 8080,
+///     guest_port: 80,
+/// };
+///
+/// assert_eq!(rule.host_port, 8080);
+/// assert_eq!(rule.guest_port, 80);
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PortForward {
     /// Port to listen on the host (e.g. `2222`).
@@ -183,6 +198,23 @@ pub struct MetricsSnapshot {
 }
 
 /// CPU utilisation metrics.
+///
+/// Captures overall and per-core CPU usage, alongside system load averages.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::CpuMetrics;
+///
+/// let cpu = CpuMetrics {
+///     total_pct: 45.2,
+///     per_core: vec![40.0, 50.4],
+///     load_avg: [1.5, 1.2, 0.9],
+/// };
+///
+/// assert_eq!(cpu.per_core.len(), 2);
+/// assert!(cpu.total_pct > 0.0);
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CpuMetrics {
     /// Overall CPU utilisation percentage (0.0–100.0).
@@ -194,6 +226,27 @@ pub struct CpuMetrics {
 }
 
 /// Memory utilisation metrics (all in bytes).
+///
+/// Tracks how RAM is being consumed inside the guest, including buffers
+/// and page cache usage which are often reclaimable.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::MemoryMetrics;
+///
+/// let mem = MemoryMetrics {
+///     total_bytes: 1024 * 1024 * 1024, // 1 GB
+///     used_bytes: 512 * 1024 * 1024,   // 512 MB
+///     free_bytes: 256 * 1024 * 1024,   // 256 MB
+///     buffers_bytes: 64 * 1024 * 1024, // 64 MB
+///     cached_bytes: 192 * 1024 * 1024, // 192 MB
+///     swap_total: 0,
+///     swap_used: 0,
+/// };
+///
+/// assert_eq!(mem.total_bytes, mem.used_bytes + mem.free_bytes + mem.buffers_bytes + mem.cached_bytes);
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MemoryMetrics {
     /// Total physical memory.
@@ -213,6 +266,26 @@ pub struct MemoryMetrics {
 }
 
 /// Per-disk I/O metrics.
+///
+/// Provides insights into block device activity, such as reads, writes,
+/// and total bytes transferred.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::DiskMetrics;
+///
+/// let disk = DiskMetrics {
+///     name: "vda".to_string(),
+///     reads_total: 1500,
+///     writes_total: 300,
+///     read_bytes: 4096 * 1500,
+///     write_bytes: 4096 * 300,
+/// };
+///
+/// assert_eq!(disk.name, "vda");
+/// assert!(disk.reads_total > 0);
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DiskMetrics {
     /// Device name (e.g. "vda").
@@ -228,6 +301,28 @@ pub struct DiskMetrics {
 }
 
 /// Per-network-interface metrics.
+///
+/// Tracks packets and bytes transmitted and received on a specific interface,
+/// along with any errors encountered.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::NetMetrics;
+///
+/// let net = NetMetrics {
+///     interface: "eth0".to_string(),
+///     rx_bytes: 1048576,
+///     tx_bytes: 524288,
+///     rx_packets: 1024,
+///     tx_packets: 512,
+///     rx_errors: 0,
+///     tx_errors: 0,
+/// };
+///
+/// assert_eq!(net.interface, "eth0");
+/// assert_eq!(net.rx_errors, 0);
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NetMetrics {
     /// Interface name (e.g. "eth0").
@@ -247,6 +342,25 @@ pub struct NetMetrics {
 }
 
 /// Per-process metrics.
+///
+/// Describes the resource usage of a single process running inside the guest.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::ProcMetrics;
+///
+/// let proc = ProcMetrics {
+///     pid: 1,
+///     name: "systemd".to_string(),
+///     cpu_pct: 0.1,
+///     rss_bytes: 8 * 1024 * 1024,
+///     state: 'S', // Sleeping
+/// };
+///
+/// assert_eq!(proc.pid, 1);
+/// assert_eq!(proc.state, 'S');
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ProcMetrics {
     /// Process ID.
@@ -421,6 +535,32 @@ pub enum VmState {
 }
 
 /// Request to create a new VM with the given configuration.
+///
+/// This type is used when asking the daemon to instantiate a new VM instance.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::{CreateVmRequest, VmConfig};
+/// use std::path::PathBuf;
+///
+/// let req = CreateVmRequest {
+///     config: VmConfig {
+///         kernel_path: PathBuf::from("/path/to/vmlinux"),
+///         initramfs_path: None,
+///         disk_path: None,
+///         ram_mib: 256,
+///         cpus: 1,
+///         cmdline: None,
+///         net: None,
+///         ports: vec![],
+///         guest_agent: Default::default(),
+///         guest_cid: Default::default(),
+///     },
+/// };
+///
+/// assert_eq!(req.config.cpus, 1);
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateVmRequest {
     /// Configuration for the VM to create.
@@ -428,6 +568,21 @@ pub struct CreateVmRequest {
 }
 
 /// Request to perform an action on an existing VM.
+///
+/// Used to change the lifecycle state of a VM, such as starting, pausing,
+/// or stopping it.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::{ActionVmRequest, VmAction};
+///
+/// let req = ActionVmRequest {
+///     action: VmAction::Stop,
+/// };
+///
+/// assert_eq!(req.action, VmAction::Stop);
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ActionVmRequest {
     /// The action to perform.
@@ -435,6 +590,21 @@ pub struct ActionVmRequest {
 }
 
 /// Request to clone an existing VM.
+///
+/// Used to duplicate an existing VM configuration into a new instance
+/// with the specified ID.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::CloneVmRequest;
+///
+/// let req = CloneVmRequest {
+///     dest_id: "cloned-vm-01".to_string(),
+/// };
+///
+/// assert_eq!(req.dest_id, "cloned-vm-01");
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CloneVmRequest {
     /// The ID for the new cloned VM.
@@ -442,6 +612,36 @@ pub struct CloneVmRequest {
 }
 
 /// Information about a VM instance returned by the API.
+///
+/// Summarizes the identity, current state, and configuration of a micro-VM.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::{VmInfo, VmState, VmConfig};
+/// use std::path::PathBuf;
+///
+/// let info = VmInfo {
+///     id: "my-vm".to_string(),
+///     state: VmState::Running,
+///     config: VmConfig {
+///         kernel_path: PathBuf::from("/vmlinux"),
+///         initramfs_path: None,
+///         disk_path: None,
+///         ram_mib: 512,
+///         cpus: 2,
+///         cmdline: None,
+///         net: None,
+///         ports: vec![],
+///         guest_agent: Default::default(),
+///         guest_cid: Default::default(),
+///     },
+///     exit_reason: None,
+/// };
+///
+/// assert_eq!(info.id, "my-vm");
+/// assert_eq!(info.state, VmState::Running);
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VmInfo {
     /// Unique identifier for this VM.
@@ -455,6 +655,20 @@ pub struct VmInfo {
 }
 
 /// Error response from the API.
+///
+/// When an API call fails, the daemon returns this struct detailing what went wrong.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::ApiError;
+///
+/// let err = ApiError {
+///     message: "VM not found".to_string(),
+/// };
+///
+/// assert_eq!(err.message, "VM not found");
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApiError {
     /// Human-readable error message.
