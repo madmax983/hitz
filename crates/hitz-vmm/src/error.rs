@@ -3,6 +3,15 @@
 /// Errors arising from guest memory operations.
 #[derive(Debug, thiserror::Error)]
 pub enum MemError {
+    /// Invalid size requested for memory region.
+    #[error("invalid size {size} bytes at GPA {gpa:#x}")]
+    InvalidSize {
+        /// Intended guest physical address.
+        gpa: u64,
+        /// Requested size in bytes.
+        size: usize,
+    },
+
     /// Host-side allocation (`VirtualAlloc`) failed.
     #[error("allocation failed for {size} bytes at GPA {gpa:#x}")]
     AllocFailed {
@@ -38,6 +47,18 @@ pub enum MemError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn should_format_invalid_size() {
+        let err = MemError::InvalidSize {
+            gpa: 0x1000,
+            size: usize::MAX,
+        };
+        assert_eq!(
+            err.to_string(),
+            format!("invalid size {} bytes at GPA 0x1000", usize::MAX)
+        );
+    }
 
     #[test]
     fn should_format_alloc_failed() {
