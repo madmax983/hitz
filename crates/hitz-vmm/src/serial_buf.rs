@@ -271,4 +271,39 @@ mod tests {
             assert_eq!(c2, b"shared");
         });
     }
+
+    #[test]
+    fn reader_lapped_by_writer_after_initial_read() {
+        let rt = test_rt();
+        rt.block_on(async {
+            let cap = 10;
+            let mut buf = SerialBuf::with_capacity(cap);
+            let mut reader = buf.reader();
+
+            // Write 5 bytes initially.
+            buf.write_all(b"12345").expect("write");
+
+            // Reader consumes those 5 bytes.
+            let chunk = tokio::time::timeout(Duration::from_millis(100), reader.read_chunk())
+                .await
+                .expect("timeout")
+                .expect("should not be None");
+            assert_eq!(chunk, b"12345");
+
+            // Write 15 more bytes, which exceeds the capacity of 10.
+            // The buffer will now contain the last 10 bytes: b"fghijklmno".
+            let overflow_data = b"abcdefghijklmno";
+            buf.write_all(overflow_data).expect("write");
+
+            // The reader is now 15 bytes behind the writer, but the capacity is 10.
+            // It should recognize it's been lapped, skip the lost bytes, and read the latest 10 bytes.
+            let chunk = tokio::time::timeout(Duration::from_millis(100), reader.read_chunk())
+                .await
+                .expect("timeout")
+                .expect("should not be None");
+
+            assert_eq!(chunk.len(), cap);
+            assert_eq!(chunk, b"fghijklmno");
+        });
+    }
 }
