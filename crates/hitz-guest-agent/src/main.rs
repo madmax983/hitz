@@ -33,14 +33,21 @@ fn now_ms() -> u64 {
     .unwrap_or(u64::MAX)
 }
 
-fn read_file(path: &str) -> String {
-    std::fs::read_to_string(path).unwrap_or_default()
+// ⚡ Bolt: We pass a mutable String buffer to reuse the same heap allocation
+// for every `/proc` file we read during a metrics snapshot. This eliminates
+// 6 string allocations per frame.
+fn read_file_into(path: &str, buf: &mut String) {
+    use std::io::Read;
+    buf.clear();
+    let _ = std::fs::File::open(path).and_then(|mut f| f.read_to_string(buf));
 }
 
-fn collect_snapshot() -> MetricsSnapshot {
-    let sample1 = parse_proc_stat_sample(&read_file("/proc/stat"));
+fn collect_snapshot(buf: &mut String) -> MetricsSnapshot {
+    read_file_into("/proc/stat", buf);
+    let sample1 = parse_proc_stat_sample(buf);
     thread::sleep(Duration::from_millis(100));
-    let sample2 = parse_proc_stat_sample(&read_file("/proc/stat"));
+    read_file_into("/proc/stat", buf);
+    let sample2 = parse_proc_stat_sample(buf);
 
     let total_pct = sample1
         .first()
@@ -54,19 +61,22 @@ fn collect_snapshot() -> MetricsSnapshot {
         .map(|(a, b)| cpu_pct(a, b))
         .collect();
 
-    let load_avg = parse_load_avg(&read_file("/proc/loadavg"));
-    let memory =
-        parse_proc_meminfo(&read_file("/proc/meminfo")).unwrap_or(hitz_api::MemoryMetrics {
-            total_bytes: 0,
-            used_bytes: 0,
-            free_bytes: 0,
-            buffers_bytes: 0,
-            cached_bytes: 0,
-            swap_total: 0,
-            swap_used: 0,
-        });
-    let disks = parse_proc_diskstats(&read_file("/proc/diskstats"));
-    let networks = parse_proc_net_dev(&read_file("/proc/net/dev"));
+    read_file_into("/proc/loadavg", buf);
+    let load_avg = parse_load_avg(buf);
+    read_file_into("/proc/meminfo", buf);
+    let memory = parse_proc_meminfo(buf).unwrap_or(hitz_api::MemoryMetrics {
+        total_bytes: 0,
+        used_bytes: 0,
+        free_bytes: 0,
+        buffers_bytes: 0,
+        cached_bytes: 0,
+        swap_total: 0,
+        swap_used: 0,
+    });
+    read_file_into("/proc/diskstats", buf);
+    let disks = parse_proc_diskstats(buf);
+    read_file_into("/proc/net/dev", buf);
+    let networks = parse_proc_net_dev(buf);
     let processes = collect_top_procs(TOP_N_PROCS);
 
     MetricsSnapshot {
@@ -199,9 +209,10 @@ fn send_snapshot(stream: &mut vsock::VsockStream, snap: &MetricsSnapshot) -> std
 
 #[cfg(unix)]
 fn push_loop() {
+    let mut buf = String::with_capacity(4096);
     loop {
         thread::sleep(Duration::from_secs(PUSH_INTERVAL_SECS));
-        let snap = collect_snapshot();
+        let snap = collect_snapshot(&mut buf);
         let addr = vsock::VsockAddr::new(VMADDR_CID_HOST, VSOCK_METRICS_PORT);
         if let Ok(mut stream) = vsock::VsockStream::connect(&addr) {
             let _ = send_snapshot(&mut stream, &snap);
@@ -212,6 +223,7 @@ fn push_loop() {
 #[cfg(unix)]
 fn pull_server() {
     use std::io::Read;
+    let mut buf = String::with_capacity(4096);
     let listener =
         match vsock::VsockListener::bind_with_cid_port(vsock::VMADDR_CID_ANY, VSOCK_METRICS_PORT) {
             Ok(l) => l,
@@ -223,7 +235,7 @@ fn pull_server() {
     for mut stream in listener.incoming().flatten() {
         let mut req_byte = [0u8; 1];
         if stream.read_exact(&mut req_byte).is_ok() {
-            let snap = collect_snapshot();
+            let snap = collect_snapshot(&mut buf);
             let _ = send_snapshot(&mut stream, &snap);
         }
     }
