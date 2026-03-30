@@ -376,6 +376,7 @@ impl VmConfig {
 /// match action {
 ///     VmAction::Start => println!("Starting the VM..."),
 ///     VmAction::Stop => println!("Stopping the VM..."),
+///     VmAction::Restart => println!("Restarting the VM..."),
 /// }
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

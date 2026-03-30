@@ -416,11 +416,22 @@ mod tests {
     #[test]
     fn test_add_overlapping_regions_fails() {
         let mut mem = GuestMemory::new();
-        mem.add_region(Gpa::new(0x1000), 4096).expect("add_region should succeed");
-        let err = mem.add_region(Gpa::new(0x1500), 4096).expect_err("should return error on overlap");
-        assert!(matches!(err, MemError::Hal(hitz_hal::HalError::MapMemory { .. })));
-        let err2 = mem.add_region(Gpa::new(0x800), 4096).expect_err("should return error on overlap");
-        assert!(matches!(err2, MemError::Hal(hitz_hal::HalError::MapMemory { .. })));
+        mem.add_region(Gpa::new(0x1000), 4096)
+            .expect("add_region should succeed");
+        let err = mem
+            .add_region(Gpa::new(0x1500), 4096)
+            .expect_err("should return error on overlap");
+        assert!(matches!(
+            err,
+            MemError::Hal(hitz_hal::HalError::MapMemory { .. })
+        ));
+        let err2 = mem
+            .add_region(Gpa::new(0x800), 4096)
+            .expect_err("should return error on overlap");
+        assert!(matches!(
+            err2,
+            MemError::Hal(hitz_hal::HalError::MapMemory { .. })
+        ));
     }
 
     #[test]
