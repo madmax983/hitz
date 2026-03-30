@@ -123,6 +123,19 @@ impl GuestMemory {
     pub fn add_region(&mut self, gpa: Gpa, size: usize) -> Result<(), MemError> {
         let aligned_size = align_up(size, PAGE_SIZE);
 
+        // Check for overlap before allocating.
+        let gpa_end = gpa.as_u64() + aligned_size as u64;
+        for existing in &self.regions {
+            let existing_end = existing.gpa_start.as_u64() + existing.size as u64;
+            if gpa.as_u64() < existing_end && gpa_end > existing.gpa_start.as_u64() {
+                return Err(MemError::Hal(hitz_hal::HalError::MapMemory {
+                    gpa: gpa.as_u64(),
+                    size: aligned_size,
+                    reason: "region overlaps with an existing memory region".to_string(),
+                }));
+            }
+        }
+
         let hva = virtual_alloc(aligned_size).ok_or(MemError::AllocFailed {
             gpa: gpa.as_u64(),
             size: aligned_size,
@@ -392,6 +405,16 @@ mod tests {
         assert_eq!(mem.regions[0].gpa_start, Gpa::new(0x1000));
         assert_eq!(mem.regions[0].size, 4096);
         assert!(!mem.regions[0].hva.is_null());
+    }
+
+    #[test]
+    fn test_add_overlapping_regions_fails() {
+        let mut mem = GuestMemory::new();
+        mem.add_region(Gpa::new(0x1000), 4096).expect("add_region should succeed");
+        let err = mem.add_region(Gpa::new(0x1500), 4096).expect_err("should return error on overlap");
+        assert!(matches!(err, MemError::Hal(hitz_hal::HalError::MapMemory { .. })));
+        let err2 = mem.add_region(Gpa::new(0x800), 4096).expect_err("should return error on overlap");
+        assert!(matches!(err2, MemError::Hal(hitz_hal::HalError::MapMemory { .. })));
     }
 
     #[test]
