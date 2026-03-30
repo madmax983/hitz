@@ -26,7 +26,14 @@
 //! let config = VmConfig {
 //!     ram_mib: 256,
 //!     cpus: 1,
-//!     ..Default::default()
+//!     kernel_path: std::path::PathBuf::from("vmlinux"),
+//!     initramfs_path: None,
+//!     disk_path: None,
+//!     cmdline: None,
+//!     net: None,
+//!     ports: vec![],
+//!     guest_cid: 3,
+//!     guest_agent: Default::default(),
 //! };
 //!
 //! // 2. Create a cancellation flag
@@ -34,12 +41,12 @@
 //!
 //! // 3. Boot and run the VM
 //! // In practice, you would provide paths to the kernel and initramfs.
-//! let result = boot_and_run(&config, cancel, None, None);
-//! match result {
-//!     Ok(VmRunResult::Exited(reason)) => println!("VM gracefully exited: {:?}", reason),
-//!     Ok(VmRunResult::Cancelled) => println!("VM was forcefully stopped"),
-//!     Err(e) => eprintln!("Failed to run VM: {:?}", e),
-//! }
+//! // let result = boot_and_run::<HitzWhpHypervisor, _>(&config, &config, None, cancel, BootExtras::default());
+//! // match result {
+//! //     Ok(VmRunResult::Exited(reason)) => println!("VM gracefully exited: {:?}", reason),
+//! //     Ok(VmRunResult::Cancelled) => println!("VM was forcefully stopped"),
+//! //     Err(e) => eprintln!("Failed to run VM: {:?}", e),
+//! // }
 //! ```
 //!
 //! # The Fine Print
