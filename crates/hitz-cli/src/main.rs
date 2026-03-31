@@ -660,11 +660,12 @@ fn run_service(arguments: &[OsString]) -> anyhow::Result<()> {
 // ── Main ──
 
 fn main() -> ExitCode {
+    use crossterm::style::Stylize;
     let cli = Cli::parse();
 
     match cli.command {
         Command::Run(args) => run_vm(args).unwrap_or_else(|e| {
-            eprintln!("error: {e:#}");
+            eprintln!("{}", format!("✗ Error: {e:#}").red().bold());
             ExitCode::FAILURE
         }),
         Command::Daemon(cmd) => {
@@ -675,7 +676,7 @@ fn main() -> ExitCode {
             };
             result.map_or_else(
                 |e| {
-                    eprintln!("error: {e:#}");
+                    eprintln!("{}", format!("✗ Error: {e:#}").red().bold());
                     ExitCode::FAILURE
                 },
                 |()| ExitCode::SUCCESS,
@@ -683,7 +684,7 @@ fn main() -> ExitCode {
         }
         Command::Vm(cmd) => run_vm_command(cmd).map_or_else(
             |e| {
-                eprintln!("error: {e:#}");
+                eprintln!("{}", format!("✗ Error: {e:#}").red().bold());
                 ExitCode::FAILURE
             },
             |()| ExitCode::SUCCESS,
@@ -1173,6 +1174,7 @@ async fn handle_vm_stop(args: &VmIdArgs) -> Result<()> {
     Ok(())
 }
 
+#[allow(clippy::too_many_lines)]
 async fn handle_vm_status(args: &VmIdArgs) -> Result<()> {
     let (status, resp) = pipe_client::pipe_request(
         &args.pipe,
@@ -1209,6 +1211,18 @@ async fn handle_vm_status(args: &VmIdArgs) -> Result<()> {
                 Cell::new("Kernel:").add_attribute(comfy_table::Attribute::Bold),
                 Cell::new(info.config.kernel_path.display().to_string()),
             ]);
+            if let Some(ref path) = info.config.initramfs_path {
+                let _ = table.add_row(vec![
+                    Cell::new("Initramfs:").add_attribute(comfy_table::Attribute::Bold),
+                    Cell::new(path.display().to_string()),
+                ]);
+            }
+            if let Some(ref path) = info.config.disk_path {
+                let _ = table.add_row(vec![
+                    Cell::new("Disk:").add_attribute(comfy_table::Attribute::Bold),
+                    Cell::new(path.display().to_string()),
+                ]);
+            }
             let _ = table.add_row(vec![
                 Cell::new("RAM:").add_attribute(comfy_table::Attribute::Bold),
                 Cell::new(format!("{} MiB", info.config.ram_mib)),
@@ -1217,6 +1231,30 @@ async fn handle_vm_status(args: &VmIdArgs) -> Result<()> {
                 Cell::new("CPUs:").add_attribute(comfy_table::Attribute::Bold),
                 Cell::new(info.config.cpus.to_string()),
             ]);
+            let agent_str = match info.config.guest_agent {
+                hitz_api::GuestAgentMode::Auto => "Auto".to_string(),
+                hitz_api::GuestAgentMode::Custom(ref p) => format!("Custom ({})", p.display()),
+                hitz_api::GuestAgentMode::Disabled => "Disabled".to_string(),
+            };
+            let _ = table.add_row(vec![
+                Cell::new("Guest Agent:").add_attribute(comfy_table::Attribute::Bold),
+                Cell::new(agent_str),
+            ]);
+            let _ = table.add_row(vec![
+                Cell::new("Guest CID:").add_attribute(comfy_table::Attribute::Bold),
+                Cell::new(info.config.guest_cid.to_string()),
+            ]);
+            if let Some(ref net) = info.config.net {
+                let mac_str = net.mac.clone().unwrap_or_else(|| "Auto".to_string());
+                let net_str = format!(
+                    "Host IP: {}, Guest IP: {}, MAC: {}",
+                    net.host_ip, net.guest_ip, mac_str
+                );
+                let _ = table.add_row(vec![
+                    Cell::new("Network:").add_attribute(comfy_table::Attribute::Bold),
+                    Cell::new(net_str),
+                ]);
+            }
 
             if !info.config.ports.is_empty() {
                 use std::fmt::Write as _;
