@@ -104,54 +104,67 @@ pub fn decode_mmio_instruction(bytes: &[u8]) -> Option<DecodedMmio> {
     pos += disp_size;
 
     // -- 5. Opcode-specific decoding --------------------------------------------
-    #[allow(clippy::cast_possible_truncation)]
     match opcode {
         // MOV r/m, r (write) or MOV r, r/m (read) — 8/32-bit variants
-        0x88..=0x8B => {
-            let size = if opcode & 1 == 0 {
-                1 // 0x88, 0x8A = byte
-            } else if has_operand_size_prefix {
-                2
-            } else {
-                4
-            };
-            Some(DecodedMmio {
-                register: reg_field,
-                size,
-                immediate: None,
-                instruction_len: pos as u8,
-            })
-        }
-
+        0x88..=0x8B => Some(decode_mov_r_rm(opcode, has_operand_size_prefix, reg_field, pos)),
         // MOV r/m32, imm32
-        0xC7 => {
-            // /0 encoding -- reg field must be 0
-            if (modrm >> 3) & 7 != 0 {
-                return None;
-            }
-
-            // Read the 4-byte immediate (or 2-byte with operand size prefix).
-            let imm_size = if has_operand_size_prefix { 2 } else { 4 };
-            if pos + imm_size > bytes.len() {
-                return None;
-            }
-            let imm = if imm_size == 2 {
-                u32::from(u16::from_le_bytes([bytes[pos], bytes[pos + 1]]))
-            } else {
-                u32::from_le_bytes([bytes[pos], bytes[pos + 1], bytes[pos + 2], bytes[pos + 3]])
-            };
-            pos += imm_size;
-
-            Some(DecodedMmio {
-                register: 0, // C7 /0 uses an immediate, not a register source
-                size: imm_size as u8,
-                immediate: Some(imm),
-                instruction_len: pos as u8,
-            })
-        }
-
+        0xC7 => decode_mov_rm_imm(bytes, has_operand_size_prefix, modrm, pos),
         _ => None,
     }
+}
+
+#[allow(clippy::cast_possible_truncation)]
+const fn decode_mov_r_rm(
+    opcode: u8,
+    has_operand_size_prefix: bool,
+    reg_field: u8,
+    pos: usize,
+) -> DecodedMmio {
+    let size = if opcode & 1 == 0 {
+        1 // 0x88, 0x8A = byte
+    } else if has_operand_size_prefix {
+        2
+    } else {
+        4
+    };
+    DecodedMmio {
+        register: reg_field,
+        size,
+        immediate: None,
+        instruction_len: pos as u8,
+    }
+}
+
+#[allow(clippy::cast_possible_truncation)]
+const fn decode_mov_rm_imm(
+    bytes: &[u8],
+    has_operand_size_prefix: bool,
+    modrm: u8,
+    mut pos: usize,
+) -> Option<DecodedMmio> {
+    // /0 encoding -- reg field must be 0
+    if (modrm >> 3) & 7 != 0 {
+        return None;
+    }
+
+    // Read the 4-byte immediate (or 2-byte with operand size prefix).
+    let imm_size = if has_operand_size_prefix { 2 } else { 4 };
+    if pos + imm_size > bytes.len() {
+        return None;
+    }
+    let imm = if imm_size == 2 {
+        u16::from_le_bytes([bytes[pos], bytes[pos + 1]]) as u32
+    } else {
+        u32::from_le_bytes([bytes[pos], bytes[pos + 1], bytes[pos + 2], bytes[pos + 3]])
+    };
+    pos += imm_size;
+
+    Some(DecodedMmio {
+        register: 0, // C7 /0 uses an immediate, not a register source
+        size: imm_size as u8,
+        immediate: Some(imm),
+        instruction_len: pos as u8,
+    })
 }
 
 /// Returns `true` if a SIB byte follows the ModR/M byte.

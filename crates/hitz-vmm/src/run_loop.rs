@@ -194,35 +194,7 @@ fn handle_mmio<V: Vcpu, W: Write>(
     // (it's always 0). Use the decoder-computed length instead.
     let instr_len = decoded.instruction_len;
 
-    if mmio.is_write {
-        let mut data = [0u8; 4];
-        let value = if let Some(imm) = decoded.immediate {
-            u64::from(imm)
-        } else {
-            let regs = vcpu.get_regs()?;
-            mmio_decode::register_value(&regs, decoded.register)
-        };
-        let size = usize::from(decoded.size);
-        data[..size].copy_from_slice(&value.to_le_bytes()[..size]);
-
-        // Lock → device write → unlock, then handle IRQ.
-        let irq = {
-            let mut devs = devices.lock().expect("device lock poisoned");
-            devs.mmio_bus.write(mmio.gpa.as_u64(), &data[..size], mem)
-        };
-        advance_rip(vcpu, instr_len)?;
-        if let Some(vector) = irq {
-            // Try to inject immediately. If the guest has IF=0
-            // (interrupts disabled) or is in interrupt shadow,
-            // WHP rejects the injection — stash the IRQ and
-            // request an interrupt window exit.
-            if vcpu.inject_interrupt(vector).is_err() {
-                *pending_irq = Some(vector);
-                vcpu.request_interrupt_window()?;
-                tracing::debug!(vector, "interrupt deferred, requested interrupt window");
-            }
-        }
-    } else {
+    if !mmio.is_write {
         // Read: lock → device read → unlock, then update registers.
         let size = usize::from(decoded.size);
         let mut data = [0u8; 8];
@@ -235,7 +207,36 @@ fn handle_mmio<V: Vcpu, W: Write>(
         let mut regs = vcpu.get_regs()?;
         mmio_decode::set_register(&mut regs, decoded.register, value);
         regs.rip += u64::from(instr_len);
-        vcpu.set_regs(&regs)?;
+        return vcpu.set_regs(&regs);
+    }
+
+    let mut data = [0u8; 4];
+    let value = if let Some(imm) = decoded.immediate {
+        u64::from(imm)
+    } else {
+        let regs = vcpu.get_regs()?;
+        mmio_decode::register_value(&regs, decoded.register)
+    };
+    let size = usize::from(decoded.size);
+    data[..size].copy_from_slice(&value.to_le_bytes()[..size]);
+
+    // Lock → device write → unlock, then handle IRQ.
+    let irq = {
+        let mut devs = devices.lock().expect("device lock poisoned");
+        devs.mmio_bus.write(mmio.gpa.as_u64(), &data[..size], mem)
+    };
+    advance_rip(vcpu, instr_len)?;
+
+    if let Some(vector) = irq {
+        // Try to inject immediately. If the guest has IF=0
+        // (interrupts disabled) or is in interrupt shadow,
+        // WHP rejects the injection — stash the IRQ and
+        // request an interrupt window exit.
+        if vcpu.inject_interrupt(vector).is_err() {
+            *pending_irq = Some(vector);
+            vcpu.request_interrupt_window()?;
+            tracing::debug!(vector, "interrupt deferred, requested interrupt window");
+        }
     }
 
     Ok(())
@@ -250,28 +251,27 @@ fn handle_io_port<V: Vcpu, W: Write>(
     if SerialDevice::<W>::handles_port(io.port) {
         if io.is_write {
             serial.pio_write(io.port, io.data[0]);
-            advance_rip(vcpu, io.instruction_len)?;
-        } else {
-            let value = serial.pio_read(io.port);
-            advance_rip_with_rax(vcpu, io.instruction_len, u64::from(value))?;
+            return advance_rip(vcpu, io.instruction_len);
         }
-    } else if PIC_PORTS.contains(&io.port) {
+        let value = serial.pio_read(io.port);
+        return advance_rip_with_rax(vcpu, io.instruction_len, u64::from(value));
+    }
+
+    if PIC_PORTS.contains(&io.port) {
         // Legacy 8259 PIC stub — absorb writes, return 0x00 for reads.
         if io.is_write {
-            advance_rip(vcpu, io.instruction_len)?;
-        } else {
-            advance_rip_with_rax(vcpu, io.instruction_len, 0x00)?;
+            return advance_rip(vcpu, io.instruction_len);
         }
-    } else {
-        tracing::debug!(port = io.port, is_write = io.is_write, "unhandled I/O port");
-        if io.is_write {
-            advance_rip(vcpu, io.instruction_len)?;
-        } else {
-            // Return 0xFF for unhandled IN (standard "nothing here" response).
-            advance_rip_with_rax(vcpu, io.instruction_len, 0xFF)?;
-        }
+        return advance_rip_with_rax(vcpu, io.instruction_len, 0x00);
     }
-    Ok(())
+
+    tracing::debug!(port = io.port, is_write = io.is_write, "unhandled I/O port");
+    if io.is_write {
+        advance_rip(vcpu, io.instruction_len)
+    } else {
+        // Return 0xFF for unhandled IN (standard "nothing here" response).
+        advance_rip_with_rax(vcpu, io.instruction_len, 0xFF)
+    }
 }
 
 /// Advance RIP past the faulting instruction.
