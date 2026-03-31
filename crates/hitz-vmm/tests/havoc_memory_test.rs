@@ -1,7 +1,7 @@
 #![allow(missing_docs)]
 #![allow(clippy::unwrap_used)]
 use hitz_hal::Gpa;
-use hitz_vmm::memory::GuestMemory;
+use hitz_vmm::GuestMemory;
 use proptest::prelude::*;
 
 proptest! {

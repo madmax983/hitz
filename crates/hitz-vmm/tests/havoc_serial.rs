@@ -1,6 +1,6 @@
 #![allow(missing_docs)]
 #![allow(clippy::unwrap_used)]
-use hitz_vmm::serial_buf::SerialBuf;
+use hitz_vmm::SerialBuf;
 use proptest::prelude::*;
 use std::io::Write;
 

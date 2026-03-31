@@ -67,15 +67,15 @@
 // the design and reviewed for safety.
 #![allow(unsafe_code)]
 
-pub(crate) mod boot_regs;
-pub(crate) mod cpio;
-pub(crate) mod error;
-pub(crate) mod memory;
-pub(crate) mod mmio_decode;
-pub(crate) mod run_loop;
-pub(crate) mod serial_buf;
-pub(crate) mod vm;
-pub(crate) mod vsock_io;
+mod boot_regs;
+mod cpio;
+mod error;
+mod memory;
+mod mmio_decode;
+mod run_loop;
+mod serial_buf;
+mod vm;
+mod vsock_io;
 
 pub use boot_regs::{GDT_GPA, configure_regs, configure_sregs, write_gdt};
 pub use cpio::CpioBuilder;
