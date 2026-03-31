@@ -337,6 +337,8 @@ enum VmCommand {
     Metrics(VmIdArgs),
     /// Display live interactive resource dashboard.
     Top(VmIdArgs),
+    /// Live TUI dashboard for all VMs.
+    Dashboard(VmListArgs),
     /// Export metrics to JSON format.
     ExportMetrics(Box<VmExportArgs>),
 }
@@ -1689,9 +1691,165 @@ fn run_vm_command(cmd: VmCommand) -> Result<()> {
             VmCommand::Serial(args) => handle_vm_serial(&args).await,
             VmCommand::Metrics(args) => handle_vm_metrics(&args).await,
             VmCommand::Top(args) => handle_vm_top(&args).await,
+            VmCommand::Dashboard(args) => handle_vm_dashboard(&args).await,
             VmCommand::ExportMetrics(args) => handle_vm_export_metrics(&args).await,
         }
     })
+}
+
+#[allow(clippy::too_many_lines)]
+async fn handle_vm_dashboard(args: &VmListArgs) -> Result<()> {
+    use crossterm::{
+        event::{self, Event, KeyCode},
+        execute,
+        terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
+    };
+    use ratatui::{
+        Terminal,
+        backend::CrosstermBackend,
+        layout::{Constraint, Direction, Layout},
+        style::{Color, Modifier, Style},
+        widgets::{Block, Borders, Cell, Paragraph, Row, Table},
+    };
+    use std::time::{Duration, Instant};
+
+    enable_raw_mode().context("failed to enable raw mode")?;
+    let mut stdout = std::io::stdout();
+    execute!(stdout, EnterAlternateScreen).context("failed to enter alternate screen")?;
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal = Terminal::new(backend).context("failed to create terminal")?;
+
+    let tick_rate = Duration::from_secs(1);
+    let mut last_tick = Instant::now();
+    let mut last_fetch = last_tick
+        .checked_sub(Duration::from_secs(10))
+        .unwrap_or(last_tick);
+    let mut vms: Vec<hitz_api::VmInfo> = Vec::new();
+    let mut err_msg: Option<String> = None;
+
+    let mut should_quit = false;
+
+    while !should_quit {
+        let now = Instant::now();
+
+        if now.duration_since(last_fetch) >= tick_rate {
+            last_fetch = now;
+            match pipe_client::pipe_request(&args.pipe, args.tcp, Method::GET, "/vms", None).await {
+                Ok((status, resp)) => {
+                    if status.is_success() {
+                        if let Ok(fetched) = serde_json::from_str::<Vec<hitz_api::VmInfo>>(&resp) {
+                            vms = fetched;
+                            err_msg = None;
+                        } else {
+                            err_msg = Some("Failed to parse JSON".to_string());
+                        }
+                    } else if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(&resp) {
+                        err_msg = Some(err.message);
+                    } else {
+                        err_msg = Some(format!("{status}: {resp}"));
+                    }
+                }
+                Err(e) => {
+                    err_msg = Some(format!("Request failed: {e}"));
+                }
+            }
+        }
+
+        let _ = terminal.draw(|f| {
+            let chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .margin(1)
+                .constraints([Constraint::Length(3), Constraint::Min(5)].as_ref())
+                .split(f.area());
+
+            let mut header_text =
+                " Hitz VM Dashboard | Polling GET /vms | Press 'q' or 'ESC' to exit ".to_string();
+            if let Some(ref e) = err_msg {
+                use std::fmt::Write;
+                let _ = write!(header_text, "| Error: {e}");
+            }
+
+            let header = Paragraph::new(header_text).block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(" Dashboard ")
+                    .title_style(
+                        Style::default()
+                            .fg(Color::Cyan)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+            );
+            f.render_widget(header, chunks[0]);
+
+            let rows = vms.iter().map(|vm| {
+                let state_str = match vm.state {
+                    hitz_api::VmState::Running => "Running",
+                    hitz_api::VmState::Stopped => "Stopped",
+                    hitz_api::VmState::Failed => "Failed",
+                    hitz_api::VmState::Created => "Created",
+                };
+                let state_color = match vm.state {
+                    hitz_api::VmState::Running => Color::Green,
+                    hitz_api::VmState::Stopped => Color::Yellow,
+                    hitz_api::VmState::Failed => Color::Red,
+                    hitz_api::VmState::Created => Color::Cyan,
+                };
+                let exit_reason = vm.exit_reason.clone().unwrap_or_else(|| "-".to_string());
+
+                Row::new(vec![
+                    Cell::from(vm.id.clone()),
+                    Cell::from(state_str).style(Style::default().fg(state_color)),
+                    Cell::from(vm.config.ram_mib.to_string()),
+                    Cell::from(vm.config.cpus.to_string()),
+                    Cell::from(exit_reason),
+                ])
+            });
+
+            let table = Table::new(
+                rows,
+                [
+                    Constraint::Length(20),
+                    Constraint::Length(10),
+                    Constraint::Length(10),
+                    Constraint::Length(6),
+                    Constraint::Min(20),
+                ],
+            )
+            .header(
+                Row::new(vec!["ID", "State", "RAM (MiB)", "CPUs", "Exit Reason"]).style(
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD),
+                ),
+            )
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(" Virtual Machines "),
+            );
+
+            f.render_widget(table, chunks[1]);
+        });
+
+        let timeout = tick_rate
+            .checked_sub(last_tick.elapsed())
+            .unwrap_or_else(|| Duration::from_secs(0));
+
+        if crossterm::event::poll(timeout).unwrap_or(false)
+            && let Event::Key(key) = event::read().unwrap_or(Event::FocusGained)
+            && (key.code == KeyCode::Char('q') || key.code == KeyCode::Esc)
+        {
+            should_quit = true;
+        }
+        if last_tick.elapsed() >= tick_rate {
+            last_tick = Instant::now();
+        }
+    }
+
+    disable_raw_mode().context("failed to disable raw mode")?;
+    execute!(terminal.backend_mut(), LeaveAlternateScreen)
+        .context("failed to leave alternate screen")?;
+    Ok(())
 }
 
 #[cfg(test)]
@@ -2014,6 +2172,16 @@ mod top_tests {
         let _args = VmExportArgs {
             id: "test".to_string(),
             out: PathBuf::from("metrics.json"),
+            pipe: "pipe".to_string(),
+            tcp: None,
+        };
+        assert!(true);
+    }
+
+    #[test]
+    #[allow(clippy::assertions_on_constants)]
+    fn run_vm_dashboard_command_definition_compiles() {
+        let _args = crate::VmListArgs {
             pipe: "pipe".to_string(),
             tcp: None,
         };
