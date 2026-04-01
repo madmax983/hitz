@@ -108,7 +108,46 @@ pub struct VmRunResult {
     pub exit_reason: ExitReason,
 }
 
-/// Validate a `VmConfig` before booting.
+/// # Abstract
+/// Validates a [`VmConfig`] prior to initiating the boot sequence.
+///
+/// Ensures that all requisite file paths (such as the kernel, initramfs, and disk images)
+/// exist on the host filesystem. This prevents the VM from attempting a boot sequence
+/// that is doomed to fail due to missing dependencies.
+///
+/// # The Hero's Journey
+/// ```rust
+/// # use hitz_api::VmConfig;
+/// # use hitz_vmm::validate_config;
+/// # use std::path::PathBuf;
+/// # use std::fs::File;
+/// # use tempfile::TempDir;
+/// #
+/// # let temp_dir = TempDir::new().unwrap();
+/// # let kernel_path = temp_dir.path().join("vmlinux");
+/// # File::create(&kernel_path).unwrap();
+/// #
+/// let mut config = VmConfig {
+///     kernel_path,
+///     initramfs_path: None,
+///     disk_path: None,
+///     ram_mib: 256,
+///     cpus: 1,
+///     cmdline: None,
+///     net: None,
+///     ports: vec![],
+///     guest_cid: 3,
+///     guest_agent: hitz_api::GuestAgentMode::Disabled,
+/// };
+///
+/// // Verify the configuration is sound before booting!
+/// assert!(validate_config(&config).is_ok());
+/// ```
+///
+/// # The Fine Print
+/// Validation is strictly a pre-flight check. It verifies the *existence* of the files,
+/// but does not parse them to verify they are valid ELF/bzImage kernels, valid cpio
+/// archives, or valid raw disk images.
 pub fn validate_config(config: &VmConfig) -> Result<(), VmError> {
     if !config.kernel_path.exists() {
         return Err(VmError::Config(format!(
@@ -168,10 +207,83 @@ fn cancel_all_vcpus<V: Vcpu>(handles: &[V::CancelHandle]) {
 /// 6. Sets up serial console and optional virtio-blk device
 /// 7. Runs the vCPU loop until the guest exits
 ///
-/// Serial output goes to `serial_out` (e.g. stdout, `Vec<u8>` for tests).
+/// # Abstract
+/// The central orchestrator for booting and executing a [`VmConfig`].
 ///
-/// # Panics
+/// This function acts as the main entry point for the VM lifecycle. It handles everything
+/// from parsing the kernel and laying out guest memory, to spawning the vCPU thread and
+/// routing MMIO/PIO requests.
 ///
+/// # The Hero's Journey
+/// ```rust
+/// # use hitz_api::VmConfig;
+/// # use hitz_vmm::{boot_and_run, BootExtras};
+/// # use hitz_hal::{Hypervisor, Partition, PartitionConfig, Vcpu, VcpuExit, HalError, Gpa, VcpuId};
+/// # use std::sync::{Arc, atomic::AtomicBool};
+/// # use std::io::sink;
+/// # use std::path::PathBuf;
+/// # use tempfile::TempDir;
+/// # use std::fs::File;
+/// #
+/// # // Define dummy hypervisor structs to satisfy trait bounds
+/// # struct DummyHypervisor;
+/// # struct DummyPartition;
+/// # struct DummyVcpu;
+/// # #[derive(Clone)]
+/// # struct DummyCancelHandle;
+/// # impl Hypervisor for DummyHypervisor {
+/// #     type Partition = DummyPartition;
+/// #     fn create_partition(&self, _cfg: &PartitionConfig) -> Result<Self::Partition, HalError> { Ok(DummyPartition) }
+/// # }
+/// # impl Partition for DummyPartition {
+/// #     type Vcpu = DummyVcpu;
+/// #     unsafe fn map_memory(&mut self, _gpa: Gpa, _hva: *mut u8, _size: usize, _flags: hitz_hal::MemFlags) -> Result<(), HalError> { Ok(()) }
+/// #     fn unmap_memory(&mut self, _gpa: Gpa, _size: usize) -> Result<(), HalError> { Ok(()) }
+/// #     fn create_vcpu(&mut self, _id: VcpuId) -> Result<Self::Vcpu, HalError> { Ok(DummyVcpu) }
+/// #     fn request_interrupt(&self, _id: VcpuId, _vector: u8) -> Result<(), HalError> { Ok(()) }
+/// # }
+/// # impl Vcpu for DummyVcpu {
+/// #     type CancelHandle = DummyCancelHandle;
+/// #     fn run(&mut self) -> Result<VcpuExit, HalError> { Ok(VcpuExit::Halt) }
+/// #     fn set_regs(&mut self, _regs: &hitz_hal::StandardRegs) -> Result<(), HalError> { Ok(()) }
+/// #     fn set_sregs(&mut self, _sregs: &hitz_hal::SpecialRegs) -> Result<(), HalError> { Ok(()) }
+/// #     fn get_regs(&self) -> Result<hitz_hal::StandardRegs, HalError> { Ok(Default::default()) }
+/// #     fn get_sregs(&self) -> Result<hitz_hal::SpecialRegs, HalError> { Ok(Default::default()) }
+/// #     fn cancel_handle(&self) -> Self::CancelHandle { DummyCancelHandle }
+/// #     fn cancel_via(_h: &Self::CancelHandle) -> Result<(), HalError> { Ok(()) }
+/// #     fn inject_interrupt(&mut self, _vector: u8) -> Result<(), HalError> { Ok(()) }
+/// #     fn request_interrupt_window(&mut self) -> Result<(), HalError> { Ok(()) }
+/// # }
+/// #
+/// # let temp_dir = TempDir::new().unwrap();
+/// # let kernel_path = temp_dir.path().join("vmlinux");
+/// # File::create(&kernel_path).unwrap(); // create dummy kernel
+/// #
+/// let mut config = VmConfig {
+///     kernel_path,
+///     initramfs_path: None,
+///     disk_path: None,
+///     ram_mib: 256,
+///     cpus: 1,
+///     cmdline: None,
+///     net: None,
+///     ports: vec![],
+///     guest_cid: 3,
+///     guest_agent: hitz_api::GuestAgentMode::Disabled,
+/// };
+///
+/// let hypervisor = DummyHypervisor;
+/// let stop_flag = Arc::new(AtomicBool::new(false));
+/// let extras = BootExtras::none();
+///
+/// // Start the machine! (using `sink()` to discard serial output)
+/// // let result = boot_and_run(&hypervisor, &config, sink(), stop_flag, extras);
+/// ```
+///
+/// # The Fine Print
+/// Serial output goes to `serial_out` (e.g., `stdout` or a `Vec<u8>` for tests).
+///
+/// ## Panics
 /// Panics if a vCPU thread or the watchdog thread cannot be spawned
 /// (OS resource exhaustion).
 #[allow(
