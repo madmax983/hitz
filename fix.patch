@@ -1,0 +1,17 @@
+--- crates/hitz-vmm/src/memory.rs
++++ crates/hitz-vmm/src/memory.rs
+@@ -127,10 +127,13 @@
+         })?;
+
+         // Check for overlap before allocating.
+-        let gpa_end = gpa.as_u64() + aligned_size as u64;
++        let gpa_end = gpa.as_u64().checked_add(aligned_size as u64).ok_or(MemError::InvalidSize {
++            gpa: gpa.as_u64(),
++            size: aligned_size,
++        })?;
+         for existing in &self.regions {
+-            let existing_end = existing.gpa_start.as_u64() + existing.size as u64;
++            let existing_end = existing.gpa_start.as_u64().checked_add(existing.size as u64).unwrap_or(u64::MAX);
+             if gpa.as_u64() < existing_end && gpa_end > existing.gpa_start.as_u64() {
+                 return Err(MemError::Hal(hitz_hal::HalError::MapMemory {
+                     gpa: gpa.as_u64(),
