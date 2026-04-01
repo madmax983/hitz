@@ -64,7 +64,7 @@ pub(crate) mod virtio;
 
 pub use mmio_bus::MmioBus;
 pub use serial::SerialDevice;
-pub use virtio::block::VirtioBlockDevice;
-pub use virtio::mmio_transport::VirtioMmioTransport;
-pub use virtio::net::VirtioNetDevice;
-pub use virtio::vsock::{VSOCK_BUF_ALLOC, VirtioVsockDevice, VsockHdr, VsockOp, VsockPacket};
+pub use virtio::VirtioBlockDevice;
+pub use virtio::VirtioMmioTransport;
+pub use virtio::VirtioNetDevice;
+pub use virtio::{VSOCK_BUF_ALLOC, VirtioVsockDevice, VsockHdr, VsockOp, VsockPacket};
