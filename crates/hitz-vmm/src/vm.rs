@@ -354,13 +354,11 @@ pub fn boot_and_run<H: Hypervisor, W: Write + Send + 'static>(
         let net_base = VIRTIO_MMIO_BASE + VIRTIO_MMIO_SIZE;
         mmio_bus.register(net_base, VIRTIO_MMIO_SIZE, Box::new(net_transport));
 
-        let adapter_name = net_cfg
-            .adapter_name
-            .clone()
-            .unwrap_or_else(|| "hitz-net".to_string());
+        // Removed unnecessary `.clone()` and `String` allocation for the default adapter name.
+        let adapter_name = net_cfg.adapter_name.as_deref().unwrap_or("hitz-net");
 
         let handle = hitz_net::start_net_io(
-            &adapter_name,
+            adapter_name,
             &net_cfg.host_ip,
             guest_mac,
             gateway_mac,
