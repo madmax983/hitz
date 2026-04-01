@@ -1046,6 +1046,19 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
 
 // ── hitz vm * ──
 
+fn print_action_result(status: hyper::StatusCode, resp: &str, success_msg: &str, error_prefix: &str) {
+    use crossterm::style::Stylize;
+    if status.is_success() {
+        println!("{}", success_msg.green());
+    } else if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(resp) {
+        let msg = format!("✗ {error_prefix}: {}", err.message);
+        println!("{}", msg.red());
+    } else {
+        let msg = format!("✗ {error_prefix} ({status}): {resp}");
+        println!("{}", msg.red());
+    }
+}
+
 async fn handle_vm_create(args: &VmCreateArgs) -> Result<()> {
     use crossterm::style::Stylize;
     let net = if args.net {
@@ -1079,21 +1092,16 @@ async fn handle_vm_create(args: &VmCreateArgs) -> Result<()> {
         Some(&body),
     )
     .await?;
-    if status.is_success() {
-        let msg = format!("✓ Successfully created VM {}", args.id);
-        println!("{}", msg.green());
-    } else if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(&resp) {
-        let msg = format!("✗ Failed to create VM {}: {}", args.id, err.message);
-        println!("{}", msg.red());
-    } else {
-        let msg = format!("✗ Failed to create VM {} ({status}): {resp}", args.id);
-        println!("{}", msg.red());
-    }
+    print_action_result(
+        status,
+        &resp,
+        &format!("✓ Successfully created VM {}", args.id),
+        &format!("Failed to create VM {}", args.id),
+    );
     Ok(())
 }
 
 async fn handle_vm_clone(args: &VmCloneArgs) -> Result<()> {
-    use crossterm::style::Stylize;
     let body = serde_json::to_string(&CloneVmRequest {
         dest_id: args.dest_id.clone(),
     })
@@ -1106,24 +1114,16 @@ async fn handle_vm_clone(args: &VmCloneArgs) -> Result<()> {
         Some(&body),
     )
     .await?;
-    if status.is_success() {
-        let msg = format!(
-            "✓ Successfully cloned VM {} to {}",
-            args.src_id, args.dest_id
-        );
-        println!("{}", msg.green());
-    } else if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(&resp) {
-        let msg = format!("✗ Failed to clone VM {}: {}", args.src_id, err.message);
-        println!("{}", msg.red());
-    } else {
-        let msg = format!("✗ Failed to clone VM {} ({status}): {resp}", args.src_id);
-        println!("{}", msg.red());
-    }
+    print_action_result(
+        status,
+        &resp,
+        &format!("✓ Successfully cloned VM {} to {}", args.src_id, args.dest_id),
+        &format!("Failed to clone VM {}", args.src_id),
+    );
     Ok(())
 }
 
 async fn handle_vm_start(args: &VmIdArgs) -> Result<()> {
-    use crossterm::style::Stylize;
     let body = serde_json::to_string(&ActionVmRequest {
         action: VmAction::Start,
     })
@@ -1136,21 +1136,16 @@ async fn handle_vm_start(args: &VmIdArgs) -> Result<()> {
         Some(&body),
     )
     .await?;
-    if status.is_success() {
-        let msg = format!("✓ Successfully started VM {}", args.id);
-        println!("{}", msg.green());
-    } else if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(&resp) {
-        let msg = format!("✗ Failed to start VM {}: {}", args.id, err.message);
-        println!("{}", msg.red());
-    } else {
-        let msg = format!("✗ Failed to start VM {} ({status}): {resp}", args.id);
-        println!("{}", msg.red());
-    }
+    print_action_result(
+        status,
+        &resp,
+        &format!("✓ Successfully started VM {}", args.id),
+        &format!("Failed to start VM {}", args.id),
+    );
     Ok(())
 }
 
 async fn handle_vm_restart(args: &VmIdArgs) -> Result<()> {
-    use crossterm::style::Stylize;
     let body = serde_json::to_string(&ActionVmRequest {
         action: VmAction::Restart,
     })
@@ -1163,21 +1158,16 @@ async fn handle_vm_restart(args: &VmIdArgs) -> Result<()> {
         Some(&body),
     )
     .await?;
-    if status.is_success() {
-        let msg = format!("✓ Successfully restarted VM {}", args.id);
-        println!("{}", msg.green());
-    } else if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(&resp) {
-        let msg = format!("✗ Failed to restart VM {}: {}", args.id, err.message);
-        println!("{}", msg.red());
-    } else {
-        let msg = format!("✗ Failed to restart VM {} ({status}): {resp}", args.id);
-        println!("{}", msg.red());
-    }
+    print_action_result(
+        status,
+        &resp,
+        &format!("✓ Successfully restarted VM {}", args.id),
+        &format!("Failed to restart VM {}", args.id),
+    );
     Ok(())
 }
 
 async fn handle_vm_stop(args: &VmIdArgs) -> Result<()> {
-    use crossterm::style::Stylize;
     let body = serde_json::to_string(&ActionVmRequest {
         action: VmAction::Stop,
     })
@@ -1190,16 +1180,12 @@ async fn handle_vm_stop(args: &VmIdArgs) -> Result<()> {
         Some(&body),
     )
     .await?;
-    if status.is_success() {
-        let msg = format!("✓ Successfully stopped VM {}", args.id);
-        println!("{}", msg.green());
-    } else if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(&resp) {
-        let msg = format!("✗ Failed to stop VM {}: {}", args.id, err.message);
-        println!("{}", msg.red());
-    } else {
-        let msg = format!("✗ Failed to stop VM {} ({status}): {resp}", args.id);
-        println!("{}", msg.red());
-    }
+    print_action_result(
+        status,
+        &resp,
+        &format!("✓ Successfully stopped VM {}", args.id),
+        &format!("Failed to stop VM {}", args.id),
+    );
     Ok(())
 }
 
@@ -1372,7 +1358,6 @@ async fn handle_vm_list(args: &VmListArgs) -> Result<()> {
 }
 
 async fn handle_vm_delete(args: &VmIdArgs) -> Result<()> {
-    use crossterm::style::Stylize;
     let (status, resp) = pipe_client::pipe_request(
         &args.pipe,
         args.tcp,
@@ -1381,16 +1366,12 @@ async fn handle_vm_delete(args: &VmIdArgs) -> Result<()> {
         None,
     )
     .await?;
-    if status.is_success() {
-        let msg = format!("✓ Successfully deleted VM {}", args.id);
-        println!("{}", msg.green());
-    } else if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(&resp) {
-        let msg = format!("✗ Failed to delete VM {}: {}", args.id, err.message);
-        println!("{}", msg.red());
-    } else {
-        let msg = format!("✗ Failed to delete VM {} ({status}): {resp}", args.id);
-        println!("{}", msg.red());
-    }
+    print_action_result(
+        status,
+        &resp,
+        &format!("✓ Successfully deleted VM {}", args.id),
+        &format!("Failed to delete VM {}", args.id),
+    );
     Ok(())
 }
 
@@ -1797,7 +1778,6 @@ async fn handle_vm_record(args: &VmRecordArgs) -> Result<()> {
 }
 
 async fn handle_vm_export_metrics(args: &VmExportArgs) -> Result<()> {
-    use crossterm::style::Stylize;
     let (status, resp) = pipe_client::pipe_request(
         &args.pipe,
         args.tcp,
@@ -1811,19 +1791,18 @@ async fn handle_vm_export_metrics(args: &VmExportArgs) -> Result<()> {
             serde_json::from_str(&resp).context("failed to parse metrics response")?;
         let json = serde_json::to_string_pretty(&snap).context("failed to serialize metrics")?;
         std::fs::write(&args.out, json).context("failed to write metrics export to file")?;
+        use crossterm::style::Stylize;
         println!(
             "{}",
             format!("✓ Exported metrics to {}", args.out.display()).green()
         );
-    } else if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(&resp) {
-        let msg = format!("✗ Failed to export VM {} metrics: {}", args.id, err.message);
-        println!("{}", msg.red());
     } else {
-        let msg = format!(
-            "✗ Failed to export VM {} metrics ({status}): {resp}",
-            args.id
+        print_action_result(
+            status,
+            &resp,
+            "",
+            &format!("Failed to export VM {} metrics", args.id),
         );
-        println!("{}", msg.red());
     }
     Ok(())
 }
