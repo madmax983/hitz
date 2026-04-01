@@ -1794,10 +1794,10 @@ async fn handle_vm_dashboard(args: &VmListArgs) -> Result<()> {
                     hitz_api::VmState::Failed => Color::Red,
                     hitz_api::VmState::Created => Color::Cyan,
                 };
-                let exit_reason = vm.exit_reason.clone().unwrap_or_else(|| "-".to_string());
+                let exit_reason = vm.exit_reason.as_deref().unwrap_or("-");
 
                 Row::new(vec![
-                    Cell::from(vm.id.clone()),
+                    Cell::from(vm.id.as_str()),
                     Cell::from(state_str).style(Style::default().fg(state_color)),
                     Cell::from(vm.config.ram_mib.to_string()),
                     Cell::from(vm.config.cpus.to_string()),
