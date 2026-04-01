@@ -40,7 +40,7 @@ pub struct SerialBuf {
 }
 
 impl SerialBuf {
-    /// Create a ring buffer with the [`DEFAULT_CAPACITY`] (64 KiB).
+    /// Create a ring buffer with the default capacity (64 KiB).
     #[must_use]
     pub fn new() -> Self {
         Self::with_capacity(DEFAULT_CAPACITY)

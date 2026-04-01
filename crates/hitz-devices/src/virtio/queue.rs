@@ -36,7 +36,7 @@ pub struct VirtQueue {
 impl VirtQueue {
     /// Create a new virtqueue with the given depth.
     ///
-    /// `size` must be a power of 2 and at most [`MAX_QUEUE_SIZE`].
+    /// `size` must be a power of 2 and at most `MAX_QUEUE_SIZE` (256).
     /// If `size` is 0 or exceeds the maximum, it is clamped to `MAX_QUEUE_SIZE`.
     #[must_use]
     pub const fn new(size: u16) -> Self {

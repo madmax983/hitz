@@ -52,7 +52,7 @@ impl Drop for GuestRegion {
 
 /// Guest physical memory manager.
 ///
-/// Maintains a sorted list of [`GuestRegion`]s and provides typed
+/// Maintains a sorted list of regions and provides typed
 /// read/write access by guest physical address. Regions can be mapped
 /// into a HAL [`Partition`] for the hypervisor to wire up.
 pub struct GuestMemory {

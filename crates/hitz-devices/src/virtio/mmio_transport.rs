@@ -189,7 +189,7 @@ pub struct VirtioMmioTransport<D: VirtioBackend> {
 impl<D: VirtioBackend> VirtioMmioTransport<D> {
     /// Create a new MMIO transport for the given backend.
     ///
-    /// Allocates one [`QueueState`] per queue reported by
+    /// Allocates one queue state per queue reported by
     /// [`VirtioBackend::queue_count`].
     ///
     /// * `device` -- the virtio backend (block, net, etc.)
