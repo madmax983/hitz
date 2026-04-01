@@ -106,7 +106,12 @@ pub fn decode_mmio_instruction(bytes: &[u8]) -> Option<DecodedMmio> {
     // -- 5. Opcode-specific decoding --------------------------------------------
     match opcode {
         // MOV r/m, r (write) or MOV r, r/m (read) — 8/32-bit variants
-        0x88..=0x8B => Some(decode_mov_r_rm(opcode, has_operand_size_prefix, reg_field, pos)),
+        0x88..=0x8B => Some(decode_mov_r_rm(
+            opcode,
+            has_operand_size_prefix,
+            reg_field,
+            pos,
+        )),
         // MOV r/m32, imm32
         0xC7 => decode_mov_rm_imm(bytes, has_operand_size_prefix, modrm, pos),
         _ => None,

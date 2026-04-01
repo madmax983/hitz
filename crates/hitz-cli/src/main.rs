@@ -1746,14 +1746,15 @@ async fn handle_vm_record(args: &VmRecordArgs) -> Result<()> {
             break;
         }
 
-        if let Some(duration) = args.duration_secs {
-            if start_time.elapsed().as_secs() >= duration {
-                println!(
-                    "{}",
-                    format!("⏹ Recording reached duration limit ({duration}s).").yellow()
-                );
-                break;
-            }
+        if let Some(duration) = args
+            .duration_secs
+            .filter(|&d| start_time.elapsed().as_secs() >= d)
+        {
+            println!(
+                "{}",
+                format!("⏹ Recording reached duration limit ({duration}s).").yellow()
+            );
+            break;
         }
 
         let _ = ticker.tick().await;
