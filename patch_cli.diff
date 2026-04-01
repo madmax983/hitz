@@ -1,0 +1,21 @@
+--- crates/hitz-cli/src/main.rs
++++ crates/hitz-cli/src/main.rs
+@@ -1746,13 +1746,11 @@
+             break;
+         }
+
+-        if let Some(duration) = args.duration_secs {
+-            if start_time.elapsed().as_secs() >= duration {
+-                println!(
+-                    "{}",
+-                    format!("⏹ Recording reached duration limit ({duration}s).").yellow()
+-                );
+-                break;
+-            }
++        if args.duration_secs.is_some_and(|duration| start_time.elapsed().as_secs() >= duration) {
++            println!(
++                "{}",
++                format!("⏹ Recording reached duration limit ({}s).", args.duration_secs.unwrap()).yellow()
++            );
++            break;
+         }
