@@ -661,3 +661,23 @@ mod tests {
         assert_eq!(VIRTIO_IRQ_VSOCK, 7);
     }
 }
+
+#[cfg(test)]
+mod additional_tests {
+    use super::*;
+
+    #[test]
+    fn test_boot_extras_none() {
+        let extras = BootExtras::none();
+        assert!(extras.vsock_channels.is_none());
+    }
+
+    #[test]
+    fn test_vmerror_display() {
+        let err = VmError::Config("test config error".to_string());
+        assert_eq!(err.to_string(), "config error: test config error");
+
+        let err2 = VmError::Io(std::io::Error::new(std::io::ErrorKind::NotFound, "file missing"));
+        assert_eq!(err2.to_string(), "I/O error: file missing");
+    }
+}

@@ -50,3 +50,30 @@ impl VsockIoHandle {
         (handle, rx_receiver, tx_sender)
     }
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_vsock_io_handle_new_pair() {
+        let (handle, rx_receiver, tx_sender) = VsockIoHandle::new_pair();
+
+        let hdr_bytes = [0u8; 44];
+        let mut hdr = hitz_devices::VsockHdr::from_bytes(&hdr_bytes).unwrap();
+        hdr.src_cid = 42;
+
+        // Test sending from device to host
+        let tx_packet: VsockPacket = (hdr.clone(), vec![1, 2, 3]);
+        tx_sender.send(tx_packet.clone()).expect("failed to send tx");
+        let received_tx = handle.tx_rx.recv().expect("failed to recv tx");
+        assert_eq!(received_tx.0.src_cid, tx_packet.0.src_cid);
+
+        // Test sending from host to device
+        let rx_packet: VsockPacket = (hdr, vec![4, 5, 6]);
+        handle.rx_tx.send(rx_packet.clone()).expect("failed to send rx");
+        let received_rx = rx_receiver.recv().expect("failed to recv rx");
+        assert_eq!(received_rx.0.src_cid, rx_packet.0.src_cid);
+    }
+}

@@ -164,3 +164,80 @@ mod havoc_race_tests {
         });
     }
 }
+
+#[cfg(test)]
+#[allow(missing_docs)]
+#[allow(clippy::unwrap_used)]
+mod havoc_memory_test {
+    use hitz_hal::Gpa;
+    use crate::memory::GuestMemory;
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn torture_guest_memory_write_read(
+            gpa1 in 0..10_000u64,
+            size1 in 1..4096usize,
+            write_addr in 0..10_000u64,
+            write_data in prop::collection::vec(any::<u8>(), 0..5000)
+        ) {
+            let mut mem = GuestMemory::new();
+            // Ignore errors if size is too big or invalid
+            let _ = mem.add_region(Gpa::new(gpa1), size1);
+
+            // This should either succeed or fail safely, not panic
+            let _ = mem.write_slice(Gpa::new(write_addr), &write_data);
+
+            let mut read_buf = vec![0u8; write_data.len()];
+            let _ = mem.read_slice(Gpa::new(write_addr), &mut read_buf);
+        }
+    }
+}
+
+#[cfg(test)]
+#[allow(missing_docs)]
+#[allow(clippy::unwrap_used)]
+mod havoc_serial_v3 {
+    use crate::serial_buf::SerialBuf;
+    use proptest::prelude::*;
+    use std::io::Write;
+
+    proptest! {
+        #[test]
+        fn torture_serial_buf_write_edge_cases_v3(
+            cap in 1..10usize, // Make capacity tiny to force overlapping wrapping writes
+            writes in prop::collection::vec(
+                prop::collection::vec(0u8..255u8, 0..50),
+                1..20
+            )
+        ) {
+            let mut buf = SerialBuf::with_capacity(cap);
+            let mut reader = buf.reader();
+            let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+
+            let mut expected = Vec::new();
+
+            for w in writes {
+                buf.write_all(&w).unwrap();
+                expected.extend(&w);
+            }
+
+            buf.close();
+
+            let mut all_reads: Vec<u8> = Vec::new();
+            rt.block_on(async {
+                while let Some(chunk) = reader.read_chunk().await {
+                    all_reads.extend(chunk);
+                }
+            });
+
+            let expected_read = if expected.len() > cap {
+                &expected[expected.len() - cap..]
+            } else {
+                &expected[..]
+            };
+
+            assert_eq!(all_reads, expected_read, "cap={}, total_written={}", cap, expected.len());
+        }
+    }
+}
