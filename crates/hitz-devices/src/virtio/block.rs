@@ -521,4 +521,22 @@ mod tests {
         let status = mem.read_bytes(STATUS_GPA, 1);
         assert_eq!(status[0], VIRTIO_BLK_S_OK);
     }
+
+    #[test]
+    fn unknown_request_type_returns_ioerr() {
+        let f = create_temp_disk(2);
+        let mut dev = VirtioBlockDevice::new(f).expect("new block device");
+        let mem = MockMem::new(0x10000);
+        let mut q = setup_queue(&mem);
+
+        // Set up a request with an unknown type (e.g., 99).
+        setup_request_chain(&mem, 0, 99, 0, 32, true);
+
+        // Process the queue.
+        dev.process_queue(0, &mut q, &mem);
+
+        // Check status is IOERR.
+        let status = mem.read_bytes(STATUS_GPA, 1);
+        assert_eq!(status[0], VIRTIO_BLK_S_IOERR);
+    }
 }
