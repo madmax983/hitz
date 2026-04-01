@@ -221,7 +221,12 @@ impl SerialReader {
                     // If `to_read` is 0, we shouldn't attempt to read.
                     if to_read > 0 {
                         // `start` is where the un-read data begins inside the ring.
-                        let start = (inner.write_pos + cap - (to_read % cap)) % cap;
+                        let start = if to_read == cap {
+                            inner.write_pos
+                        } else {
+                            (inner.write_pos + cap - (to_read % cap)) % cap
+                        };
+
                         if start + to_read <= cap {
                             result.extend_from_slice(&inner.buf[start..start + to_read]);
                         } else {
