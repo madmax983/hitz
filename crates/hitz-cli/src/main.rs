@@ -341,6 +341,8 @@ enum VmCommand {
     Dashboard(VmListArgs),
     /// Export metrics to JSON format.
     ExportMetrics(Box<VmExportArgs>),
+    /// Record metrics over time to JSON Lines format.
+    Record(Box<VmRecordArgs>),
 }
 
 /// Arguments for `vm clone`.
@@ -351,6 +353,33 @@ struct VmCloneArgs {
 
     /// Destination VM identifier.
     dest_id: String,
+
+    /// Named pipe path.
+    #[arg(long, default_value = DEFAULT_PIPE)]
+    pipe: String,
+
+    /// Connect to daemon via TCP instead of named pipe.
+    #[arg(long)]
+    tcp: Option<std::net::SocketAddr>,
+}
+
+/// Arguments for `vm record`.
+#[derive(Parser)]
+struct VmRecordArgs {
+    /// VM identifier.
+    id: String,
+
+    /// Path to output the metrics stream (JSON Lines format).
+    #[arg(short, long)]
+    out: PathBuf,
+
+    /// Polling interval in milliseconds.
+    #[arg(long, default_value_t = 1000)]
+    interval_ms: u64,
+
+    /// Duration to record for in seconds (if not specified, records until Ctrl-C).
+    #[arg(long)]
+    duration_secs: Option<u64>,
 
     /// Named pipe path.
     #[arg(long, default_value = DEFAULT_PIPE)]
@@ -1677,6 +1706,95 @@ async fn handle_vm_metrics(args: &VmIdArgs) -> Result<()> {
     Ok(())
 }
 
+async fn handle_vm_record(args: &VmRecordArgs) -> Result<()> {
+    use crossterm::style::Stylize;
+    use std::time::Instant;
+
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&args.out)
+        .context("failed to open output file for recording")?;
+
+    let interval = std::time::Duration::from_millis(args.interval_ms);
+    let mut ticker = tokio::time::interval(interval);
+    let start_time = Instant::now();
+
+    println!(
+        "{}",
+        format!(
+            "⏺ Recording metrics for VM '{}' to '{}' (interval: {}ms)...",
+            args.id,
+            args.out.display(),
+            args.interval_ms
+        )
+        .cyan()
+    );
+
+    let stop_flag = Arc::new(AtomicBool::new(false));
+    let stop_clone = Arc::clone(&stop_flag);
+    ctrlc::set_handler(move || {
+        stop_clone.store(true, Ordering::SeqCst);
+    })
+    .context("failed to set Ctrl-C handler")?;
+
+    let mut samples = 0;
+
+    loop {
+        if stop_flag.load(Ordering::SeqCst) {
+            println!("{}", "⏹ Recording stopped by user.".yellow());
+            break;
+        }
+
+        if let Some(duration) = args.duration_secs {
+            if start_time.elapsed().as_secs() >= duration {
+                println!(
+                    "{}",
+                    format!("⏹ Recording reached duration limit ({duration}s).").yellow()
+                );
+                break;
+            }
+        }
+
+        let _ = ticker.tick().await;
+
+        let (status, resp) = pipe_client::pipe_request(
+            &args.pipe,
+            args.tcp,
+            Method::GET,
+            &format!("/vms/{}/metrics", args.id),
+            None,
+        )
+        .await?;
+
+        if status.is_success() {
+            let snap: hitz_api::MetricsSnapshot =
+                serde_json::from_str(&resp).context("failed to parse metrics response")?;
+            let mut line = serde_json::to_string(&snap).context("failed to serialize metrics")?;
+            line.push('\n');
+            file.write_all(line.as_bytes())
+                .context("failed to write metrics line to file")?;
+            samples += 1;
+            print!("\r{}", format!("⏺ Recorded {samples} samples...").green());
+            let _ = stdout().flush();
+        } else if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(&resp) {
+            eprintln!("\n{}", format!("✗ API Error: {}", err.message).red());
+            break;
+        } else {
+            eprintln!("\n{}", format!("✗ Error ({status}): {resp}").red());
+            break;
+        }
+    }
+
+    println!();
+    println!(
+        "{}",
+        format!("✓ Finished recording {samples} samples.").green()
+    );
+
+    Ok(())
+}
+
 async fn handle_vm_export_metrics(args: &VmExportArgs) -> Result<()> {
     use crossterm::style::Stylize;
     let (status, resp) = pipe_client::pipe_request(
@@ -1731,6 +1849,7 @@ fn run_vm_command(cmd: VmCommand) -> Result<()> {
             VmCommand::Top(args) => handle_vm_top(&args).await,
             VmCommand::Dashboard(args) => handle_vm_dashboard(&args).await,
             VmCommand::ExportMetrics(args) => handle_vm_export_metrics(&args).await,
+            VmCommand::Record(args) => handle_vm_record(&args).await,
         }
     })
 }
@@ -2202,6 +2321,20 @@ mod top_tests {
             pipe: "pipe".to_string(),
             tcp: None,
         };
+    }
+
+    #[test]
+    #[allow(clippy::assertions_on_constants)]
+    fn run_vm_record_command_definition_compiles() {
+        let _args = crate::VmRecordArgs {
+            id: "test".to_string(),
+            out: PathBuf::from("metrics.jsonl"),
+            interval_ms: 1000,
+            duration_secs: None,
+            pipe: "pipe".to_string(),
+            tcp: None,
+        };
+        assert!(true);
     }
 
     #[test]
