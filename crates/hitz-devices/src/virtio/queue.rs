@@ -128,7 +128,8 @@ impl VirtQueue {
         }
 
         // Read avail.idx (u16 at offset 2 in the available ring).
-        let avail_idx = read_u16(mem, self.avail_gpa + 2)?;
+        let avail_idx_gpa = self.avail_gpa.checked_add(2)?;
+        let avail_idx = read_u16(mem, avail_idx_gpa)?;
 
         // Nothing new?
         if self.last_avail_idx == avail_idx {
@@ -138,7 +139,8 @@ impl VirtQueue {
         // Read the head descriptor index from the ring.
         // avail ring layout: flags(u16), idx(u16), ring[size](u16 each)
         let ring_offset = u64::from(self.last_avail_idx % self.size) * 2;
-        let head_idx = read_u16(mem, self.avail_gpa + 4 + ring_offset)?;
+        let head_idx_gpa = self.avail_gpa.checked_add(4)?.checked_add(ring_offset)?;
+        let head_idx = read_u16(mem, head_idx_gpa)?;
 
         self.last_avail_idx = self.last_avail_idx.wrapping_add(1);
 
@@ -157,21 +159,32 @@ impl VirtQueue {
     /// `len` is the total number of bytes written to device-writable descriptors.
     pub fn push_used(&self, mem: &dyn GuestMemAccess, head_idx: u16, len: u32) {
         // Read current used.idx.
-        let Some(used_idx) = read_u16(mem, self.used_gpa + 2) else {
+        let Some(idx_gpa) = self.used_gpa.checked_add(2) else {
+            return;
+        };
+        let Some(used_idx) = read_u16(mem, idx_gpa) else {
             return;
         };
 
         // Used ring layout: flags(u16), idx(u16), ring[size](VirtqUsedElem: id(u32) + len(u32))
         let ring_offset = u64::from(used_idx % self.size) * 8;
-        let elem_gpa = self.used_gpa + 4 + ring_offset;
+        let Some(elem_gpa) = self
+            .used_gpa
+            .checked_add(4)
+            .and_then(|x| x.checked_add(ring_offset))
+        else {
+            return;
+        };
 
         // Write VirtqUsedElem { id, len }.
         let _ = mem.write_guest(elem_gpa, &u32::from(head_idx).to_le_bytes());
-        let _ = mem.write_guest(elem_gpa + 4, &len.to_le_bytes());
+        if let Some(elem_len_gpa) = elem_gpa.checked_add(4) {
+            let _ = mem.write_guest(elem_len_gpa, &len.to_le_bytes());
+        }
 
         // Bump used.idx.
         let new_idx = used_idx.wrapping_add(1);
-        let _ = mem.write_guest(self.used_gpa + 2, &new_idx.to_le_bytes());
+        let _ = mem.write_guest(idx_gpa, &new_idx.to_le_bytes());
     }
 }
 
@@ -233,7 +246,7 @@ impl DescriptorChain {
         self.count += 1;
 
         // Each VirtqDesc is 16 bytes: addr(u64) + len(u32) + flags(u16) + next(u16).
-        let desc_addr = self.desc_gpa + u64::from(idx) * 16;
+        let desc_addr = self.desc_gpa.checked_add(u64::from(idx) * 16)?;
         let mut buf = [0u8; 16];
         if mem.read_guest(desc_addr, &mut buf).is_err() {
             self.next_idx = None;
@@ -668,3 +681,6 @@ mod tests {
         assert_eq!(count, 16);
     }
 }
+
+#[cfg(test)]
+mod queue_test;
