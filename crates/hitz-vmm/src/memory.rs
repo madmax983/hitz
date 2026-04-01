@@ -138,8 +138,7 @@ impl GuestMemory {
             let existing_end = existing
                 .gpa_start
                 .as_u64()
-                .saturating_add(existing.size as u64)
-                ;
+                .saturating_add(existing.size as u64);
             if gpa.as_u64() < existing_end && gpa_end > existing.gpa_start.as_u64() {
                 return Err(MemError::Hal(hitz_hal::HalError::MapMemory {
                     gpa: gpa.as_u64(),
