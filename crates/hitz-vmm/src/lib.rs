@@ -18,15 +18,49 @@
 //!
 //! ```no_run
 //! use hitz_api::VmConfig;
-//! use hitz_vmm::{boot_and_run, VmRunResult};
+//! use hitz_vmm::{boot_and_run, VmRunResult, BootExtras, ExitReason};
 //! use std::sync::atomic::{AtomicBool, Ordering};
 //! use std::sync::Arc;
+//! use hitz_hal::{Hypervisor, Partition, PartitionConfig, Vcpu, VcpuId, MemFlags, Gpa};
+//! # struct DummyVcpu;
+//! # impl Vcpu for DummyVcpu {
+//! #     type CancelHandle = ();
+//! #     fn get_regs(&self) -> Result<hitz_hal::StandardRegs, hitz_hal::HalError> { unimplemented!() }
+//! #     fn set_regs(&mut self, _r: &hitz_hal::StandardRegs) -> Result<(), hitz_hal::HalError> { unimplemented!() }
+//! #     fn get_sregs(&self) -> Result<hitz_hal::SpecialRegs, hitz_hal::HalError> { unimplemented!() }
+//! #     fn set_sregs(&mut self, _s: &hitz_hal::SpecialRegs) -> Result<(), hitz_hal::HalError> { unimplemented!() }
+//! #     fn run(&mut self) -> Result<hitz_hal::VcpuExit, hitz_hal::HalError> { unimplemented!() }
+//! #     fn cancel_via(_h: &Self::CancelHandle) -> Result<(), hitz_hal::HalError> { unimplemented!() }
+//! #     fn cancel_handle(&self) -> Self::CancelHandle { unimplemented!() }
+//! #     fn inject_interrupt(&mut self, _vector: u8) -> Result<(), hitz_hal::HalError> { unimplemented!() }
+//! #     fn request_interrupt_window(&mut self) -> Result<(), hitz_hal::HalError> { unimplemented!() }
+//! # }
+//! # struct DummyPartition;
+//! # impl Partition for DummyPartition {
+//! #     type Vcpu = DummyVcpu;
+//! #     fn create_vcpu(&mut self, _id: VcpuId) -> Result<Self::Vcpu, hitz_hal::HalError> { unimplemented!() }
+//! #     unsafe fn map_memory(&mut self, _gpa: Gpa, _hva: *mut u8, _size: usize, _flags: MemFlags) -> Result<(), hitz_hal::HalError> { unimplemented!() }
+//! #     fn unmap_memory(&mut self, _gpa: Gpa, _size: usize) -> Result<(), hitz_hal::HalError> { unimplemented!() }
+//! #     fn request_interrupt(&self, _vcpu_id: VcpuId, _vector: u8) -> Result<(), hitz_hal::HalError> { unimplemented!() }
+//! # }
+//! # struct DummyHypervisor;
+//! # impl Hypervisor for DummyHypervisor {
+//! #     type Partition = DummyPartition;
+//! #     fn create_partition(&self, _config: &PartitionConfig) -> Result<Self::Partition, hitz_hal::HalError> { unimplemented!() }
+//! # }
 //!
 //! // 1. Define the VM configuration
 //! let config = VmConfig {
+//!     kernel_path: "vmlinux".into(),
+//!     initramfs_path: None,
+//!     disk_path: None,
 //!     ram_mib: 256,
 //!     cpus: 1,
-//!     ..Default::default()
+//!     cmdline: None,
+//!     net: None,
+//!     ports: vec![],
+//!     guest_cid: hitz_api::DEFAULT_GUEST_CID,
+//!     guest_agent: hitz_api::GuestAgentMode::Auto,
 //! };
 //!
 //! // 2. Create a cancellation flag
@@ -34,10 +68,12 @@
 //!
 //! // 3. Boot and run the VM
 //! // In practice, you would provide paths to the kernel and initramfs.
-//! let result = boot_and_run(&config, cancel, None, None);
+//! let hypervisor = DummyHypervisor;
+//! let extras = BootExtras::none();
+//! let result = boot_and_run(&hypervisor, &config, std::io::sink(), cancel, extras);
 //! match result {
-//!     Ok(VmRunResult::Exited(reason)) => println!("VM gracefully exited: {:?}", reason),
-//!     Ok(VmRunResult::Cancelled) => println!("VM was forcefully stopped"),
+//!     Ok(VmRunResult { exit_reason: ExitReason::Canceled }) => println!("VM was forcefully stopped"),
+//!     Ok(res) => println!("VM gracefully exited: {:?}", res.exit_reason),
 //!     Err(e) => eprintln!("Failed to run VM: {:?}", e),
 //! }
 //! ```
