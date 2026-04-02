@@ -358,7 +358,11 @@ impl hitz_boot::GuestMemWriter for GuestMemory {
             let chunk = len.min(CHUNK_SIZE);
             self.write_slice(gpa, &zeroes[..chunk])
                 .map_err(|e| hitz_boot::BootError::WriteFailed(e.to_string()))?;
-            gpa = Gpa::new(gpa.as_u64() + chunk as u64);
+            let next_gpa = gpa
+                .as_u64()
+                .checked_add(chunk as u64)
+                .ok_or_else(|| hitz_boot::BootError::WriteFailed("GPA overflow".to_string()))?;
+            gpa = Gpa::new(next_gpa);
             len -= chunk;
         }
         Ok(())

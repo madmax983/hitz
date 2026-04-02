@@ -274,6 +274,16 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
     /// let info = manager.create_vm("my-vm".to_string(), &config).unwrap();
     /// ```
     pub fn create_vm(&self, id: String, config: &VmConfig) -> Result<VmInfo, DaemonError> {
+        if id.is_empty()
+            || !id
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+        {
+            return Err(DaemonError::Internal(format!(
+                "Invalid VM ID '{id}': must be alphanumeric, hyphen, or underscore"
+            )));
+        }
+
         hitz_vmm::validate_config(config)?;
 
         let info = {
@@ -988,6 +998,22 @@ mod tests {
         let info = mgr.create_vm("vm1".into(), &config).expect("create");
         assert_eq!(info.state, VmState::Created);
         assert_eq!(info.id, "vm1");
+    }
+
+    #[test]
+    fn create_vm_invalid_id_path_traversal() {
+        let (mgr, _dir) = make_manager();
+        let (config, _tmp) = make_config();
+
+        let err = mgr
+            .create_vm("../hacked_vm".into(), &config)
+            .expect_err("should fail");
+        assert!(err.to_string().contains("Invalid VM ID"), "got: {err}");
+
+        let err2 = mgr
+            .create_vm("vm/1".into(), &config)
+            .expect_err("should fail");
+        assert!(err2.to_string().contains("Invalid VM ID"), "got: {err2}");
     }
 
     #[test]
