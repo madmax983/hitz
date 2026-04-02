@@ -55,7 +55,7 @@ fn havoc_test_notify_race_condition() {
         let mut reader = buf.reader();
 
         let mut writer_buf = buf.clone();
-        tokio::spawn(async move {
+        let handle = tokio::spawn(async move {
             tokio::task::yield_now().await;
             writer_buf.write_all(b"test").unwrap();
         });
@@ -71,5 +71,6 @@ fn havoc_test_notify_race_condition() {
             chunk, b"test",
             "Havoc expected the data, but got deadlock/timeout!"
         );
+        let _ = handle.await;
     });
 }

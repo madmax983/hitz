@@ -150,8 +150,8 @@ mod tests {
             .finish();
 
         // Mode is encoded in the ASCII header at offset 14..22 (8 bytes)
-        let mode_hex = std::str::from_utf8(&archive[14..22]).expect("valid utf8");
-        let parsed_mode = u32::from_str_radix(mode_hex, 16).expect("valid hex");
+        let mode_hex = std::str::from_utf8(&archive[14..22]).unwrap_or("");
+        let parsed_mode = u32::from_str_radix(mode_hex, 16).unwrap_or(0);
 
         // Ensure 0o100_000 (S_IFREG) is set
         assert_eq!(parsed_mode & 0o100_000, 0o100_000);
