@@ -377,3 +377,40 @@ mod tests {
         });
     }
 }
+
+#[cfg(test)]
+mod proptest_tests {
+    use super::*;
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn test_serial_buf_random_writes(
+            cap in 1..1000usize,
+            writes in prop::collection::vec(prop::collection::vec(any::<u8>(), 0..2000), 1..100)
+        ) {
+            let mut buf = SerialBuf::with_capacity(cap);
+            let mut reader = buf.reader();
+
+            for w in writes {
+                buf.write_all(&w).unwrap();
+            }
+
+            let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+            rt.block_on(async {
+                let _ = tokio::time::timeout(std::time::Duration::from_millis(10), reader.read_chunk()).await;
+            });
+        }
+    }
+}
+
+#[cfg(test)]
+mod havoc_tests {
+    use super::*;
+
+    #[test]
+    #[should_panic]
+    fn havoc_capacity_zero_panic() {
+        let _ = SerialBuf::with_capacity(0);
+    }
+}
