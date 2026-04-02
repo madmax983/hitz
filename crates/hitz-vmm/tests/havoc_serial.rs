@@ -42,3 +42,34 @@ proptest! {
         assert_eq!(all_reads, expected_read, "cap={}, total_written={}", cap, expected.len());
     }
 }
+
+#[test]
+fn havoc_test_notify_race_condition() {
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+
+    rt.block_on(async {
+        let buf = SerialBuf::with_capacity(10);
+        let mut reader = buf.reader();
+
+        let mut writer_buf = buf.clone();
+        tokio::spawn(async move {
+            tokio::task::yield_now().await;
+            writer_buf.write_all(b"test").unwrap();
+        });
+
+        // Simulate the gap between lock drop and notified().await
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        let chunk_opt =
+            tokio::time::timeout(std::time::Duration::from_millis(50), reader.read_chunk()).await;
+
+        let chunk = chunk_opt.unwrap().unwrap();
+        assert_eq!(
+            chunk, b"test",
+            "Havoc expected the data, but got deadlock/timeout!"
+        );
+    });
+}
