@@ -199,6 +199,7 @@ impl SerialReader {
     /// and all remaining data has been drained.
     pub async fn read_chunk(&mut self) -> Option<Vec<u8>> {
         loop {
+            let notified = self.notify.notified();
             {
                 let inner = self.inner.lock().ok()?;
                 if self.read_pos < inner.total_written {
@@ -239,7 +240,7 @@ impl SerialReader {
                 }
             }
             // Park until the writer pushes more data or closes.
-            self.notify.notified().await;
+            notified.await;
         }
     }
 }
