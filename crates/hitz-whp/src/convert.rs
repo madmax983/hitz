@@ -308,8 +308,8 @@ pub fn exit_context_to_hal(ctx: &WHV_RUN_VP_EXIT_CONTEXT) -> Result<VcpuExit, Ha
         if is_write {
             // For OUT instructions, the data is in RAX.
             let rax_bytes = io.Rax.to_le_bytes();
-            data[..usize::from(access_size)]
-                .copy_from_slice(&rax_bytes[..usize::from(access_size)]);
+            let copy_len = usize::from(access_size).min(4);
+            data[..copy_len].copy_from_slice(&rax_bytes[..copy_len]);
         }
         Ok(VcpuExit::IoPort(IoPortExit {
             port: io.PortNumber,
