@@ -1260,7 +1260,7 @@ async fn handle_vm_status(args: &VmIdArgs) -> Result<()> {
                 Cell::new(info.config.guest_cid.to_string()),
             ]);
             if let Some(ref net) = info.config.net {
-                let mac_str = net.mac.clone().unwrap_or_else(|| "Auto".to_string());
+                let mac_str = net.mac.as_deref().unwrap_or("Auto");
                 let net_str = format!(
                     "Host IP: {}, Guest IP: {}, MAC: {}",
                     net.host_ip, net.guest_ip, mac_str
