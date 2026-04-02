@@ -299,6 +299,11 @@ pub fn exit_context_to_hal(ctx: &WHV_RUN_VP_EXIT_CONTEXT) -> Result<VcpuExit, Ha
         let access_info = unsafe { io.AccessInfo.Anonymous };
         let is_write = is_io_write(access_info);
         let access_size = io_access_size(access_info);
+        if access_size > 4 {
+            return Err(HalError::VcpuRun(format!(
+                "invalid I/O port access size: {access_size}"
+            )));
+        }
         let mut data = [0u8; 4];
         if is_write {
             // For OUT instructions, the data is in RAX.
@@ -343,4 +348,23 @@ const fn is_io_write(info: WHV_X64_IO_PORT_ACCESS_INFO_0) -> bool {
 #[allow(clippy::cast_possible_truncation)] // value is masked to 3 bits, always fits u8
 const fn io_access_size(info: WHV_X64_IO_PORT_ACCESS_INFO_0) -> u8 {
     ((info._bitfield >> 1) & 0b111) as u8
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn should_return_error_when_io_access_size_invalid() {
+        let mut ctx: WHV_RUN_VP_EXIT_CONTEXT = unsafe { core::mem::zeroed() };
+        ctx.ExitReason = WHvRunVpExitReasonX64IoPortAccess;
+        ctx.Anonymous.IoPortAccess.AccessInfo.Anonymous._bitfield = (5 << 1) | 1; // write, size 5
+        ctx.Anonymous.IoPortAccess.Rax = 0x1122334455667788;
+
+        let res = exit_context_to_hal(&ctx);
+        assert!(res.is_err());
+        if let Err(e) = res {
+            assert!(e.to_string().contains("invalid I/O port access size: 5"));
+        }
+    }
 }
