@@ -530,8 +530,7 @@ pub fn boot_and_run<H: Hypervisor, W: Write + Send + 'static>(
     }
 
     // Multi-vCPU: spawn a thread per vCPU.
-    let cancel_handles: Vec<_> = vcpus.iter().map(Vcpu::cancel_handle).collect();
-    let shared_handles = Arc::new(cancel_handles);
+    let shared_handles: Arc<[_]> = vcpus.iter().map(Vcpu::cancel_handle).collect();
     let (exit_tx, exit_rx) = mpsc::channel::<Result<ExitReason, hitz_hal::HalError>>();
     let num_vcpus = vcpus.len();
 

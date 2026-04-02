@@ -1046,7 +1046,12 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
 
 // ── hitz vm * ──
 
-fn print_action_result(status: hyper::StatusCode, resp: &str, success_msg: &str, error_prefix: &str) {
+fn print_action_result(
+    status: hyper::StatusCode,
+    resp: &str,
+    success_msg: &str,
+    error_prefix: &str,
+) {
     use crossterm::style::Stylize;
     if status.is_success() {
         println!("{}", success_msg.green());
@@ -1117,7 +1122,10 @@ async fn handle_vm_clone(args: &VmCloneArgs) -> Result<()> {
     print_action_result(
         status,
         &resp,
-        &format!("✓ Successfully cloned VM {} to {}", args.src_id, args.dest_id),
+        &format!(
+            "✓ Successfully cloned VM {} to {}",
+            args.src_id, args.dest_id
+        ),
         &format!("Failed to clone VM {}", args.src_id),
     );
     Ok(())
