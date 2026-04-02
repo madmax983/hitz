@@ -274,6 +274,10 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
     /// let info = manager.create_vm("my-vm".to_string(), &config).unwrap();
     /// ```
     pub fn create_vm(&self, id: String, config: &VmConfig) -> Result<VmInfo, DaemonError> {
+        if id.contains('/') || id.contains('\\') || id.contains("..") {
+            return Err(DaemonError::Internal("Invalid VM ID".to_string()));
+        }
+
         hitz_vmm::validate_config(config)?;
 
         let info = {
@@ -1007,6 +1011,27 @@ mod tests {
         let (mgr, _dir) = make_manager();
         let err = mgr.get_vm("nope").expect_err("should fail");
         assert!(err.to_string().contains("not found"), "got: {err}");
+    }
+
+    #[test]
+    fn create_vm_path_traversal() {
+        let (mgr, _dir) = make_manager();
+        let (config, _tmp) = make_config();
+
+        let err = mgr
+            .create_vm("../../../boot/vmlinux".into(), &config)
+            .expect_err("should fail");
+        assert!(err.to_string().contains("Invalid VM ID"), "got: {err}");
+
+        let err2 = mgr
+            .create_vm("some/path".into(), &config)
+            .expect_err("should fail");
+        assert!(err2.to_string().contains("Invalid VM ID"), "got: {err2}");
+
+        let err3 = mgr
+            .create_vm("some\\path".into(), &config)
+            .expect_err("should fail");
+        assert!(err3.to_string().contains("Invalid VM ID"), "got: {err3}");
     }
 
     #[test]
