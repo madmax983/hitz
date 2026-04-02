@@ -390,10 +390,27 @@ mod tests {
 
     #[test]
     fn null_segment_is_not_present() {
-        let seg = null_segment(0);
+        let seg = null_segment(42);
         assert_eq!(seg.present, 0);
         assert_eq!(seg.base, 0);
         assert_eq!(seg.limit, 0);
+        assert_eq!(seg.selector, 42);
+        assert_eq!(seg.type_, 0);
+        assert_eq!(seg.s, 0);
+        assert_eq!(seg.dpl, 0);
+        assert_eq!(seg.long_mode, 0);
+        assert_eq!(seg.db, 0);
+        assert_eq!(seg.granularity, 0);
+    }
+
+    #[test]
+    fn tss_descriptor_large_limit() {
+        let limit = 0x8_FFFF; // 0x8FFFF, limit_hi should be 8
+        let (low, _) = build_tss_descriptor(0x1000, limit);
+        let limit_lo = low & 0xFFFF;
+        let limit_hi = (low >> 48) & 0xF;
+        assert_eq!(limit_lo, 0xFFFF);
+        assert_eq!(limit_hi, 0x8);
     }
 
     /// Smoke test: `configure_regs` builds a valid `StandardRegs`.

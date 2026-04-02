@@ -143,6 +143,22 @@ mod tests {
         assert!(archive_str.contains("S99hitz-agent"));
     }
 
+    #[test]
+    fn file_mode_is_regular_file() {
+        let archive = CpioBuilder::new()
+            .add_file("test.txt", b"hello", 0o777)
+            .finish();
+
+        // Mode is encoded in the ASCII header at offset 14..22 (8 bytes)
+        let mode_hex = std::str::from_utf8(&archive[14..22]).expect("valid utf8");
+        let parsed_mode = u32::from_str_radix(mode_hex, 16).expect("valid hex");
+
+        // Ensure 0o100_000 (S_IFREG) is set
+        assert_eq!(parsed_mode & 0o100_000, 0o100_000);
+        // Ensure standard permissions are preserved
+        assert_eq!(parsed_mode & 0o7777, 0o777);
+    }
+
     use proptest::prelude::*;
 
     proptest! {
