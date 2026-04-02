@@ -48,6 +48,20 @@ const MIN_RAM_MIB: u32 = 2;
 
 /// Optional channel endpoints pre-created by the daemon before `boot_and_run`.
 ///
+/// # Abstract
+/// Provides external dependencies (like vsock channels) to the VM execution
+/// environment.
+///
+/// # The Hero's Journey
+/// ```rust
+/// # use hitz_vmm::BootExtras;
+/// #
+/// // Most consumers can just use the empty default:
+/// let extras = BootExtras::none();
+/// assert!(extras.vsock_channels.is_none());
+/// ```
+///
+/// # The Fine Print
 /// Allows the host-side async runtime to communicate with the vsock device
 /// during VM execution. When `vsock_channels` is `Some`, the device is wired
 /// into MMIO slot 2 at `VIRTIO_MMIO_BASE + VIRTIO_MMIO_SIZE * 2` (IRQ 7).
@@ -78,6 +92,32 @@ impl BootExtras {
 }
 
 /// Errors that can occur during VM boot or execution.
+///
+/// # Abstract
+/// Represents the various failure modes that can occur when configuring,
+/// booting, or running a micro-VM.
+///
+/// # The Hero's Journey
+/// ```rust
+/// # use hitz_vmm::VmError;
+/// # use std::io;
+/// #
+/// fn handle_error(err: VmError) {
+///     match err {
+///         VmError::Io(e) => println!("IO failed: {}", e),
+///         VmError::Config(msg) => println!("Bad config: {}", msg),
+///         _ => println!("Other error: {}", err),
+///     }
+/// }
+///
+/// let io_err = VmError::Io(io::Error::new(io::ErrorKind::NotFound, "file missing"));
+/// handle_error(io_err);
+/// ```
+///
+/// # The Fine Print
+/// Most errors in this enum are wrappers around underlying sub-system errors
+/// (like [`std::io::Error`] or `hitz_hal::HalError`). They provide a unified
+/// error type for the [`boot_and_run`] pipeline.
 #[derive(Debug, thiserror::Error)]
 pub enum VmError {
     /// I/O error (reading kernel, initramfs, disk).
@@ -102,6 +142,27 @@ pub enum VmError {
 }
 
 /// Result of running a VM to completion.
+///
+/// # Abstract
+/// Encapsulates the outcome of the VM's execution lifecycle. When [`boot_and_run`]
+/// completes (either normally or via an error/cancellation), it yields this struct.
+///
+/// # The Hero's Journey
+/// ```rust
+/// # use hitz_vmm::VmRunResult;
+/// # use hitz_vmm::run_loop::ExitReason;
+/// #
+/// let result = VmRunResult {
+///     exit_reason: ExitReason::Halt,
+/// };
+///
+/// if matches!(result.exit_reason, ExitReason::Halt) {
+///     println!("The VM halted gracefully.");
+/// }
+/// ```
+///
+/// # The Fine Print
+/// The `exit_reason` provides exactly *why* the VM loop terminated.
 #[derive(Debug)]
 pub struct VmRunResult {
     /// Why the VM stopped.
