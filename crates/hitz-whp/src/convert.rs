@@ -359,7 +359,7 @@ mod tests {
         let mut ctx: WHV_RUN_VP_EXIT_CONTEXT = unsafe { core::mem::zeroed() };
         ctx.ExitReason = WHvRunVpExitReasonX64IoPortAccess;
         ctx.Anonymous.IoPortAccess.AccessInfo.Anonymous._bitfield = (5 << 1) | 1; // write, size 5
-        ctx.Anonymous.IoPortAccess.Rax = 0x1122334455667788;
+        ctx.Anonymous.IoPortAccess.Rax = 0x1122_3344_5566_7788;
 
         let res = exit_context_to_hal(&ctx);
         assert!(res.is_err());

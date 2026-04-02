@@ -517,6 +517,48 @@ mod tests {
         }
     }
 
+    #[test]
+    fn test_decode_mov_imm16_with_prefix() {
+        // 66 C7 05 10 20 30 40 76 69
+        // 66 = operand size prefix
+        // C7 = MOV r/m, imm
+        // 05 = mod=00, reg=000 (/0), r/m=101 (disp32)
+        // 10 20 30 40 = disp32
+        // 76 69 = imm16
+        // Length: prefix(1) + opcode(1) + ModR/M(1) + disp32(4) + imm16(2) = 9
+        let bytes = [0x66, 0xC7, 0x05, 0x10, 0x20, 0x30, 0x40, 0x76, 0x69];
+        let decoded = decode_mmio_instruction(&bytes).expect("should decode");
+        assert_eq!(decoded.register, 0);
+        assert_eq!(decoded.size, 2);
+        assert_eq!(decoded.immediate, Some(0x6976));
+        assert_eq!(decoded.instruction_len, 9);
+    }
+
+    #[test]
+    fn test_decode_displacement_out_of_bounds() {
+        // 8B 05 00 00
+        // Expects 4 bytes of displacement, only 2 provided
+        let bytes = [0x8B, 0x05, 0x00, 0x00];
+        assert!(decode_mmio_instruction(&bytes).is_none());
+    }
+
+    #[test]
+    fn test_decode_immediate_out_of_bounds() {
+        // C7 05 00 00 00 00 01
+        // Expects 4 bytes of immediate, only 1 provided
+        let bytes = [0xC7, 0x05, 0x00, 0x00, 0x00, 0x00, 0x01];
+        assert!(decode_mmio_instruction(&bytes).is_none());
+    }
+
+    #[test]
+    fn test_decode_sib_out_of_bounds() {
+        // 8B 04
+        // 04 = mod=00, reg=000, r/m=100 (SIB)
+        // Expects SIB byte, none provided
+        let bytes = [0x8B, 0x04];
+        assert!(decode_mmio_instruction(&bytes).is_none());
+    }
+
     use proptest::prelude::*;
 
     proptest! {
