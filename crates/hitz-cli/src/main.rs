@@ -1049,6 +1049,17 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
 
 // ── hitz vm * ──
 
+fn print_error_response(status: hyper::StatusCode, resp: &str, error_prefix: &str) {
+    use crossterm::style::Stylize;
+    if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(resp) {
+        let msg = format!("✗ {error_prefix}: {}", err.message);
+        println!("{}", msg.red());
+    } else {
+        let msg = format!("✗ {error_prefix} ({status}): {resp}");
+        println!("{}", msg.red());
+    }
+}
+
 fn print_action_result(
     status: hyper::StatusCode,
     resp: &str,
@@ -1058,12 +1069,8 @@ fn print_action_result(
     use crossterm::style::Stylize;
     if status.is_success() {
         println!("{}", success_msg.green());
-    } else if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(resp) {
-        let msg = format!("✗ {error_prefix}: {}", err.message);
-        println!("{}", msg.red());
     } else {
-        let msg = format!("✗ {error_prefix} ({status}): {resp}");
-        println!("{}", msg.red());
+        print_error_response(status, resp, error_prefix);
     }
 }
 
@@ -1313,14 +1320,12 @@ async fn handle_vm_status(args: &VmIdArgs) -> Result<()> {
             let msg = format!("✗ Failed to parse VM {} status: {resp}", args.id);
             println!("{}", msg.red());
         }
-    } else if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(&resp) {
-        use crossterm::style::Stylize;
-        let msg = format!("✗ Failed to get VM {} status: {}", args.id, err.message);
-        println!("{}", msg.red());
     } else {
-        use crossterm::style::Stylize;
-        let msg = format!("✗ Failed to get VM {} status ({status}): {resp}", args.id);
-        println!("{}", msg.red());
+        print_error_response(
+            status,
+            &resp,
+            &format!("Failed to get VM {} status", args.id),
+        );
     }
     Ok(())
 }
@@ -1356,14 +1361,8 @@ async fn handle_vm_list(args: &VmListArgs) -> Result<()> {
             let msg = format!("✗ Failed to parse VMs list: {resp}");
             println!("{}", msg.red());
         }
-    } else if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(&resp) {
-        use crossterm::style::Stylize;
-        let msg = format!("✗ Failed to list VMs: {}", err.message);
-        println!("{}", msg.red());
     } else {
-        use crossterm::style::Stylize;
-        let msg = format!("✗ Failed to list VMs ({status}): {resp}");
-        println!("{}", msg.red());
+        print_error_response(status, &resp, "Failed to list VMs");
     }
     Ok(())
 }
@@ -1686,14 +1685,12 @@ async fn handle_vm_metrics(args: &VmIdArgs) -> Result<()> {
         let snap: hitz_api::MetricsSnapshot =
             serde_json::from_str(&resp).context("failed to parse metrics response")?;
         print!("{}", format_metrics_snapshot(&snap));
-    } else if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(&resp) {
-        use crossterm::style::Stylize;
-        let msg = format!("✗ Failed to get VM {} metrics: {}", args.id, err.message);
-        println!("{}", msg.red());
     } else {
-        use crossterm::style::Stylize;
-        let msg = format!("✗ Failed to get VM {} metrics ({status}): {resp}", args.id);
-        println!("{}", msg.red());
+        print_error_response(
+            status,
+            &resp,
+            &format!("Failed to get VM {} metrics", args.id),
+        );
     }
     Ok(())
 }
@@ -1862,21 +1859,11 @@ async fn handle_vm_analyze(args: &VmIdArgs) -> Result<()> {
     .await?;
 
     if !status_info.is_success() {
-        if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(&resp_info) {
-            println!(
-                "{}",
-                format!("✗ Failed to get VM {} info: {}", args.id, err.message).red()
-            );
-        } else {
-            println!(
-                "{}",
-                format!(
-                    "✗ Failed to get VM {} info ({}): {}",
-                    args.id, status_info, resp_info
-                )
-                .red()
-            );
-        }
+        print_error_response(
+            status_info,
+            &resp_info,
+            &format!("Failed to get VM {} info", args.id),
+        );
         return Ok(());
     }
 
@@ -1911,21 +1898,11 @@ async fn handle_vm_analyze(args: &VmIdArgs) -> Result<()> {
     .await?;
 
     if !status_metrics.is_success() {
-        if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(&resp_metrics) {
-            println!(
-                "{}",
-                format!("✗ Failed to get VM {} metrics: {}", args.id, err.message).red()
-            );
-        } else {
-            println!(
-                "{}",
-                format!(
-                    "✗ Failed to get VM {} metrics ({}): {}",
-                    args.id, status_metrics, resp_metrics
-                )
-                .red()
-            );
-        }
+        print_error_response(
+            status_metrics,
+            &resp_metrics,
+            &format!("Failed to get VM {} metrics", args.id),
+        );
         return Ok(());
     }
 
