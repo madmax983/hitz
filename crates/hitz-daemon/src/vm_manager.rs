@@ -375,7 +375,7 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
         self.store.save_state(id, VmState::Running)?;
 
         // Inject guest agent overlay into initramfs if agent is enabled.
-        let boot_config = inject_guest_agent(config, id);
+        let boot_config = inject_guest_agent(config.clone(), id);
 
         // Record guest RAM size as a one-shot gauge.
         {
@@ -845,10 +845,8 @@ fn inject_guest_agent(mut config: VmConfig, id: &str) -> VmConfig {
     let tmp = std::env::temp_dir().join(format!("hitz-initrd-{id}.cpio"));
     if std::fs::write(&tmp, &combined).is_ok() {
         config.initramfs_path = Some(tmp);
-        config
-    } else {
-        config
     }
+    config
 }
 
 /// Helper function to set up port forwarding for a VM

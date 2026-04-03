@@ -10,9 +10,9 @@ pub enum WarningLevel {
 impl std::fmt::Display for WarningLevel {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            WarningLevel::Info => write!(f, "INFO"),
-            WarningLevel::Warning => write!(f, "WARN"),
-            WarningLevel::Critical => write!(f, "CRIT"),
+            Self::Info => write!(f, "INFO"),
+            Self::Warning => write!(f, "WARN"),
+            Self::Critical => write!(f, "CRIT"),
         }
     }
 }
@@ -49,22 +49,23 @@ pub fn analyze_vm(info: &VmInfo, metrics: &MetricsSnapshot) -> Vec<ResourceInsig
     if metrics.memory.total_bytes > 0 {
         // According to hitz_api, buffers and cached bytes are often reclaimable, but for a simple score,
         // let's look at used_bytes vs total_bytes.
+        #[allow(clippy::cast_precision_loss)]
         let used_pct =
             (metrics.memory.used_bytes as f64 / metrics.memory.total_bytes as f64) * 100.0;
         if used_pct > 90.0 {
             insights.push(ResourceInsight {
                 level: WarningLevel::Critical,
-                message: format!("High Memory utilization: {:.1}% (OOM Risk)", used_pct),
+                message: format!("High Memory utilization: {used_pct:.1}% (OOM Risk)"),
             });
         } else if used_pct > 75.0 {
             insights.push(ResourceInsight {
                 level: WarningLevel::Warning,
-                message: format!("Elevated Memory utilization: {:.1}%", used_pct),
+                message: format!("Elevated Memory utilization: {used_pct:.1}%"),
             });
         } else {
             insights.push(ResourceInsight {
                 level: WarningLevel::Info,
-                message: format!("Healthy Memory utilization: {:.1}%", used_pct),
+                message: format!("Healthy Memory utilization: {used_pct:.1}%"),
             });
         }
 
@@ -79,28 +80,25 @@ pub fn analyze_vm(info: &VmInfo, metrics: &MetricsSnapshot) -> Vec<ResourceInsig
     }
 
     // Process analysis
-    if let Some(top_proc) = metrics.processes.first() {
-        if top_proc.cpu_pct > 80.0 {
-            insights.push(ResourceInsight {
-                level: WarningLevel::Warning,
-                message: format!(
-                    "Process '{}' (PID {}) is consuming {:.1}% CPU",
-                    top_proc.name, top_proc.pid, top_proc.cpu_pct
-                ),
-            });
-        }
-    }
-
-    // Network Errors Analysis
-    let total_rx_errs: u64 = metrics.networks.iter().map(|n| n.rx_errors).sum();
-    let total_tx_errs: u64 = metrics.networks.iter().map(|n| n.tx_errors).sum();
-
-    if total_rx_errs > 0 || total_tx_errs > 0 {
+    if let Some(top_proc) = metrics.processes.first().filter(|p| p.cpu_pct > 80.0) {
         insights.push(ResourceInsight {
             level: WarningLevel::Warning,
             message: format!(
-                "Network errors detected (RX: {}, TX: {})",
-                total_rx_errs, total_tx_errs
+                "Process '{}' (PID {}) is consuming {:.1}% CPU",
+                top_proc.name, top_proc.pid, top_proc.cpu_pct
+            ),
+        });
+    }
+
+    // Network Errors Analysis
+    let rx_errs: u64 = metrics.networks.iter().map(|n| n.rx_errors).sum();
+    let tx_errs: u64 = metrics.networks.iter().map(|n| n.tx_errors).sum();
+
+    if rx_errs > 0 || tx_errs > 0 {
+        insights.push(ResourceInsight {
+            level: WarningLevel::Warning,
+            message: format!(
+                "Network errors detected (RX: {rx_errs}, TX: {tx_errs})"
             ),
         });
     }
