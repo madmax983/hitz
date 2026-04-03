@@ -3,6 +3,21 @@
 use crate::newtypes::{Gpa, MemSizeMiB, VcpuId};
 
 /// Configuration for creating a new partition.
+///
+/// # Abstract
+///
+/// Defines the fundamental parameters required to bootstrap a new VM.
+///
+/// # The Hero's Journey
+///
+/// ```rust
+/// use hitz_hal::{PartitionConfig, MemSizeMiB};
+///
+/// let config = PartitionConfig {
+///     vcpu_count: 2,
+///     memory_size: MemSizeMiB::new(1024),
+/// };
+/// ```
 #[derive(Debug, Clone)]
 pub struct PartitionConfig {
     /// Number of virtual CPUs.
@@ -12,6 +27,25 @@ pub struct PartitionConfig {
 }
 
 /// Reason a vCPU exited the run loop.
+///
+/// # Abstract
+///
+/// Represents the various reasons a virtual CPU might stop execution
+/// and return control to the Virtual Machine Monitor (VMM).
+///
+/// # The Hero's Journey
+///
+/// ```rust
+/// use hitz_hal::VcpuExit;
+///
+/// fn handle_exit(exit: VcpuExit) {
+///     match exit {
+///         VcpuExit::Halt => println!("Guest halted"),
+///         VcpuExit::Shutdown => println!("Guest shutting down"),
+///         _ => println!("Other exit reason"),
+///     }
+/// }
+/// ```
 #[derive(Debug)]
 pub enum VcpuExit {
     /// Guest performed an MMIO access.
@@ -31,6 +65,31 @@ pub enum VcpuExit {
 }
 
 /// Details of an MMIO exit.
+///
+/// # Abstract
+///
+/// Provides the necessary context when the guest accesses memory-mapped I/O,
+/// allowing the VMM to emulate the device behavior.
+///
+/// # The Hero's Journey
+///
+/// ```rust
+/// use hitz_hal::{MmioExit, Gpa};
+///
+/// let exit = MmioExit {
+///     gpa: Gpa::new(0x1000),
+///     data: [0; 8],
+///     len: 4,
+///     is_write: false,
+///     instruction_len: 3,
+///     instruction_bytes: [0; 16],
+///     instruction_byte_count: 0,
+/// };
+///
+/// if exit.is_write {
+///     println!("Guest writing to MMIO");
+/// }
+/// ```
 #[derive(Debug)]
 pub struct MmioExit {
     /// Guest physical address being accessed.
@@ -53,6 +112,28 @@ pub struct MmioExit {
 }
 
 /// Details of an I/O port exit.
+///
+/// # Abstract
+///
+/// Provides the context when the guest executes an `IN` or `OUT` instruction.
+///
+/// # The Hero's Journey
+///
+/// ```rust
+/// use hitz_hal::IoPortExit;
+///
+/// let exit = IoPortExit {
+///     port: 0x3F8, // COM1
+///     data: [0x41, 0, 0, 0], // 'A'
+///     len: 1,
+///     is_write: true,
+///     instruction_len: 2,
+/// };
+///
+/// if exit.is_write && exit.port == 0x3F8 {
+///     println!("Guest wrote to COM1");
+/// }
+/// ```
 #[derive(Debug)]
 pub struct IoPortExit {
     /// Port number (0x0000–0xFFFF).
@@ -70,6 +151,21 @@ pub struct IoPortExit {
 }
 
 /// x86-64 general-purpose registers + RIP, RFLAGS.
+///
+/// # Abstract
+///
+/// Represents the standard state of a vCPU that needs to be saved/restored
+/// or modified by the VMM.
+///
+/// # The Hero's Journey
+///
+/// ```rust
+/// use hitz_hal::StandardRegs;
+///
+/// let mut regs = StandardRegs::default();
+/// regs.rip = 0x100000;
+/// regs.rflags = 0x2;
+/// ```
 #[derive(Debug, Clone, Default)]
 pub struct StandardRegs {
     /// Instruction pointer.
@@ -111,6 +207,22 @@ pub struct StandardRegs {
 }
 
 /// x86-64 segment descriptor for use in segment registers.
+///
+/// # Abstract
+///
+/// Defines a segment in the x86 architecture. Used for CS, DS, ES, FS, GS,
+/// and SS registers.
+///
+/// # The Hero's Journey
+///
+/// ```rust
+/// use hitz_hal::SegmentDescriptor;
+///
+/// let mut cs = SegmentDescriptor::default();
+/// cs.base = 0;
+/// cs.limit = 0xFFFFFFFF;
+/// cs.type_ = 11; // Execute/Read, accessed
+/// ```
 #[derive(Debug, Clone, Default)]
 pub struct SegmentDescriptor {
     /// Base address.
@@ -136,6 +248,21 @@ pub struct SegmentDescriptor {
 }
 
 /// Descriptor table register (GDTR/IDTR).
+///
+/// # Abstract
+///
+/// Represents the Global or Interrupt Descriptor Table register.
+///
+/// # The Hero's Journey
+///
+/// ```rust
+/// use hitz_hal::DescriptorTable;
+///
+/// let gdtr = DescriptorTable {
+///     base: 0x2000,
+///     limit: 0x1FF,
+/// };
+/// ```
 #[derive(Debug, Clone, Default)]
 pub struct DescriptorTable {
     /// Base address.
@@ -145,6 +272,19 @@ pub struct DescriptorTable {
 }
 
 /// x86-64 special (system) registers: control registers, segment registers, etc.
+///
+/// # Abstract
+///
+/// Holds the state of system-level configuration registers for a vCPU.
+///
+/// # The Hero's Journey
+///
+/// ```rust
+/// use hitz_hal::SpecialRegs;
+///
+/// let mut sregs = SpecialRegs::default();
+/// sregs.cr0 = 0x80000011; // Enable Paging + Protection
+/// ```
 #[derive(Debug, Clone, Default)]
 pub struct SpecialRegs {
     /// CR0 — contains PE (protection enable), PG (paging), etc.
@@ -180,6 +320,21 @@ pub struct SpecialRegs {
 }
 
 /// Flags controlling memory mapping permissions.
+///
+/// # Abstract
+///
+/// Defines access rights (Read, Write, Execute) for a mapped memory region.
+///
+/// # The Hero's Journey
+///
+/// ```rust
+/// use hitz_hal::MemFlags;
+///
+/// let flags = MemFlags::READ_WRITE;
+/// assert!(flags.read);
+/// assert!(flags.write);
+/// assert!(!flags.execute);
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MemFlags {
     /// Guest can read from this region.
@@ -214,6 +369,21 @@ impl MemFlags {
 }
 
 /// Information about an interrupt to inject into a vCPU.
+///
+/// # Abstract
+///
+/// Encapsulates the target vCPU and the vector of the interrupt.
+///
+/// # The Hero's Journey
+///
+/// ```rust
+/// use hitz_hal::{InterruptRequest, VcpuId};
+///
+/// let req = InterruptRequest {
+///     vcpu_id: VcpuId::new(0),
+///     vector: 32, // e.g., timer interrupt
+/// };
+/// ```
 #[derive(Debug, Clone, Copy)]
 pub struct InterruptRequest {
     /// Target vCPU.
