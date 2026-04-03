@@ -218,13 +218,23 @@ pub fn load_elf(
 
         // Zero-fill BSS (memsz > filesz).
         if ph.memsz > ph.filesz {
-            let bss_start = ph.paddr + ph.filesz;
-            let bss_len = (ph.memsz - ph.filesz) as usize;
+            let bss_start = ph
+                .paddr
+                .checked_add(ph.filesz)
+                .ok_or_else(|| BootError::InvalidElf("segment offset overflow".into()))?;
+            let bss_len = ph
+                .memsz
+                .checked_sub(ph.filesz)
+                .ok_or_else(|| BootError::InvalidElf("segment offset overflow".into()))?
+                as usize;
             writer.write_zeroes(Gpa::new(bss_start), bss_len)?;
         }
 
         // Track address bounds.
-        let seg_end = ph.paddr + ph.memsz;
+        let seg_end = ph
+            .paddr
+            .checked_add(ph.memsz)
+            .ok_or_else(|| BootError::InvalidElf("segment offset overflow".into()))?;
         min_addr = Some(min_addr.map_or(ph.paddr, |cur: u64| cur.min(ph.paddr)));
         if seg_end > max_addr {
             max_addr = seg_end;
