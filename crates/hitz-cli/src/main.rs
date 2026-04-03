@@ -9,6 +9,7 @@
 // CLI binary — anyhow for top-level errors, expect on infallible ops.
 #![allow(clippy::expect_used)]
 
+mod analyzer;
 mod pipe_client;
 
 use std::ffi::OsString;
@@ -343,6 +344,8 @@ enum VmCommand {
     ExportMetrics(Box<VmExportArgs>),
     /// Record metrics over time to JSON Lines format.
     Record(Box<VmRecordArgs>),
+    /// Analyze VM health based on configuration and current metrics.
+    Analyze(VmIdArgs),
 }
 
 /// Arguments for `vm clone`.
@@ -1046,7 +1049,12 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
 
 // ── hitz vm * ──
 
-fn print_action_result(status: hyper::StatusCode, resp: &str, success_msg: &str, error_prefix: &str) {
+fn print_action_result(
+    status: hyper::StatusCode,
+    resp: &str,
+    success_msg: &str,
+    error_prefix: &str,
+) {
     use crossterm::style::Stylize;
     if status.is_success() {
         println!("{}", success_msg.green());
@@ -1117,7 +1125,10 @@ async fn handle_vm_clone(args: &VmCloneArgs) -> Result<()> {
     print_action_result(
         status,
         &resp,
-        &format!("✓ Successfully cloned VM {} to {}", args.src_id, args.dest_id),
+        &format!(
+            "✓ Successfully cloned VM {} to {}",
+            args.src_id, args.dest_id
+        ),
         &format!("Failed to clone VM {}", args.src_id),
     );
     Ok(())
@@ -1830,8 +1841,126 @@ fn run_vm_command(cmd: VmCommand) -> Result<()> {
             VmCommand::Dashboard(args) => handle_vm_dashboard(&args).await,
             VmCommand::ExportMetrics(args) => handle_vm_export_metrics(&args).await,
             VmCommand::Record(args) => handle_vm_record(&args).await,
+            VmCommand::Analyze(args) => handle_vm_analyze(&args).await,
         }
     })
+}
+
+async fn handle_vm_analyze(args: &VmIdArgs) -> Result<()> {
+    use crossterm::style::Stylize;
+
+    println!("{}", format!("Analyzing VM '{}'...", args.id).cyan());
+
+    // Fetch VM Info
+    let (status_info, resp_info) = pipe_client::pipe_request(
+        &args.pipe,
+        args.tcp,
+        Method::GET,
+        &format!("/vms/{}", args.id),
+        None,
+    )
+    .await?;
+
+    if !status_info.is_success() {
+        if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(&resp_info) {
+            println!(
+                "{}",
+                format!("✗ Failed to get VM {} info: {}", args.id, err.message).red()
+            );
+        } else {
+            println!(
+                "{}",
+                format!(
+                    "✗ Failed to get VM {} info ({}): {}",
+                    args.id, status_info, resp_info
+                )
+                .red()
+            );
+        }
+        return Ok(());
+    }
+
+    let info: hitz_api::VmInfo = match serde_json::from_str(&resp_info) {
+        Ok(i) => i,
+        Err(e) => {
+            println!("{}", format!("✗ Failed to parse VM info: {}", e).red());
+            return Ok(());
+        }
+    };
+
+    if info.state != hitz_api::VmState::Running {
+        println!(
+            "{}",
+            format!(
+                "VM is not running (State: {:?}). Metrics analysis requires a running VM.",
+                info.state
+            )
+            .yellow()
+        );
+        return Ok(());
+    }
+
+    // Fetch Metrics
+    let (status_metrics, resp_metrics) = pipe_client::pipe_request(
+        &args.pipe,
+        args.tcp,
+        Method::GET,
+        &format!("/vms/{}/metrics", args.id),
+        None,
+    )
+    .await?;
+
+    if !status_metrics.is_success() {
+        if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(&resp_metrics) {
+            println!(
+                "{}",
+                format!("✗ Failed to get VM {} metrics: {}", args.id, err.message).red()
+            );
+        } else {
+            println!(
+                "{}",
+                format!(
+                    "✗ Failed to get VM {} metrics ({}): {}",
+                    args.id, status_metrics, resp_metrics
+                )
+                .red()
+            );
+        }
+        return Ok(());
+    }
+
+    let metrics: hitz_api::MetricsSnapshot = match serde_json::from_str(&resp_metrics) {
+        Ok(m) => m,
+        Err(e) => {
+            println!("{}", format!("✗ Failed to parse VM metrics: {}", e).red());
+            return Ok(());
+        }
+    };
+
+    let insights = analyzer::analyze_vm(&info, &metrics);
+
+    println!("\nAnalysis Report for VM '{}'", args.id);
+    println!("----------------------------------------");
+
+    if insights.is_empty() {
+        println!("{}", "No insights generated.".dark_grey());
+    }
+
+    for insight in insights {
+        match insight.level {
+            analyzer::WarningLevel::Critical => {
+                println!("{} {}", "[CRIT]".red().bold(), insight.message.red())
+            }
+            analyzer::WarningLevel::Warning => {
+                println!("{} {}", "[WARN]".yellow().bold(), insight.message.yellow())
+            }
+            analyzer::WarningLevel::Info => {
+                println!("{} {}", "[INFO]".blue().bold(), insight.message)
+            }
+        }
+    }
+
+    Ok(())
 }
 
 #[allow(clippy::too_many_lines)]
