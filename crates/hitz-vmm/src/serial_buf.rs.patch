@@ -1,9 +1,0 @@
---- crates/hitz-vmm/src/serial_buf.rs
-+++ crates/hitz-vmm/src/serial_buf.rs
-@@ -78,6 +78,7 @@
-     /// Create a ring buffer with an explicit capacity in bytes.
-+    /// Panics if capacity is 0.
-     #[must_use]
-     pub fn with_capacity(capacity: usize) -> Self {
-+        assert!(capacity > 0, "capacity must be greater than 0");
-         Self {
