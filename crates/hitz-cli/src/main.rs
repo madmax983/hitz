@@ -1944,20 +1944,36 @@ async fn handle_vm_analyze(args: &VmIdArgs) -> Result<()> {
 
     if insights.is_empty() {
         println!("{}", "No insights generated.".dark_grey());
-    }
+    } else {
+        use comfy_table::presets::NOTHING;
+        use comfy_table::{Cell, Color, Table};
+        let mut table = Table::new();
+        let _ = table.load_preset(NOTHING);
 
-    for insight in insights {
-        match insight.level {
-            analyzer::WarningLevel::Critical => {
-                println!("{} {}", "[CRIT]".red().bold(), insight.message.red())
-            }
-            analyzer::WarningLevel::Warning => {
-                println!("{} {}", "[WARN]".yellow().bold(), insight.message.yellow())
-            }
-            analyzer::WarningLevel::Info => {
-                println!("{} {}", "[INFO]".blue().bold(), insight.message)
-            }
+        for insight in insights {
+            let (level_cell, msg_cell) = match insight.level {
+                analyzer::WarningLevel::Critical => (
+                    Cell::new("[CRIT]")
+                        .fg(Color::Red)
+                        .add_attribute(comfy_table::Attribute::Bold),
+                    Cell::new(insight.message).fg(Color::Red),
+                ),
+                analyzer::WarningLevel::Warning => (
+                    Cell::new("[WARN]")
+                        .fg(Color::Yellow)
+                        .add_attribute(comfy_table::Attribute::Bold),
+                    Cell::new(insight.message).fg(Color::Yellow),
+                ),
+                analyzer::WarningLevel::Info => (
+                    Cell::new("[INFO]")
+                        .fg(Color::Blue)
+                        .add_attribute(comfy_table::Attribute::Bold),
+                    Cell::new(insight.message),
+                ),
+            };
+            let _ = table.add_row(vec![level_cell, msg_cell]);
         }
+        println!("{table}");
     }
 
     Ok(())
