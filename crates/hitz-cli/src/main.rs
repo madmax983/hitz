@@ -692,11 +692,11 @@ fn run_service(arguments: &[OsString]) -> anyhow::Result<()> {
 // ── Main ──
 
 fn main() -> ExitCode {
-    use crossterm::style::Stylize;
     let cli = Cli::parse();
 
     match cli.command {
         Command::Run(args) => run_vm(args).unwrap_or_else(|e| {
+            use crossterm::style::Stylize;
             eprintln!("{}", format!("✗ Error: {e:#}").red().bold());
             ExitCode::FAILURE
         }),
@@ -708,6 +708,7 @@ fn main() -> ExitCode {
             };
             result.map_or_else(
                 |e| {
+                    use crossterm::style::Stylize;
                     eprintln!("{}", format!("✗ Error: {e:#}").red().bold());
                     ExitCode::FAILURE
                 },
@@ -716,6 +717,7 @@ fn main() -> ExitCode {
         }
         Command::Vm(cmd) => run_vm_command(cmd).map_or_else(
             |e| {
+                use crossterm::style::Stylize;
                 eprintln!("{}", format!("✗ Error: {e:#}").red().bold());
                 ExitCode::FAILURE
             },
@@ -1068,7 +1070,6 @@ fn print_action_result(
 }
 
 async fn handle_vm_create(args: &VmCreateArgs) -> Result<()> {
-    use crossterm::style::Stylize;
     let net = if args.net {
         Some(hitz_api::NetConfig {
             mac: args.mac.clone(),
@@ -1798,11 +1799,11 @@ async fn handle_vm_export_metrics(args: &VmExportArgs) -> Result<()> {
     )
     .await?;
     if status.is_success() {
+        use crossterm::style::Stylize;
         let snap: hitz_api::MetricsSnapshot =
             serde_json::from_str(&resp).context("failed to parse metrics response")?;
         let json = serde_json::to_string_pretty(&snap).context("failed to serialize metrics")?;
         std::fs::write(&args.out, json).context("failed to write metrics export to file")?;
-        use crossterm::style::Stylize;
         println!(
             "{}",
             format!("✓ Exported metrics to {}", args.out.display()).green()
@@ -1846,6 +1847,7 @@ fn run_vm_command(cmd: VmCommand) -> Result<()> {
     })
 }
 
+#[allow(clippy::too_many_lines)]
 async fn handle_vm_analyze(args: &VmIdArgs) -> Result<()> {
     use crossterm::style::Stylize;
 
@@ -1883,7 +1885,7 @@ async fn handle_vm_analyze(args: &VmIdArgs) -> Result<()> {
     let info: hitz_api::VmInfo = match serde_json::from_str(&resp_info) {
         Ok(i) => i,
         Err(e) => {
-            println!("{}", format!("✗ Failed to parse VM info: {}", e).red());
+            println!("{}", format!("✗ Failed to parse VM info: {e}").red());
             return Ok(());
         }
     };
@@ -1932,40 +1934,45 @@ async fn handle_vm_analyze(args: &VmIdArgs) -> Result<()> {
     let metrics: hitz_api::MetricsSnapshot = match serde_json::from_str(&resp_metrics) {
         Ok(m) => m,
         Err(e) => {
-            println!("{}", format!("✗ Failed to parse VM metrics: {}", e).red());
+            println!("{}", format!("✗ Failed to parse VM metrics: {e}").red());
             return Ok(());
         }
     };
 
     let insights = analyzer::analyze_vm(&info, &metrics);
 
-    println!("\nAnalysis Report for VM '{}'", args.id);
-    println!("----------------------------------------");
+    println!("\n{}", format!(" 🔍 Analysis Report for VM '{}' ", args.id).bold().on_blue().white());
+    println!();
 
     if insights.is_empty() {
-        println!("{}", "No insights generated.".dark_grey());
+        println!("{}", "  ✅ System is healthy. No issues detected.".green());
     } else {
-        use comfy_table::presets::NOTHING;
+        use comfy_table::presets::UTF8_FULL_CONDENSED;
         use comfy_table::{Cell, Color, Table};
         let mut table = Table::new();
-        let _ = table.load_preset(NOTHING);
+        let _ = table.load_preset(UTF8_FULL_CONDENSED);
+
+        let _ = table.set_header(vec![
+            Cell::new("Level").add_attribute(comfy_table::Attribute::Bold),
+            Cell::new("Insight").add_attribute(comfy_table::Attribute::Bold),
+        ]);
 
         for insight in insights {
             let (level_cell, msg_cell) = match insight.level {
                 analyzer::WarningLevel::Critical => (
-                    Cell::new("[CRIT]")
+                    Cell::new("🚨 CRITICAL")
                         .fg(Color::Red)
                         .add_attribute(comfy_table::Attribute::Bold),
                     Cell::new(insight.message).fg(Color::Red),
                 ),
                 analyzer::WarningLevel::Warning => (
-                    Cell::new("[WARN]")
+                    Cell::new("⚠️ WARNING")
                         .fg(Color::Yellow)
                         .add_attribute(comfy_table::Attribute::Bold),
                     Cell::new(insight.message).fg(Color::Yellow),
                 ),
                 analyzer::WarningLevel::Info => (
-                    Cell::new("[INFO]")
+                    Cell::new("ℹ️ INFO")
                         .fg(Color::Blue)
                         .add_attribute(comfy_table::Attribute::Bold),
                     Cell::new(insight.message),
