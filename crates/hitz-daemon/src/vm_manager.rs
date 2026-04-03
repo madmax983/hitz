@@ -375,7 +375,7 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
         self.store.save_state(id, VmState::Running)?;
 
         // Inject guest agent overlay into initramfs if agent is enabled.
-        let boot_config = inject_guest_agent(&config, id);
+        let boot_config = inject_guest_agent(config, id);
 
         // Record guest RAM size as a one-shot gauge.
         {
@@ -824,10 +824,16 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
     }
 }
 
-/// Helper function to inject guest agent into initramfs
-fn inject_guest_agent(config: &VmConfig, id: &str) -> VmConfig {
+/// Helper function to inject guest agent into initramfs.
+///
+/// ⚡ Bolt Optimization:
+/// Takes ownership of `mut config: VmConfig` instead of taking a reference `&VmConfig`.
+/// This eliminates up to 3 deep struct `.clone()` calls (which incur heap allocations
+/// for `Vec`s and `PathBuf`s) on the VM startup hot path, allowing us to patch the
+/// configuration in-place.
+fn inject_guest_agent(mut config: VmConfig, id: &str) -> VmConfig {
     let Some(agent_bytes) = crate::agent::resolve_agent_bytes(&config.guest_agent) else {
-        return config.clone();
+        return config;
     };
 
     let overlay = crate::agent::build_agent_overlay(&agent_bytes);
@@ -838,11 +844,10 @@ fn inject_guest_agent(config: &VmConfig, id: &str) -> VmConfig {
     combined.extend_from_slice(&overlay);
     let tmp = std::env::temp_dir().join(format!("hitz-initrd-{id}.cpio"));
     if std::fs::write(&tmp, &combined).is_ok() {
-        let mut patched = config.clone();
-        patched.initramfs_path = Some(tmp);
-        patched
+        config.initramfs_path = Some(tmp);
+        config
     } else {
-        config.clone()
+        config
     }
 }
 
