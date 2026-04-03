@@ -17,12 +17,16 @@ pub struct CpuSample {
 impl CpuSample {
     /// Total active (non-idle) ticks.
     pub const fn active(&self) -> u64 {
-        self.user + self.nice + self.system + self.irq + self.softirq
+        self.user
+            .saturating_add(self.nice)
+            .saturating_add(self.system)
+            .saturating_add(self.irq)
+            .saturating_add(self.softirq)
     }
 
     /// Total ticks (active + idle).
     pub const fn total(&self) -> u64 {
-        self.active() + self.idle + self.iowait
+        self.active().saturating_add(self.idle).saturating_add(self.iowait)
     }
 }
 
@@ -85,7 +89,7 @@ pub fn parse_proc_meminfo(content: &str) -> Option<MemoryMetrics> {
         let Ok(val) = val_str.parse::<u64>() else {
             continue;
         };
-        let val = val * 1024;
+        let val = val.saturating_mul(1024);
         match key {
             "MemTotal:" => total = val,
             "MemFree:" => free = val,
@@ -133,8 +137,8 @@ pub fn parse_proc_diskstats(content: &str) -> Vec<DiskMetrics> {
                 name,
                 reads_total: reads,
                 writes_total: writes,
-                read_bytes: read_sec * 512,
-                write_bytes: write_sec * 512,
+                read_bytes: read_sec.saturating_mul(512),
+                write_bytes: write_sec.saturating_mul(512),
             })
         })
         .collect()
@@ -225,6 +229,22 @@ mod tests {
         assert_eq!(nets[0].interface, "eth0");
         assert_eq!(nets[0].rx_bytes, 5000);
         assert_eq!(nets[0].tx_bytes, 2000);
+    }
+
+    #[test]
+    fn havoc_overflow_proc_stat() {
+        // u64::MAX should not panic during parsing/summation
+        let stats = parse_proc_stat_sample("cpu 18446744073709551615 18446744073709551615 18446744073709551615 18446744073709551615 18446744073709551615 18446744073709551615 18446744073709551615");
+        assert_eq!(stats.len(), 1);
+        assert_eq!(stats[0].active(), u64::MAX);
+        assert_eq!(stats[0].total(), u64::MAX);
+
+        let mem = parse_proc_meminfo("MemTotal: 18446744073709551615 kB\nMemFree: 18446744073709551615 kB").expect("parse");
+        assert_eq!(mem.total_bytes, u64::MAX);
+
+        let disks = parse_proc_diskstats("   8   0 vda 100 0 18446744073709551615 20 50 0 18446744073709551615 10 0 30 30\n");
+        assert_eq!(disks[0].read_bytes, u64::MAX);
+        assert_eq!(disks[0].write_bytes, u64::MAX);
     }
 
     #[test]
