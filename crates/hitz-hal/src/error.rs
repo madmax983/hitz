@@ -1,6 +1,34 @@
 //! HAL error type.
 
 /// Errors from hypervisor operations.
+///
+/// # Abstract
+///
+/// The central error type for all HAL operations. Encapsulates platform-specific
+/// failure codes and provides context for cross-platform debugging.
+///
+/// # The Hero's Journey
+///
+/// ```rust
+/// use hitz_hal::HalError;
+///
+/// fn setup_vm() -> Result<(), HalError> {
+///     // Attempt to map memory, which might fail
+///     Err(HalError::MapMemory {
+///         gpa: 0x1000,
+///         size: 4096,
+///         reason: "Memory already mapped".to_string(),
+///     })
+/// }
+///
+/// match setup_vm() {
+///     Ok(_) => println!("VM ready"),
+///     Err(HalError::MapMemory { gpa, size, reason }) => {
+///         println!("Failed to map {} bytes at 0x{:x}: {}", size, gpa, reason);
+///     }
+///     Err(e) => println!("Other error: {}", e),
+/// }
+/// ```
 #[derive(Debug, thiserror::Error)]
 pub enum HalError {
     /// Failed to create a partition.

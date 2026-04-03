@@ -8,11 +8,30 @@ use crate::error::HalError;
 use crate::newtypes::{Gpa, VcpuId};
 use crate::types::{MemFlags, PartitionConfig, SpecialRegs, StandardRegs, VcpuExit};
 
-/// Guest physical memory access — allows devices to read/write guest RAM
-/// without depending on a concrete memory implementation.
+/// Guest physical memory access.
 ///
-/// This is the key abstraction that decouples hitz-devices (virtio stack)
-/// from hitz-vmm (memory management), preventing circular dependencies.
+/// # Abstract
+///
+/// Allows devices to read/write guest RAM
+/// without depending on a concrete memory implementation.
+/// This is the key abstraction that decouples `hitz-devices` (virtio stack)
+/// from `hitz-vmm` (memory management), preventing circular dependencies.
+///
+/// # The Hero's Journey
+///
+/// ```rust
+/// use hitz_hal::{GuestMemAccess, HalError};
+///
+/// # struct DummyMem;
+/// # impl GuestMemAccess for DummyMem {
+/// #     fn read_guest(&self, gpa: u64, buf: &mut [u8]) -> Result<(), HalError> { Ok(()) }
+/// #     fn write_guest(&self, gpa: u64, data: &[u8]) -> Result<(), HalError> { Ok(()) }
+/// # }
+/// # let memory = DummyMem;
+/// let mut buffer = [0u8; 4];
+/// // Read 4 bytes from guest physical address 0x1000.
+/// memory.read_guest(0x1000, &mut buffer).unwrap();
+/// ```
 pub trait GuestMemAccess: Send + Sync {
     /// Read `buf.len()` bytes from guest physical address `gpa` into `buf`.
     fn read_guest(&self, gpa: u64, buf: &mut [u8]) -> Result<(), HalError>;
@@ -21,7 +40,54 @@ pub trait GuestMemAccess: Send + Sync {
     fn write_guest(&self, gpa: u64, data: &[u8]) -> Result<(), HalError>;
 }
 
-/// Top-level hypervisor interface. One per process.
+/// Top-level hypervisor interface.
+///
+/// # Abstract
+///
+/// This is the entry point for interacting with a hypervisor. Generally,
+/// there is only one instance of this per process. It acts as a factory
+/// for creating [`Partition`] instances.
+///
+/// # The Hero's Journey
+///
+/// ```rust
+/// use hitz_hal::{Hypervisor, PartitionConfig, HalError, MemSizeMiB};
+/// # use hitz_hal::{Partition, VcpuId, MemFlags, Gpa, Vcpu};
+/// # struct DummyPartition;
+/// # struct DummyVcpu;
+/// # impl Vcpu for DummyVcpu {
+/// #     type CancelHandle = ();
+/// #     fn run(&mut self) -> Result<hitz_hal::VcpuExit, HalError> { unreachable!() }
+/// #     fn cancel_handle(&self) -> () { () }
+/// #     fn cancel_via(_: &()) -> Result<(), HalError> { Ok(()) }
+/// #     fn get_regs(&self) -> Result<hitz_hal::StandardRegs, HalError> { unreachable!() }
+/// #     fn set_regs(&mut self, _: &hitz_hal::StandardRegs) -> Result<(), HalError> { Ok(()) }
+/// #     fn get_sregs(&self) -> Result<hitz_hal::SpecialRegs, HalError> { unreachable!() }
+/// #     fn set_sregs(&mut self, _: &hitz_hal::SpecialRegs) -> Result<(), HalError> { Ok(()) }
+/// #     fn inject_interrupt(&mut self, _: u8) -> Result<(), HalError> { Ok(()) }
+/// #     fn request_interrupt_window(&mut self) -> Result<(), HalError> { Ok(()) }
+/// # }
+/// # impl Partition for DummyPartition {
+/// #     type Vcpu = DummyVcpu;
+/// #     unsafe fn map_memory(&mut self, _: Gpa, _: *mut u8, _: usize, _: MemFlags) -> Result<(), HalError> { Ok(()) }
+/// #     fn unmap_memory(&mut self, _: Gpa, _: usize) -> Result<(), HalError> { Ok(()) }
+/// #     fn create_vcpu(&mut self, _: VcpuId) -> Result<Self::Vcpu, HalError> { Ok(DummyVcpu) }
+/// #     fn request_interrupt(&self, _: VcpuId, _: u8) -> Result<(), HalError> { Ok(()) }
+/// # }
+/// # struct DummyHypervisor;
+/// # impl Hypervisor for DummyHypervisor {
+/// #     type Partition = DummyPartition;
+/// #     fn create_partition(&self, _: &PartitionConfig) -> Result<Self::Partition, HalError> {
+/// #         Ok(DummyPartition)
+/// #     }
+/// # }
+/// # let hv = DummyHypervisor;
+/// let config = PartitionConfig {
+///     vcpu_count: 2,
+///     memory_size: MemSizeMiB::new(2048),
+/// };
+/// let partition = hv.create_partition(&config).expect("failed to create VM");
+/// ```
 pub trait Hypervisor: Send + Sync {
     /// The partition type produced by this hypervisor.
     type Partition: Partition;
@@ -32,10 +98,47 @@ pub trait Hypervisor: Send + Sync {
 
 /// A VM partition — owns guest memory mappings and vCPUs.
 ///
-/// # Safety
+/// # Abstract
+///
+/// A partition represents a single virtual machine instance. It encapsulates
+/// the physical memory mappings (RAM) and acts as a factory for its
+/// virtual processors ([`Vcpu`]).
+///
+/// # The Hero's Journey
+///
+/// ```rust
+/// use hitz_hal::{Partition, VcpuId, HalError, Gpa, MemFlags};
+/// # use hitz_hal::{Vcpu};
+/// # struct DummyVcpu;
+/// # impl Vcpu for DummyVcpu {
+/// #     type CancelHandle = ();
+/// #     fn run(&mut self) -> Result<hitz_hal::VcpuExit, HalError> { unreachable!() }
+/// #     fn cancel_handle(&self) -> () { () }
+/// #     fn cancel_via(_: &()) -> Result<(), HalError> { Ok(()) }
+/// #     fn get_regs(&self) -> Result<hitz_hal::StandardRegs, HalError> { unreachable!() }
+/// #     fn set_regs(&mut self, _: &hitz_hal::StandardRegs) -> Result<(), HalError> { Ok(()) }
+/// #     fn get_sregs(&self) -> Result<hitz_hal::SpecialRegs, HalError> { unreachable!() }
+/// #     fn set_sregs(&mut self, _: &hitz_hal::SpecialRegs) -> Result<(), HalError> { Ok(()) }
+/// #     fn inject_interrupt(&mut self, _: u8) -> Result<(), HalError> { Ok(()) }
+/// #     fn request_interrupt_window(&mut self) -> Result<(), HalError> { Ok(()) }
+/// # }
+/// # struct DummyPartition;
+/// # impl Partition for DummyPartition {
+/// #     type Vcpu = DummyVcpu;
+/// #     unsafe fn map_memory(&mut self, _: Gpa, _: *mut u8, _: usize, _: MemFlags) -> Result<(), HalError> { Ok(()) }
+/// #     fn unmap_memory(&mut self, _: Gpa, _: usize) -> Result<(), HalError> { Ok(()) }
+/// #     fn create_vcpu(&mut self, _: VcpuId) -> Result<Self::Vcpu, HalError> { Ok(DummyVcpu) }
+/// #     fn request_interrupt(&self, _: VcpuId, _: u8) -> Result<(), HalError> { Ok(()) }
+/// # }
+/// # let mut partition = DummyPartition;
+/// let vcpu = partition.create_vcpu(VcpuId::new(0)).expect("failed to create vCPU 0");
+/// ```
+///
+/// # Details
 ///
 /// Implementations must ensure that memory mappings outlive any vCPU
-/// that may access them.
+/// that may access them. The `map_memory` function is `unsafe` because
+/// the caller must guarantee the host pointer remains valid.
 pub trait Partition: Send + Sync {
     /// The vCPU type produced by this partition.
     type Vcpu: Vcpu + 'static;
@@ -69,10 +172,39 @@ pub trait Partition: Send + Sync {
 
 /// A virtual processor — the vCPU run loop lives here.
 ///
-/// Each vCPU runs on its own OS thread. The `run` method blocks until
-/// the guest exits (I/O, MMIO, HLT, etc.).
+/// # Abstract
 ///
-/// # Cancellation
+/// Each vCPU usually runs on its own dedicated OS thread. The `run` method
+/// enters the guest execution context and blocks until the guest exits
+/// due to an event like I/O, MMIO, or HLT.
+///
+/// # The Hero's Journey
+///
+/// ```rust
+/// use hitz_hal::{Vcpu, HalError, VcpuExit};
+/// # struct DummyVcpu;
+/// # impl Vcpu for DummyVcpu {
+/// #     type CancelHandle = ();
+/// #     fn run(&mut self) -> Result<hitz_hal::VcpuExit, HalError> { Ok(VcpuExit::Halt) }
+/// #     fn cancel_handle(&self) -> () { () }
+/// #     fn cancel_via(_: &()) -> Result<(), HalError> { Ok(()) }
+/// #     fn get_regs(&self) -> Result<hitz_hal::StandardRegs, HalError> { unreachable!() }
+/// #     fn set_regs(&mut self, _: &hitz_hal::StandardRegs) -> Result<(), HalError> { Ok(()) }
+/// #     fn get_sregs(&self) -> Result<hitz_hal::SpecialRegs, HalError> { unreachable!() }
+/// #     fn set_sregs(&mut self, _: &hitz_hal::SpecialRegs) -> Result<(), HalError> { Ok(()) }
+/// #     fn inject_interrupt(&mut self, _: u8) -> Result<(), HalError> { Ok(()) }
+/// #     fn request_interrupt_window(&mut self) -> Result<(), HalError> { Ok(()) }
+/// # }
+/// # let mut vcpu = DummyVcpu;
+/// loop {
+///     match vcpu.run().expect("vcpu run failed") {
+///         VcpuExit::Halt => break, // Guest executed HLT
+///         _ => {} // Handle other exits
+///     }
+/// }
+/// ```
+///
+/// # Details
 ///
 /// Call [`cancel_handle`][Vcpu::cancel_handle] *before* moving the vCPU into
 /// a thread. Share the handle via `Arc<Self::CancelHandle>` or by cloning,

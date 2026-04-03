@@ -8,6 +8,22 @@ use std::fmt;
 use uuid::Uuid;
 
 /// Unique identifier for a virtual machine.
+///
+/// # Abstract
+///
+/// Wraps a UUID to uniquely identify a VM instance. Prevents mixing up
+/// VM IDs with other UUIDs or strings.
+///
+/// # The Hero's Journey
+///
+/// ```rust
+/// use hitz_hal::VmId;
+///
+/// let id1 = VmId::new();
+/// let id2 = VmId::new();
+/// assert_ne!(id1, id2);
+/// println!("Created VM with ID: {}", id1);
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct VmId(Uuid);
 
@@ -38,6 +54,20 @@ impl fmt::Display for VmId {
 }
 
 /// Virtual CPU identifier within a partition.
+///
+/// # Abstract
+///
+/// Strongly-typed identifier for a vCPU.
+///
+/// # The Hero's Journey
+///
+/// ```rust
+/// use hitz_hal::VcpuId;
+///
+/// let vcpu_id = VcpuId::new(0);
+/// assert_eq!(vcpu_id.as_u32(), 0);
+/// println!("Starting {}", vcpu_id);
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct VcpuId(u32);
 
@@ -62,6 +92,23 @@ impl fmt::Display for VcpuId {
 }
 
 /// Guest Physical Address.
+///
+/// # Abstract
+///
+/// Represents an address in the guest's physical memory space. Prevents
+/// accidental mix-ups with host physical addresses, host virtual addresses,
+/// or guest virtual addresses.
+///
+/// # The Hero's Journey
+///
+/// ```rust
+/// use hitz_hal::Gpa;
+///
+/// let base = Gpa::new(0x1000);
+/// let offset = base.offset(0x500);
+/// assert_eq!(offset.as_u64(), 0x1500);
+/// assert_eq!(offset.page_base().as_u64(), 0x1000);
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Gpa(u64);
 
@@ -104,6 +151,19 @@ impl fmt::Display for Gpa {
 }
 
 /// Interrupt request line number.
+///
+/// # Abstract
+///
+/// Strongly typed wrapper for an IRQ number.
+///
+/// # The Hero's Journey
+///
+/// ```rust
+/// use hitz_hal::IrqLine;
+///
+/// let timer_irq = IrqLine::new(0);
+/// assert_eq!(timer_irq.as_u8(), 0);
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct IrqLine(u8);
 
@@ -128,6 +188,19 @@ impl fmt::Display for IrqLine {
 }
 
 /// Slot index for MMIO device registration.
+///
+/// # Abstract
+///
+/// Identifies a registered MMIO region or device slot.
+///
+/// # The Hero's Journey
+///
+/// ```rust
+/// use hitz_hal::MmioSlot;
+///
+/// let slot = MmioSlot::new(1);
+/// assert_eq!(slot.as_u16(), 1);
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct MmioSlot(u16);
 
@@ -146,6 +219,20 @@ impl MmioSlot {
 }
 
 /// Offset within a disk image.
+///
+/// # Abstract
+///
+/// Byte offset inside a virtual disk, helping prevent confusion with
+/// memory offsets or sector indices.
+///
+/// # The Hero's Journey
+///
+/// ```rust
+/// use hitz_hal::DiskOffset;
+///
+/// let offset = DiskOffset::new(4096);
+/// assert_eq!(offset.as_u64(), 4096);
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct DiskOffset(u64);
 
@@ -164,6 +251,19 @@ impl DiskOffset {
 }
 
 /// MAC address for a virtual network device.
+///
+/// # Abstract
+///
+/// Represents a 6-byte hardware address.
+///
+/// # The Hero's Journey
+///
+/// ```rust
+/// use hitz_hal::MacAddress;
+///
+/// let mac = MacAddress::new([0xDE, 0xAD, 0xBE, 0xEF, 0x00, 0x01]);
+/// assert_eq!(mac.to_string(), "de:ad:be:ef:00:01");
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct MacAddress([u8; 6]);
 
@@ -192,6 +292,20 @@ impl fmt::Display for MacAddress {
 }
 
 /// Memory size in mebibytes.
+///
+/// # Abstract
+///
+/// Explicitly typed wrapper for memory capacity in MiB.
+/// Prevents the classic "is this bytes, KiB, or MiB?" bug.
+///
+/// # The Hero's Journey
+///
+/// ```rust
+/// use hitz_hal::MemSizeMiB;
+///
+/// let size = MemSizeMiB::new(1024); // 1 GiB
+/// assert_eq!(size.as_bytes(), 1024 * 1024 * 1024);
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct MemSizeMiB(u64);
 
