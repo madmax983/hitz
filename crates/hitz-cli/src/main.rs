@@ -1939,33 +1939,42 @@ async fn handle_vm_analyze(args: &VmIdArgs) -> Result<()> {
 
     let insights = analyzer::analyze_vm(&info, &metrics);
 
-    println!("\nAnalysis Report for VM '{}'", args.id);
-    println!("----------------------------------------");
+    println!(
+        "\n{}",
+        format!(" Analysis Report for VM '{}' ", args.id)
+            .bold()
+            .cyan()
+            .on_dark_grey()
+    );
 
     if insights.is_empty() {
-        println!("{}", "No insights generated.".dark_grey());
+        println!("\n{}", "✓ System looks healthy! No issues detected.".green());
     } else {
-        use comfy_table::presets::NOTHING;
-        use comfy_table::{Cell, Color, Table};
+        use comfy_table::presets::UTF8_FULL;
+        use comfy_table::{Cell, Color, Table, Row};
         let mut table = Table::new();
-        let _ = table.load_preset(NOTHING);
+        let _ = table.load_preset(UTF8_FULL);
+        let _ = table.set_header(vec![
+            Cell::new("Severity").add_attribute(comfy_table::Attribute::Bold),
+            Cell::new("Insight").add_attribute(comfy_table::Attribute::Bold),
+        ]);
 
         for insight in insights {
             let (level_cell, msg_cell) = match insight.level {
                 analyzer::WarningLevel::Critical => (
-                    Cell::new("[CRIT]")
+                    Cell::new("🚨 CRITICAL")
                         .fg(Color::Red)
                         .add_attribute(comfy_table::Attribute::Bold),
                     Cell::new(insight.message).fg(Color::Red),
                 ),
                 analyzer::WarningLevel::Warning => (
-                    Cell::new("[WARN]")
+                    Cell::new("⚠️ WARNING")
                         .fg(Color::Yellow)
                         .add_attribute(comfy_table::Attribute::Bold),
                     Cell::new(insight.message).fg(Color::Yellow),
                 ),
                 analyzer::WarningLevel::Info => (
-                    Cell::new("[INFO]")
+                    Cell::new("ℹ️ INFO")
                         .fg(Color::Blue)
                         .add_attribute(comfy_table::Attribute::Bold),
                     Cell::new(insight.message),
@@ -1973,7 +1982,7 @@ async fn handle_vm_analyze(args: &VmIdArgs) -> Result<()> {
             };
             let _ = table.add_row(vec![level_cell, msg_cell]);
         }
-        println!("{table}");
+        println!("\n{table}");
     }
 
     Ok(())
