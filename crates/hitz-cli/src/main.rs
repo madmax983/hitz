@@ -11,6 +11,7 @@
 
 mod analyzer;
 mod pipe_client;
+mod report;
 
 use std::ffi::OsString;
 use std::io::{BufWriter, Write, stdout};
@@ -346,6 +347,8 @@ enum VmCommand {
     Record(Box<VmRecordArgs>),
     /// Analyze VM health based on configuration and current metrics.
     Analyze(VmIdArgs),
+    /// Export a markdown health report for a running VM.
+    Report(Box<VmReportArgs>),
 }
 
 /// Arguments for `vm clone`.
@@ -459,6 +462,25 @@ struct VmExportArgs {
     id: String,
 
     /// Path to export the metrics to (JSON).
+    #[arg(short, long)]
+    out: PathBuf,
+
+    /// Named pipe path.
+    #[arg(long, default_value = DEFAULT_PIPE)]
+    pipe: String,
+
+    /// Connect to daemon via TCP instead of named pipe.
+    #[arg(long)]
+    tcp: Option<std::net::SocketAddr>,
+}
+
+#[derive(Parser)]
+struct VmReportArgs {
+    /// VM identifier.
+    #[arg(short, long)]
+    id: String,
+
+    /// Path to export the report to (Markdown).
     #[arg(short, long)]
     out: PathBuf,
 
@@ -1842,8 +1864,106 @@ fn run_vm_command(cmd: VmCommand) -> Result<()> {
             VmCommand::ExportMetrics(args) => handle_vm_export_metrics(&args).await,
             VmCommand::Record(args) => handle_vm_record(&args).await,
             VmCommand::Analyze(args) => handle_vm_analyze(&args).await,
+            VmCommand::Report(args) => handle_vm_report(&args).await,
         }
     })
+}
+
+async fn handle_vm_report(args: &VmReportArgs) -> Result<()> {
+    use crossterm::style::Stylize;
+
+    println!(
+        "{}",
+        format!("Generating health report for VM '{}'...", args.id).cyan()
+    );
+
+    // Fetch VM Info
+    let (status_info, resp_info) = pipe_client::pipe_request(
+        &args.pipe,
+        args.tcp,
+        Method::GET,
+        &format!("/vms/{}", args.id),
+        None,
+    )
+    .await?;
+
+    if !status_info.is_success() {
+        if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(&resp_info) {
+            println!(
+                "{}",
+                format!("✗ Failed to get VM {} info: {}", args.id, err.message).red()
+            );
+        } else {
+            println!(
+                "{}",
+                format!(
+                    "✗ Failed to get VM {} info ({}): {}",
+                    args.id, status_info, resp_info
+                )
+                .red()
+            );
+        }
+        return Ok(());
+    }
+
+    let info: hitz_api::VmInfo = match serde_json::from_str(&resp_info) {
+        Ok(i) => i,
+        Err(e) => {
+            println!("{}", format!("✗ Failed to parse VM info: {}", e).red());
+            return Ok(());
+        }
+    };
+
+    // Fetch Metrics
+    let (status_metrics, resp_metrics) = pipe_client::pipe_request(
+        &args.pipe,
+        args.tcp,
+        Method::GET,
+        &format!("/vms/{}/metrics", args.id),
+        None,
+    )
+    .await?;
+
+    if !status_metrics.is_success() {
+        if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(&resp_metrics) {
+            println!(
+                "{}",
+                format!("✗ Failed to get VM {} metrics: {}", args.id, err.message).red()
+            );
+        } else {
+            println!(
+                "{}",
+                format!(
+                    "✗ Failed to get VM {} metrics ({}): {}",
+                    args.id, status_metrics, resp_metrics
+                )
+                .red()
+            );
+        }
+        return Ok(());
+    }
+
+    let metrics: hitz_api::MetricsSnapshot = match serde_json::from_str(&resp_metrics) {
+        Ok(m) => m,
+        Err(e) => {
+            println!("{}", format!("✗ Failed to parse VM metrics: {}", e).red());
+            return Ok(());
+        }
+    };
+
+    let insights = analyzer::analyze_vm(&info, &metrics);
+    let report_content = report::generate_markdown_report(&info, &metrics, &insights);
+
+    if let Err(e) = std::fs::write(&args.out, report_content) {
+        println!("{}", format!("✗ Failed to write report: {}", e).red());
+    } else {
+        println!(
+            "{}",
+            format!("✓ Report saved to {}", args.out.display()).green()
+        );
+    }
+
+    Ok(())
 }
 
 async fn handle_vm_analyze(args: &VmIdArgs) -> Result<()> {
