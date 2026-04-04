@@ -133,6 +133,38 @@ mod havoc_edge_cases {
 
 #[cfg(test)]
 #[allow(clippy::expect_used, clippy::unwrap_used)]
+mod havoc_rip_tests {
+    use proptest::prelude::*;
+    use hitz_hal::{StandardRegs, SpecialRegs, VcpuExit, HalError, Vcpu};
+
+    struct FakeVcpu {
+        regs: StandardRegs,
+    }
+    impl Vcpu for FakeVcpu {
+        type CancelHandle = ();
+        fn cancel_handle(&self) -> Self::CancelHandle {}
+        fn cancel_via(_handle: &Self::CancelHandle) -> Result<(), HalError> { Ok(()) }
+        fn run(&mut self) -> Result<VcpuExit, HalError> { Ok(VcpuExit::Halt) }
+        fn get_regs(&self) -> Result<StandardRegs, HalError> { Ok(self.regs.clone()) }
+        fn set_regs(&mut self, regs: &StandardRegs) -> Result<(), HalError> { self.regs = regs.clone(); Ok(()) }
+        fn get_sregs(&self) -> Result<SpecialRegs, HalError> { Ok(SpecialRegs::default()) }
+        fn set_sregs(&mut self, _sregs: &SpecialRegs) -> Result<(), HalError> { Ok(()) }
+        fn inject_interrupt(&mut self, _vector: u8) -> Result<(), HalError> { Ok(()) }
+        fn request_interrupt_window(&mut self) -> Result<(), HalError> { Ok(()) }
+    }
+
+    proptest! {
+        #[test]
+        fn havoc_test_advance_rip_overflow(rip in (u64::MAX - 20)..=u64::MAX, len in 0..=15u8) {
+            let mut vcpu = FakeVcpu { regs: StandardRegs { rip, ..Default::default() } };
+            let _ = crate::run_loop::advance_rip(&mut vcpu, len);
+            let _ = crate::run_loop::advance_rip_with_rax(&mut vcpu, len, 0);
+        }
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod havoc_race_tests {
     use crate::serial_buf::SerialBuf;
     use std::io::Write;

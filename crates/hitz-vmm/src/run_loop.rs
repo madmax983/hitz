@@ -206,7 +206,7 @@ fn handle_mmio<V: Vcpu, W: Write>(
 
         let mut regs = vcpu.get_regs()?;
         mmio_decode::set_register(&mut regs, decoded.register, value);
-        regs.rip += u64::from(instr_len);
+        regs.rip = regs.rip.wrapping_add(u64::from(instr_len));
         return vcpu.set_regs(&regs);
     }
 
@@ -275,9 +275,9 @@ fn handle_io_port<V: Vcpu, W: Write>(
 }
 
 /// Advance RIP past the faulting instruction.
-fn advance_rip<V: Vcpu>(vcpu: &mut V, instruction_len: u8) -> Result<(), HalError> {
+pub(crate) fn advance_rip<V: Vcpu>(vcpu: &mut V, instruction_len: u8) -> Result<(), HalError> {
     let mut regs = vcpu.get_regs()?;
-    regs.rip += u64::from(instruction_len);
+    regs.rip = regs.rip.wrapping_add(u64::from(instruction_len));
     vcpu.set_regs(&regs)
 }
 
@@ -285,13 +285,13 @@ fn advance_rip<V: Vcpu>(vcpu: &mut V, instruction_len: u8) -> Result<(), HalErro
 ///
 /// Combines both updates into a single `set_regs` call to minimize
 /// round-trips to the hypervisor.
-fn advance_rip_with_rax<V: Vcpu>(
+pub(crate) fn advance_rip_with_rax<V: Vcpu>(
     vcpu: &mut V,
     instruction_len: u8,
     rax: u64,
 ) -> Result<(), HalError> {
     let mut regs = vcpu.get_regs()?;
-    regs.rip += u64::from(instruction_len);
+    regs.rip = regs.rip.wrapping_add(u64::from(instruction_len));
     regs.rax = rax;
     vcpu.set_regs(&regs)
 }
