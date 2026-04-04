@@ -241,9 +241,7 @@ impl VirtioVsockDevice {
                 }
             }
 
-            if raw.len() >= VSOCK_HDR_SIZE
-                && let Some(hdr) = VsockHdr::from_bytes(&raw)
-            {
+            if let Some(hdr) = (raw.len() >= VSOCK_HDR_SIZE).then(|| VsockHdr::from_bytes(&raw)).flatten() {
                 let payload_end = VSOCK_HDR_SIZE + hdr.len as usize;
                 let payload = raw.get(VSOCK_HDR_SIZE..payload_end).unwrap_or(&[]).to_vec();
                 // Non-blocking send; if channel is closed, drop packet.
@@ -290,7 +288,6 @@ impl VirtioBackend for VirtioVsockDevice {
         }
     }
 
-    #[allow(clippy::too_many_lines)]
     fn poll_rx(&mut self, rx_queue: &mut VirtQueue, mem: &dyn hitz_hal::GuestMemAccess) -> bool {
         // Drain channel into local pending queue.
         while let Ok(packet) = self.rx_receiver.try_recv() {
@@ -305,33 +302,32 @@ impl VirtioBackend for VirtioVsockDevice {
 
         while let Some((hdr, payload)) = self.rx_pending.pop_front() {
             // Try to inject one packet into the RX virtqueue.
-            if let Some(mut chain) = rx_queue.pop_chain(mem) {
-                let head = chain.head_index();
-                let hdr_bytes = hdr.to_bytes();
-                let total = hdr_bytes.len() + payload.len();
+            let Some(mut chain) = rx_queue.pop_chain(mem) else {
+                // No RX buffers available — push packet back.
+                self.rx_pending.push_front((hdr, payload));
+                break;
+            };
 
-                // Find a writable descriptor to write into.
-                if let Some(desc) = chain.next_descriptor(mem)
-                    && desc.is_device_writable
-                {
-                    let _ = mem.write_guest(desc.gpa, &hdr_bytes);
-                    if !payload.is_empty() {
-                        let payload_addr = desc.gpa
-                            + u64::try_from(hdr_bytes.len()).unwrap_or(VSOCK_HDR_SIZE as u64);
-                        let _ = mem.write_guest(payload_addr, &payload);
-                    }
-                    rx_queue.push_used(mem, head, u32::try_from(total).unwrap_or(u32::MAX));
-                    injected = true;
-                    continue;
-                }
+            let head = chain.head_index();
+            let hdr_bytes = hdr.to_bytes();
+            let total = hdr_bytes.len() + payload.len();
+
+            // Find a writable descriptor to write into.
+            let Some(desc) = chain.next_descriptor(mem).filter(|d| d.is_device_writable) else {
                 // Couldn't write — push packet back for next poll.
                 self.rx_pending.push_front((hdr, payload));
                 rx_queue.push_used(mem, head, 0);
                 break;
+            };
+
+            let _ = mem.write_guest(desc.gpa, &hdr_bytes);
+            if !payload.is_empty() {
+                let payload_addr =
+                    desc.gpa + u64::try_from(hdr_bytes.len()).unwrap_or(VSOCK_HDR_SIZE as u64);
+                let _ = mem.write_guest(payload_addr, &payload);
             }
-            // No RX buffers available — push packet back.
-            self.rx_pending.push_front((hdr, payload));
-            break;
+            rx_queue.push_used(mem, head, u32::try_from(total).unwrap_or(u32::MAX));
+            injected = true;
         }
 
         injected
