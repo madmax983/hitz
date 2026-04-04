@@ -50,7 +50,19 @@ impl MmioBus {
     }
 
     /// Register a device at `base_gpa` occupying `size` bytes.
+    ///
+    /// # Panics
+    /// Panics if the requested address range overlaps with an already registered device.
     pub fn register(&mut self, base_gpa: u64, size: u64, device: Box<dyn MmioDevice>) {
+        for slot in &self.slots {
+            let end_gpa = base_gpa + size;
+            let slot_end = slot.base + slot.size;
+            assert!(
+                !(base_gpa < slot_end && end_gpa > slot.base),
+                "Overlapping MMIO region: base {base_gpa:#x}, size {size:#x} overlaps with existing device at {:#x}",
+                slot.base
+            );
+        }
         self.slots.push(MmioSlot {
             base: base_gpa,
             size,
@@ -258,5 +270,49 @@ mod tests {
         // Should return the IRQ from the first device in the slots list
         // that has an IRQ pending (dev2 in this case).
         assert_eq!(bus.poll_devices(), Some(5));
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "Overlapping MMIO region: base 0xd0000500, size 0x1000 overlaps with existing device at 0xd0000000"
+    )]
+    fn register_overlapping_device_panics() {
+        let mut bus = MmioBus::new();
+        bus.register(0xD000_0000, 0x1000, Box::new(StubDevice::new(0)));
+        // Overlaps at the end of the existing region
+        bus.register(0xD000_0500, 0x1000, Box::new(StubDevice::new(0)));
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "Overlapping MMIO region: base 0xd0000000, size 0x1000 overlaps with existing device at 0xd0000000"
+    )]
+    fn register_exact_overlap_panics() {
+        let mut bus = MmioBus::new();
+        bus.register(0xD000_0000, 0x1000, Box::new(StubDevice::new(0)));
+        // Exact overlap
+        bus.register(0xD000_0000, 0x1000, Box::new(StubDevice::new(0)));
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "Overlapping MMIO region: base 0xd0000100, size 0x100 overlaps with existing device at 0xd0000000"
+    )]
+    fn register_inner_overlap_panics() {
+        let mut bus = MmioBus::new();
+        bus.register(0xD000_0000, 0x1000, Box::new(StubDevice::new(0)));
+        // Complete inner overlap
+        bus.register(0xD000_0100, 0x0100, Box::new(StubDevice::new(0)));
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "Overlapping MMIO region: base 0xcfff0000, size 0x12000 overlaps with existing device at 0xd0000000"
+    )]
+    fn register_outer_overlap_panics() {
+        let mut bus = MmioBus::new();
+        bus.register(0xD000_0000, 0x1000, Box::new(StubDevice::new(0)));
+        // Complete outer overlap
+        bus.register(0xCFFF_0000, 0x12000, Box::new(StubDevice::new(0)));
     }
 }
