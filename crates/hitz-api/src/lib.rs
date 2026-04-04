@@ -536,14 +536,17 @@ pub enum VmState {
 
 /// Request to create a new VM with the given configuration.
 ///
-/// This type is used when asking the daemon to instantiate a new VM instance.
+/// # Abstract
+/// This type is the payload sent from the CLI to the daemon's REST API when
+/// asking to instantiate a new micro-VM. It wraps the core [`VmConfig`] so the
+/// daemon knows exactly how to build the partition.
 ///
-/// ## Examples
-///
+/// # The Hero's Journey
 /// ```rust
-/// use hitz_api::{CreateVmRequest, VmConfig};
+/// use hitz_api::{CreateVmRequest, VmConfig, GuestAgentMode};
 /// use std::path::PathBuf;
 ///
+/// // Create the request object containing the blueprint for our new VM
 /// let req = CreateVmRequest {
 ///     config: VmConfig {
 ///         kernel_path: PathBuf::from("/path/to/vmlinux"),
@@ -554,73 +557,90 @@ pub enum VmState {
 ///         cmdline: None,
 ///         net: None,
 ///         ports: vec![],
-///         guest_agent: Default::default(),
-///         guest_cid: Default::default(),
+///         guest_agent: GuestAgentMode::Auto,
+///         guest_cid: 3,
 ///     },
 /// };
 ///
+/// // Verify we packed 1 CPU for the journey
 /// assert_eq!(req.config.cpus, 1);
 /// ```
+///
+/// # Details
+/// This request must be serialized into JSON and sent via a `PUT` request to
+/// the daemon at `/vms/{id}`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateVmRequest {
-    /// Configuration for the VM to create.
+    /// Configuration blueprint for the VM to create.
     pub config: VmConfig,
 }
 
 /// Request to perform an action on an existing VM.
 ///
-/// Used to change the lifecycle state of a VM, such as starting, pausing,
-/// or stopping it.
+/// # Abstract
+/// This type is used to command the daemon to change the lifecycle state of a VM.
+/// Instead of separate endpoints for starting, stopping, or restarting, a single
+/// `POST /vms/{id}/action` endpoint accepts this payload.
 ///
-/// ## Examples
-///
+/// # The Hero's Journey
 /// ```rust
 /// use hitz_api::{ActionVmRequest, VmAction};
 ///
+/// // Prepare a command to gracefully halt the VM
 /// let req = ActionVmRequest {
 ///     action: VmAction::Stop,
 /// };
 ///
+/// // Confirm the intent is to stop
 /// assert_eq!(req.action, VmAction::Stop);
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ActionVmRequest {
-    /// The action to perform.
+    /// The discrete action to perform (e.g., [`VmAction::Start`] or [`VmAction::Stop`]).
     pub action: VmAction,
 }
 
 /// Request to clone an existing VM.
 ///
-/// Used to duplicate an existing VM configuration into a new instance
-/// with the specified ID.
+/// # Abstract
+/// Used to duplicate an existing VM configuration into a new instance with a
+/// specified destination ID. This is particularly useful for spawning multiple
+/// identical workers.
 ///
-/// ## Examples
-///
+/// # The Hero's Journey
 /// ```rust
 /// use hitz_api::CloneVmRequest;
 ///
+/// // Tell the daemon to create a carbon-copy VM named 'cloned-vm-01'
 /// let req = CloneVmRequest {
 ///     dest_id: "cloned-vm-01".to_string(),
 /// };
 ///
 /// assert_eq!(req.dest_id, "cloned-vm-01");
 /// ```
+///
+/// # Details
+/// Sent via `POST /vms/{src_id}/clone`. The source VM can be in any [`VmState`],
+/// but the newly cloned VM will always start in the [`VmState::Created`] state.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CloneVmRequest {
-    /// The ID for the new cloned VM.
+    /// The new unique identifier for the cloned VM instance.
     pub dest_id: String,
 }
 
 /// Information about a VM instance returned by the API.
 ///
+/// # Abstract
 /// Summarizes the identity, current state, and configuration of a micro-VM.
+/// The daemon responds with this payload when querying a specific VM or listing
+/// all VMs.
 ///
-/// ## Examples
-///
+/// # The Hero's Journey
 /// ```rust
-/// use hitz_api::{VmInfo, VmState, VmConfig};
+/// use hitz_api::{VmInfo, VmState, VmConfig, GuestAgentMode};
 /// use std::path::PathBuf;
 ///
+/// // The daemon returns the vital statistics of the running VM
 /// let info = VmInfo {
 ///     id: "my-vm".to_string(),
 ///     state: VmState::Running,
@@ -633,45 +653,49 @@ pub struct CloneVmRequest {
 ///         cmdline: None,
 ///         net: None,
 ///         ports: vec![],
-///         guest_agent: Default::default(),
-///         guest_cid: Default::default(),
+///         guest_agent: GuestAgentMode::Auto,
+///         guest_cid: 3,
 ///     },
 ///     exit_reason: None,
 /// };
 ///
+/// // We can check if it's still alive
 /// assert_eq!(info.id, "my-vm");
 /// assert_eq!(info.state, VmState::Running);
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VmInfo {
-    /// Unique identifier for this VM.
+    /// The unique identifier assigned to this VM.
     pub id: String,
-    /// Current lifecycle state.
+    /// The current lifecycle status (e.g., [`VmState::Running`]).
     pub state: VmState,
-    /// Configuration the VM was created with.
+    /// The exact configuration the VM was created with.
     pub config: VmConfig,
-    /// If the VM exited or failed, the reason why.
+    /// If the VM exited or failed, a human-readable explanation of why.
     pub exit_reason: Option<String>,
 }
 
 /// Error response from the API.
 ///
-/// When an API call fails, the daemon returns this struct detailing what went wrong.
+/// # Abstract
+/// When an API call fails (like trying to start a VM that doesn't exist), the
+/// daemon returns this structured error detailing what went wrong. It's the
+/// first line of defense for debugging CLI interactions.
 ///
-/// ## Examples
-///
+/// # The Hero's Journey
 /// ```rust
 /// use hitz_api::ApiError;
 ///
+/// // The daemon encountered a user error and politely explains why
 /// let err = ApiError {
-///     message: "VM not found".to_string(),
+///     message: "VM not found: my-vm".to_string(),
 /// };
 ///
-/// assert_eq!(err.message, "VM not found");
+/// assert_eq!(err.message, "VM not found: my-vm");
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApiError {
-    /// Human-readable error message.
+    /// A human-readable, descriptive error message explaining the failure.
     pub message: String,
 }
 
