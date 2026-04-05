@@ -385,7 +385,7 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
                 .with_description("Guest RAM in bytes at VM start")
                 .build();
             memory_gauge.record(
-                u64::from(config.ram_mib) * 1024 * 1024,
+                u64::from(boot_config.ram_mib) * 1024 * 1024,
                 &[KeyValue::new("vm.id", id.to_string())],
             );
         }

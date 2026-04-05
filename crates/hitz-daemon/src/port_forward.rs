@@ -65,18 +65,23 @@ impl PortForwardManager {
             let relay_handles_clone = Arc::clone(&relay_handles);
             let connections_total_l = connections_total.clone();
             let relays_active_l = relays_active.clone();
-            let host_port_str = rule.host_port.to_string();
+
+            // ⚡ Bolt Optimization:
+            // By creating a single `KeyValue` with an `i64` value instead of using `.to_string()`,
+            // we eliminate 3 `String` heap allocations (`.clone()`) per incoming TCP connection on the hot path.
+            let kv = KeyValue::new("host_port", rule.host_port as i64);
+
             let handle = tokio::spawn(async move {
                 loop {
                     match listener.accept().await {
                         Ok((mut inbound, _peer)) => {
                             connections_total_l
-                                .add(1, &[KeyValue::new("host_port", host_port_str.clone())]);
+                                .add(1, &[kv.clone()]);
                             relays_active_l
-                                .add(1, &[KeyValue::new("host_port", host_port_str.clone())]);
+                                .add(1, &[kv.clone()]);
 
                             let relays_active_r = relays_active_l.clone();
-                            let host_port_r = host_port_str.clone();
+                            let kv_r = kv.clone();
                             let relay = tokio::spawn(async move {
                                 match tokio::net::TcpStream::connect(guest_addr).await {
                                     Ok(mut outbound) => {
@@ -93,7 +98,7 @@ impl PortForwardManager {
                                     }
                                 }
                                 // Relay complete — decrement active counter.
-                                relays_active_r.add(-1, &[KeyValue::new("host_port", host_port_r)]);
+                                relays_active_r.add(-1, &[kv_r]);
                             });
                             relay_handles_clone.lock().await.push(relay);
                         }
