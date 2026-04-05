@@ -6,7 +6,7 @@
 //!
 //! # The Hero's Journey
 //! ```
-//! # use hitz_devices::virtio::queue::VirtQueue;
+//! # use hitz_devices::VirtQueue;
 //! // 1. Create a queue of a power of two size.
 //! let mut queue = VirtQueue::new(256);
 //!
@@ -55,7 +55,7 @@ impl VirtQueue {
     ///
     /// # Examples
     /// ```
-    /// # use hitz_devices::virtio::queue::VirtQueue;
+    /// # use hitz_devices::VirtQueue;
     /// let queue = VirtQueue::new(128);
     /// ```
     #[must_use]
