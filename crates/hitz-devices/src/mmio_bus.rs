@@ -208,6 +208,15 @@ mod tests {
     }
 
     #[test]
+    fn write_unmapped_returns_none() {
+        let mut bus = MmioBus::new();
+        let mem = StubMem;
+        let data = [0u8; 4];
+        let irq = bus.write(0xFFFF_0000, &data, &mem);
+        assert_eq!(irq, None);
+    }
+
+    #[test]
     fn write_dispatches_to_device() {
         let mut bus = MmioBus::new();
         bus.register(0xD000_0000, 0x1000, Box::new(StubDevice::new(0)));

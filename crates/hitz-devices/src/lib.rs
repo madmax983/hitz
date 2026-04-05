@@ -27,20 +27,25 @@
 //! let mut bus = MmioBus::new();
 //!
 //! // 2. Create devices
-//! let mut serial = SerialDevice::new();
-//! let block_backend = VirtioBlockDevice::new("/path/to/root.img".into()).unwrap();
-//! let mut block_device = VirtioMmioTransport::new(block_backend);
+//! let mut serial = SerialDevice::new(std::io::sink());
+//! let block_backend = VirtioBlockDevice::new(std::fs::File::open("/dev/null").unwrap()).unwrap();
+//! let mut block_device = VirtioMmioTransport::new(block_backend, std::sync::Arc::new(DummyMem), 5);
 //!
+
 //! // 3. Register devices with specific base addresses and sizes
 //! // Typical serial base is 0x3f8 with size 8
-//! bus.insert(serial, 0x3f8, 8);
+//! # struct DummyMem;
+//! # impl hitz_hal::GuestMemAccess for DummyMem {
+//! #     fn read_guest(&self, _gpa: u64, _buf: &mut [u8]) -> Result<(), hitz_hal::HalError> { Ok(()) }
+//! #     fn write_guest(&self, _gpa: u64, _data: &[u8]) -> Result<(), hitz_hal::HalError> { Ok(()) }
+//! # }
 //!
 //! // Typical virtio MMIO base is 0xd0000000 with size 0x200
-//! bus.insert(block_device, 0xd0000000, 0x200);
+//! bus.register(0xd0000000, 0x200, Box::new(block_device));
 //!
 //! // 4. When a guest access occurs (intercepted by WHP), route it:
 //! // e.g., guest writes 'A' (0x41) to the serial port
-//! bus.write(0x3f8, &[0x41]);
+//! bus.write(0x3f8, &[0x41], &DummyMem);
 //! ```
 //!
 //! # The Fine Print
@@ -64,7 +69,10 @@ pub(crate) mod virtio;
 
 pub use mmio_bus::MmioBus;
 pub use serial::SerialDevice;
+pub use virtio::VirtQueue;
+pub use virtio::VirtioBackend;
 pub use virtio::VirtioBlockDevice;
 pub use virtio::VirtioMmioTransport;
 pub use virtio::VirtioNetDevice;
+
 pub use virtio::{VSOCK_BUF_ALLOC, VirtioVsockDevice, VsockHdr, VsockOp, VsockPacket};

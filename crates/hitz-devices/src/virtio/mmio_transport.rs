@@ -7,19 +7,17 @@
 //!
 //! # The Hero's Journey
 //! ```
-//! # use hitz_devices::virtio::mmio_transport::VirtioMmioTransport;
-//! # use hitz_devices::virtio::VirtioBackend;
+//! # use hitz_devices::VirtioMmioTransport;
+//! # use hitz_devices::VirtioBackend;
 //! # use std::sync::Arc;
 //! # use hitz_hal::GuestMemAccess;
 //! # struct DummyBackend;
 //! # impl VirtioBackend for DummyBackend {
 //! #     fn device_id(&self) -> u32 { 1 }
 //! #     fn device_features(&self) -> u64 { 0 }
-//!     fn driver_features_accepted(&mut self, _f: u64) {}
 //! #     fn queue_count(&self) -> usize { 1 }
-//!     fn process_queue(&mut self, _idx: u16, _q: &mut hitz_devices::virtio::queue::VirtQueue, _mem: &dyn GuestMemAccess) {}
-//!     fn set_status(&mut self, _status: u8) {}
-//!     fn read_config(&self, _offset: u64, _data: &mut [u8]) {}
+//!     fn process_queue(&mut self, _idx: u16, _q: &mut hitz_devices::VirtQueue, _mem: &dyn GuestMemAccess) {}
+//! #     fn read_config(&self, _offset: u64, _data: &mut [u8]) {}
 //!     fn write_config(&mut self, _offset: u64, _data: &[u8]) {}
 //! # }
 //! # struct DummyMem;
