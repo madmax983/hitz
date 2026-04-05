@@ -85,7 +85,7 @@ pub fn parse_proc_meminfo(content: &str) -> Option<MemoryMetrics> {
         let Ok(val) = val_str.parse::<u64>() else {
             continue;
         };
-        let val = val * 1024;
+        let val = val.saturating_mul(1024);
         match key {
             "MemTotal:" => total = val,
             "MemFree:" => free = val,
@@ -103,7 +103,7 @@ pub fn parse_proc_meminfo(content: &str) -> Option<MemoryMetrics> {
 
     Some(MemoryMetrics {
         total_bytes: total,
-        used_bytes: total.saturating_sub(free + buffers + cached),
+        used_bytes: total.saturating_sub(free.saturating_add(buffers).saturating_add(cached)),
         free_bytes: free,
         buffers_bytes: buffers,
         cached_bytes: cached,
@@ -133,8 +133,8 @@ pub fn parse_proc_diskstats(content: &str) -> Vec<DiskMetrics> {
                 name,
                 reads_total: reads,
                 writes_total: writes,
-                read_bytes: read_sec * 512,
-                write_bytes: write_sec * 512,
+                read_bytes: read_sec.saturating_mul(512),
+                write_bytes: write_sec.saturating_mul(512),
             })
         })
         .collect()
@@ -276,5 +276,16 @@ mod tests {
         fn havoc_fuzz_parse_proc_net_dev(s in ".*") {
             let _ = parse_proc_net_dev(&s);
         }
+
+    }
+
+    #[test]
+    fn havoc_fuzz_parse_proc_meminfo_no_panic() {
+        let _ = parse_proc_meminfo("MemTotal: 9999999999999999999\nMemFree: 9999999999999999999\nBuffers: 9999999999999999999\nCached: 9999999999999999999\nSwapTotal: 9999999999999999999\nSwapFree: 9999999999999999999\n");
+    }
+
+    #[test]
+    fn havoc_fuzz_parse_proc_diskstats_no_panic() {
+        let _ = parse_proc_diskstats(" 8       0 sda 9999999999999999999 0 9999999999999999999 0 9999999999999999999 0 9999999999999999999\n");
     }
 }
