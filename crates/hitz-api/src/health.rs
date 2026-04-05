@@ -1,0 +1,168 @@
+use crate::MetricsSnapshot;
+use serde::{Deserialize, Serialize};
+
+/// The overall health status of the system or component.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum HealthStatus {
+    /// System is operating within normal parameters.
+    Healthy,
+    /// System is experiencing elevated load or minor issues.
+    Warning,
+    /// System is experiencing severe resource exhaustion or critical errors.
+    Critical,
+}
+
+/// The result of a health assessment.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SystemHealth {
+    /// The aggregated health status.
+    pub status: HealthStatus,
+    /// A list of human-readable reasons explaining the current status.
+    /// Empty if `status` is `Healthy`.
+    pub reasons: Vec<String>,
+}
+
+/// Trait for types that can be evaluated for system health.
+pub trait HealthCheck {
+    /// Assesses the health of the entity and returns a `SystemHealth` report.
+    fn assess_health(&self) -> SystemHealth;
+}
+
+impl HealthCheck for MetricsSnapshot {
+    #[allow(clippy::cast_precision_loss, clippy::similar_names)]
+    fn assess_health(&self) -> SystemHealth {
+        let mut status = HealthStatus::Healthy;
+        let mut reasons = Vec::new();
+
+        // CPU evaluation
+        if self.cpu.total_pct > 90.0 {
+            status = HealthStatus::Critical;
+            reasons.push(format!("Critical CPU usage: {:.1}%", self.cpu.total_pct));
+        } else if self.cpu.total_pct > 75.0 {
+            if status == HealthStatus::Healthy {
+                status = HealthStatus::Warning;
+            }
+            reasons.push(format!("High CPU usage: {:.1}%", self.cpu.total_pct));
+        }
+
+        // Memory evaluation
+        if self.memory.total_bytes > 0 {
+            let memory_pct =
+                (self.memory.used_bytes as f64 / self.memory.total_bytes as f64) * 100.0;
+            if memory_pct > 90.0 {
+                status = HealthStatus::Critical;
+                reasons.push(format!("Critical memory usage: {memory_pct:.1}%"));
+            } else if memory_pct > 75.0 {
+                if status == HealthStatus::Healthy {
+                    status = HealthStatus::Warning;
+                }
+                reasons.push(format!("High memory usage: {memory_pct:.1}%"));
+            }
+        }
+
+        // Swap evaluation
+        if self.memory.swap_total > 0 {
+            #[allow(clippy::cast_precision_loss)]
+            let swap_pct = (self.memory.swap_used as f64 / self.memory.swap_total as f64) * 100.0;
+            if swap_pct > 50.0 {
+                status = HealthStatus::Critical;
+                reasons.push(format!("Critical swap usage: {swap_pct:.1}%"));
+            } else if swap_pct > 20.0 {
+                if status == HealthStatus::Healthy {
+                    status = HealthStatus::Warning;
+                }
+                reasons.push(format!("High swap usage: {swap_pct:.1}%"));
+            }
+        }
+
+        // Network errors evaluation
+        #[allow(clippy::similar_names)]
+        let mut total_rx_errors = 0;
+        #[allow(clippy::similar_names)]
+        let mut total_tx_errors = 0;
+        for net in &self.networks {
+            total_rx_errors += net.rx_errors;
+            total_tx_errors += net.tx_errors;
+        }
+        let total_net_errors = total_rx_errors + total_tx_errors;
+
+        if total_net_errors > 100 {
+            status = HealthStatus::Critical;
+            reasons.push(format!("Critical network errors: {total_net_errors}"));
+        } else if total_net_errors > 10 {
+            if status == HealthStatus::Healthy {
+                status = HealthStatus::Warning;
+            }
+            reasons.push(format!("Elevated network errors: {total_net_errors}"));
+        }
+
+        SystemHealth { status, reasons }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{CpuMetrics, MemoryMetrics, NetMetrics};
+
+    fn safe_metrics() -> MetricsSnapshot {
+        MetricsSnapshot {
+            timestamp_ms: 0,
+            cpu: CpuMetrics {
+                total_pct: 10.0,
+                per_core: vec![10.0],
+                load_avg: [0.1, 0.1, 0.1],
+            },
+            memory: MemoryMetrics {
+                total_bytes: 1000,
+                used_bytes: 100,
+                free_bytes: 900,
+                buffers_bytes: 0,
+                cached_bytes: 0,
+                swap_total: 1000,
+                swap_used: 100,
+            },
+            disks: vec![],
+            networks: vec![NetMetrics {
+                interface: "eth0".to_string(),
+                rx_bytes: 0,
+                tx_bytes: 0,
+                rx_packets: 0,
+                tx_packets: 0,
+                rx_errors: 0,
+                tx_errors: 0,
+            }],
+            processes: vec![],
+        }
+    }
+
+    #[test]
+    fn should_return_healthy_when_metrics_are_low() {
+        let metrics = safe_metrics();
+        let health = metrics.assess_health();
+        assert_eq!(health.status, HealthStatus::Healthy);
+        assert!(health.reasons.is_empty());
+    }
+
+    #[test]
+    fn should_return_warning_when_cpu_is_elevated() {
+        let mut metrics = safe_metrics();
+        metrics.cpu.total_pct = 80.0;
+        let health = metrics.assess_health();
+        assert_eq!(health.status, HealthStatus::Warning);
+        assert_eq!(health.reasons.len(), 1);
+        assert!(health.reasons[0].contains("High CPU"));
+    }
+
+    #[test]
+    fn should_return_critical_when_memory_and_swap_exhausted() {
+        let mut metrics = safe_metrics();
+        metrics.memory.used_bytes = 950;
+        metrics.memory.swap_used = 600;
+        let health = metrics.assess_health();
+        assert_eq!(health.status, HealthStatus::Critical);
+        assert_eq!(health.reasons.len(), 2);
+        assert!(health.reasons[0].contains("Critical memory"));
+        assert!(health.reasons[1].contains("Critical swap"));
+    }
+}
