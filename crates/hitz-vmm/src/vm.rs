@@ -459,9 +459,9 @@ pub fn boot_and_run<H: Hypervisor, W: Write + Send + 'static>(
         );
     }
 
-    let mut cmdline_bytes = cmdline.as_bytes().to_vec();
-    cmdline_bytes.push(0); // null-terminate
-    guest_mem.write_slice(Gpa::new(CMDLINE_GPA), &cmdline_bytes)?;
+    // Removed intermediate `.to_vec()` allocation.
+    cmdline.push('\0');
+    guest_mem.write_slice(Gpa::new(CMDLINE_GPA), cmdline.as_bytes())?;
 
     // ── 9. Write GDT ──
     boot_regs::write_gdt(&guest_mem)?;
