@@ -59,16 +59,69 @@ fn record_exit(counter: &Counter<u64>, reason: &'static str) {
 
 /// Run a vCPU in a loop, dispatching I/O and MMIO exits to devices.
 ///
+/// # Abstract
+///
+/// This is the heart of the virtual machine. It repeatedly tells the hypervisor
+/// to run the virtual CPU until an exit occurs (like a memory-mapped I/O request
+/// or a halt instruction). It handles routing these exits to the appropriate
+/// virtual devices and then resumes execution.
+///
+/// # The Hero's Journey
+///
+/// ```rust
+/// # use hitz_vmm::run_loop::{run_vcpu_loop, SharedDevices, ExitReason};
+/// # use hitz_devices::{MmioBus, SerialDevice};
+/// # use hitz_hal::{GuestMemAccess, Vcpu, StandardRegs, SpecialRegs, VcpuExit};
+/// # use std::sync::{Arc, Mutex};
+/// # use std::sync::atomic::{AtomicBool, Ordering};
+/// #
+/// # // Minimal dummy struct to implement the required trait bounds for the doc test.
+/// # struct DummyVcpu;
+/// # impl Vcpu for DummyVcpu {
+/// #     fn run(&mut self) -> Result<VcpuExit, hitz_hal::HalError> { Ok(VcpuExit::Halt) }
+/// #     fn get_regs(&self) -> Result<StandardRegs, hitz_hal::HalError> { Ok(StandardRegs::default()) }
+/// #     fn set_regs(&mut self, _regs: &StandardRegs) -> Result<(), hitz_hal::HalError> { Ok(()) }
+/// #     fn get_sregs(&self) -> Result<SpecialRegs, hitz_hal::HalError> { unimplemented!() }
+/// #     fn set_sregs(&mut self, _sregs: &SpecialRegs) -> Result<(), hitz_hal::HalError> { Ok(()) }
+/// #     fn inject_interrupt(&mut self, _vector: u8) -> Result<(), hitz_hal::HalError> { Ok(()) }
+/// #     fn request_interrupt_window(&mut self) -> Result<(), hitz_hal::HalError> { Ok(()) }
+/// #     fn cancel_handle(&self) -> hitz_hal::VcpuCancelHandle { unimplemented!() }
+/// #     fn cancel_via(_handle: &hitz_hal::VcpuCancelHandle) -> Result<(), hitz_hal::HalError> { Ok(()) }
+/// # }
+/// #
+/// # struct DummyMem;
+/// # impl GuestMemAccess for DummyMem {
+/// #     fn read(&self, _gpa: u64, _buf: &mut [u8]) -> Result<(), hitz_hal::HalError> { Ok(()) }
+/// #     fn write(&self, _gpa: u64, _buf: &[u8]) -> Result<(), hitz_hal::HalError> { Ok(()) }
+/// # }
+/// #
+/// # let mut vcpu = DummyVcpu;
+/// # let mem = DummyMem;
+/// let devices = Mutex::new(SharedDevices {
+///     serial: SerialDevice::new(std::io::sink()),
+///     mmio_bus: MmioBus::new(),
+/// });
+/// let stop_flag = AtomicBool::new(false);
+///
+/// // Hand over control to the run loop!
+/// let result = run_vcpu_loop(&mut vcpu, &devices, &mem, &stop_flag);
+///
+/// // In this dummy example, the vCPU immediately halts.
+/// assert!(matches!(result.unwrap(), ExitReason::Halt));
+/// ```
+///
+/// # The Fine Print
+///
 /// Returns when the guest halts, shuts down, or hits an unrecoverable exit.
 ///
-/// # Arguments
+/// ## Arguments
 ///
 /// * `vcpu` — the virtual processor to run (must already have registers configured)
 /// * `devices` — shared device state (serial + MMIO bus) behind a mutex
 /// * `mem` — guest physical memory accessor for DMA operations
 /// * `stop_flag` — set to `true` by another thread to cancel the run loop
 ///
-/// # Panics
+/// ## Panics
 ///
 /// Panics if the device mutex is poisoned (a vCPU thread panicked while
 /// holding the lock). This is intentional — a poisoned lock means the

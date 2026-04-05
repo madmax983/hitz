@@ -38,7 +38,34 @@ pub struct DecodedMmio {
 
 /// Decode an x86 MMIO instruction from raw bytes.
 ///
-/// Returns `None` if the instruction is not a recognized MOV pattern.
+/// # Abstract
+///
+/// Decodes a memory-mapped I/O (MMIO) instruction that triggered a VM exit.
+/// WHP provides the raw instruction bytes but does not decode them. This function
+/// identifies the source/destination register, the size of the access, and any
+/// immediate values involved.
+///
+/// # The Hero's Journey
+///
+/// ```rust
+/// use hitz_vmm::mmio_decode::decode_mmio_instruction;
+///
+/// // Example: `mov dword ptr [rip+disp32], 0x12345678` (write immediate)
+/// // C7 05 = opcode and ModR/M
+/// // 00 00 00 00 = displacement
+/// // 78 56 34 12 = immediate
+/// let bytes = [0xC7, 0x05, 0x00, 0x00, 0x00, 0x00, 0x78, 0x56, 0x34, 0x12];
+/// let decoded = decode_mmio_instruction(&bytes).unwrap();
+///
+/// assert_eq!(decoded.size, 4); // 32-bit access
+/// assert_eq!(decoded.immediate, Some(0x12345678));
+/// ```
+///
+/// # The Fine Print
+///
+/// Returns `None` if the instruction is not a recognized `MOV` pattern.
+/// The `register` field corresponds to x86 standard register indexing
+/// (0 = RAX, 1 = RCX, etc.).
 #[must_use]
 pub fn decode_mmio_instruction(bytes: &[u8]) -> Option<DecodedMmio> {
     if bytes.is_empty() {

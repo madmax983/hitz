@@ -191,8 +191,30 @@ const fn build_tss_descriptor(base: u64, limit: u64) -> (u64, u64) {
 
 /// Write the GDT entries into guest memory at [`GDT_GPA`].
 ///
+/// # Abstract
+///
+/// Bootstraps the Global Descriptor Table (GDT) directly into guest memory.
+/// This enables the VM to transition seamlessly into 64-bit long mode.
+///
+/// # The Hero's Journey
+///
+/// ```rust
+/// use hitz_vmm::GuestMemory;
+/// use hitz_vmm::boot_regs::{write_gdt, GDT_GPA};
+/// use hitz_hal::Gpa;
+///
+/// let mut mem = GuestMemory::new();
+/// mem.add_region(Gpa::new(0), 4096).unwrap(); // Add dummy memory
+///
+/// // Inject the GDT into memory
+/// write_gdt(&mem).unwrap();
+/// ```
+///
+/// # The Fine Print
+///
 /// The GDT contains: `[null, code64, data64, tss_low, tss_high]`.
 /// The TSS descriptor spans two GDT slots (16 bytes for 64-bit TSS).
+/// Returns a `MemError` if the intended memory region is not mapped.
 pub fn write_gdt(mem: &GuestMemory) -> Result<(), MemError> {
     let (tss_low, tss_high) = build_tss_descriptor(TSS_GPA, TSS_SIZE - 1);
     let entries = [GDT_NULL, GDT_CODE64, GDT_DATA64, tss_low, tss_high];
@@ -206,8 +228,44 @@ pub fn write_gdt(mem: &GuestMemory) -> Result<(), MemError> {
 /// Configure a vCPU's special registers for 64-bit long mode with the given
 /// page table root (PML4 GPA, for CR3).
 ///
+/// # Abstract
+///
+/// Transitions a virtual CPU directly into 64-bit long mode, bypassing real mode and
+/// 32-bit protected mode. It configures the CPU's control registers, EFER, and segment
+/// descriptors to point to the correct GDT/IDT locations.
+///
+/// # The Hero's Journey
+///
+/// ```rust
+/// # use hitz_vmm::boot_regs::configure_sregs;
+/// # use hitz_hal::{Gpa, Vcpu, SpecialRegs, StandardRegs, VcpuExit};
+/// #
+/// # // Minimal dummy struct to implement the required trait bounds for the doc test.
+/// # struct DummyVcpu;
+/// # impl Vcpu for DummyVcpu {
+/// #     fn run(&mut self) -> Result<VcpuExit, hitz_hal::HalError> { Ok(VcpuExit::Halt) }
+/// #     fn get_regs(&self) -> Result<StandardRegs, hitz_hal::HalError> { Ok(StandardRegs::default()) }
+/// #     fn set_regs(&mut self, _regs: &StandardRegs) -> Result<(), hitz_hal::HalError> { Ok(()) }
+/// #     fn get_sregs(&self) -> Result<SpecialRegs, hitz_hal::HalError> { unimplemented!() }
+/// #     fn set_sregs(&mut self, _sregs: &SpecialRegs) -> Result<(), hitz_hal::HalError> { Ok(()) }
+/// #     fn inject_interrupt(&mut self, _vector: u8) -> Result<(), hitz_hal::HalError> { Ok(()) }
+/// #     fn request_interrupt_window(&mut self) -> Result<(), hitz_hal::HalError> { Ok(()) }
+/// #     fn cancel_handle(&self) -> hitz_hal::VcpuCancelHandle { unimplemented!() }
+/// #     fn cancel_via(_handle: &hitz_hal::VcpuCancelHandle) -> Result<(), hitz_hal::HalError> { Ok(()) }
+/// # }
+/// #
+/// # let mut vcpu = DummyVcpu;
+/// let pml4_gpa = Gpa::new(0x2000); // Address of page tables
+///
+/// // Configure the virtual CPU for long mode
+/// configure_sregs(&mut vcpu, pml4_gpa).unwrap();
+/// ```
+///
+/// # The Fine Print
+///
 /// This sets CR0, CR3, CR4, EFER, segment registers (CS/DS/ES/FS/GS/SS),
-/// TR, LDT, GDT, and IDT.
+/// TR, LDT, GDT, and IDT. Ensure the provided `pml4_gpa` corresponds to a valid
+/// set of pre-configured page tables in guest memory.
 pub fn configure_sregs(vcpu: &mut impl Vcpu, pml4_gpa: Gpa) -> Result<(), hitz_hal::HalError> {
     // GDT limit = 5 entries * 8 bytes - 1 = 39; always fits u16.
     #[allow(clippy::cast_possible_truncation)]
@@ -258,9 +316,45 @@ pub fn configure_sregs(vcpu: &mut impl Vcpu, pml4_gpa: Gpa) -> Result<(), hitz_h
 
 /// Configure a vCPU's general-purpose registers for the Linux boot entry point.
 ///
+/// # Abstract
+///
+/// Prepares the CPU to start executing the Linux kernel. It sets the instruction
+/// pointer to the kernel's entry point and passes the location of the `boot_params`
+/// structure as required by the Linux boot protocol.
+///
+/// # The Hero's Journey
+///
+/// ```rust
+/// # use hitz_vmm::boot_regs::configure_regs;
+/// # use hitz_hal::{Gpa, Vcpu, SpecialRegs, StandardRegs, VcpuExit};
+/// #
+/// # // Minimal dummy struct to implement the required trait bounds for the doc test.
+/// # struct DummyVcpu;
+/// # impl Vcpu for DummyVcpu {
+/// #     fn run(&mut self) -> Result<VcpuExit, hitz_hal::HalError> { Ok(VcpuExit::Halt) }
+/// #     fn get_regs(&self) -> Result<StandardRegs, hitz_hal::HalError> { Ok(StandardRegs::default()) }
+/// #     fn set_regs(&mut self, _regs: &StandardRegs) -> Result<(), hitz_hal::HalError> { Ok(()) }
+/// #     fn get_sregs(&self) -> Result<SpecialRegs, hitz_hal::HalError> { unimplemented!() }
+/// #     fn set_sregs(&mut self, _sregs: &SpecialRegs) -> Result<(), hitz_hal::HalError> { Ok(()) }
+/// #     fn inject_interrupt(&mut self, _vector: u8) -> Result<(), hitz_hal::HalError> { Ok(()) }
+/// #     fn request_interrupt_window(&mut self) -> Result<(), hitz_hal::HalError> { Ok(()) }
+/// #     fn cancel_handle(&self) -> hitz_hal::VcpuCancelHandle { unimplemented!() }
+/// #     fn cancel_via(_handle: &hitz_hal::VcpuCancelHandle) -> Result<(), hitz_hal::HalError> { Ok(()) }
+/// # }
+/// #
+/// # let mut vcpu = DummyVcpu;
+/// let entry_point = Gpa::new(0x100000); // Kernel entry point
+/// let boot_params_gpa = Gpa::new(0x7000); // Location of boot_params
+///
+/// // Prepare the CPU to boot Linux
+/// configure_regs(&mut vcpu, entry_point, boot_params_gpa).unwrap();
+/// ```
+///
+/// # The Fine Print
+///
 /// - `RIP` = kernel entry point
 /// - `RSI` = `boot_params` GPA (Linux protocol: RSI points to zero page)
-/// - `RSP` = top of a small boot stack
+/// - `RSP` = top of a small boot stack (defaults to 0, which is fine since the kernel sets its own)
 /// - `RFLAGS` = 0x2 (reserved bit set)
 pub fn configure_regs(
     vcpu: &mut impl Vcpu,

@@ -57,6 +57,7 @@ mod tests {
     use hitz_devices::VsockHdr;
 
     #[test]
+    #[allow(clippy::expect_used)]
     fn should_create_matched_pairs_and_route_messages_correctly() {
         let (handle, rx_receiver, tx_sender) = VsockIoHandle::new_pair();
 
@@ -88,7 +89,7 @@ mod tests {
 
         // 2. Device sends to Host (tx direction)
         tx_sender
-            .send((dummy_hdr.clone(), vec![1, 2, 3]))
+            .send((dummy_hdr, vec![1, 2, 3]))
             .expect("failed to send device->host");
 
         let (received_hdr, payload) = handle
