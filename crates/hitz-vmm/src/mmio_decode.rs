@@ -20,7 +20,7 @@ use hitz_hal::StandardRegs;
 
 /// Decoded MMIO instruction information.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DecodedMmio {
+pub(crate) struct DecodedMmio {
     /// GP register index 0–15 (x86 encoding order).
     ///
     /// 0=RAX, 1=RCX, 2=RDX, 3=RBX, 4=RSP, 5=RBP, 6=RSI, 7=RDI, 8–15=R8–R15.

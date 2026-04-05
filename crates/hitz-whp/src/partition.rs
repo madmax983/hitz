@@ -13,7 +13,7 @@ use windows::Win32::System::Hypervisor::{
 use crate::vcpu::WhpVcpu;
 
 /// Shared state for a WHP partition, accessible by all vCPUs.
-pub struct PartitionInner {
+pub(crate) struct PartitionInner {
     /// The WHP partition handle.
     pub(crate) handle: WHV_PARTITION_HANDLE,
 }

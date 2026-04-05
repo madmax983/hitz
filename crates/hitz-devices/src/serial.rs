@@ -23,7 +23,7 @@ const UART_PORT_COUNT: u16 = 8;
 /// `type E = Infallible` guarantees `trigger()` can never fail, which
 /// lets the serial device compile without an interrupt delivery backend.
 #[derive(Debug, Clone, Copy)]
-pub struct NoopTrigger;
+pub(crate) struct NoopTrigger;
 
 impl Trigger for NoopTrigger {
     type E = Infallible;
