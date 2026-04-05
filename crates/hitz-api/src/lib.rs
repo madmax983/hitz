@@ -18,6 +18,12 @@
 
 use std::path::PathBuf;
 
+#[cfg(feature = "health_check")]
+/// Health assessment module for evaluating system telemetry.
+pub mod health;
+#[cfg(feature = "health_check")]
+pub use health::*;
+
 use serde::{Deserialize, Serialize};
 
 /// Default kernel command line for Linux direct boot.
