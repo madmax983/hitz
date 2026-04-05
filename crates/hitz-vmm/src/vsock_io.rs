@@ -58,6 +58,7 @@ mod tests {
     use hitz_devices::VsockHdr;
 
     #[test]
+    #[allow(clippy::expect_used)]
     fn should_create_matched_pairs_and_route_messages_correctly() {
         let (handle, rx_receiver, tx_sender) = VsockIoHandle::new_pair();
 
