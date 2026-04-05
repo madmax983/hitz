@@ -52,6 +52,7 @@ impl VsockIoHandle {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used)]
 mod tests {
     use super::*;
     use hitz_devices::VsockHdr;
@@ -88,7 +89,7 @@ mod tests {
 
         // 2. Device sends to Host (tx direction)
         tx_sender
-            .send((dummy_hdr.clone(), vec![1, 2, 3]))
+            .send((dummy_hdr, vec![1, 2, 3]))
             .expect("failed to send device->host");
 
         let (received_hdr, payload) = handle
