@@ -857,6 +857,7 @@ dependencies = [
  "hitz-api",
  "hitz-devices",
  "hitz-hal",
+ "hitz-net",
  "hitz-vmm",
  "hitz-whp",
  "http-body-util",

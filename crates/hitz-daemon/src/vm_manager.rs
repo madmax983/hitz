@@ -374,9 +374,6 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
         // Persist Running state before spawning the VM task.
         self.store.save_state(id, VmState::Running)?;
 
-        // Inject guest agent overlay into initramfs if agent is enabled.
-        let boot_config = inject_guest_agent(config, id);
-
         // Record guest RAM size as a one-shot gauge.
         {
             let meter = opentelemetry::global::meter("hitz");
@@ -389,6 +386,9 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
                 &[KeyValue::new("vm.id", id.to_string())],
             );
         }
+
+        // Inject guest agent overlay into initramfs if agent is enabled.
+        let boot_config = inject_guest_agent(config, id);
 
         // Increment the running-VM count.
         self.vm_count.add(1, &[KeyValue::new("state", "running")]);
@@ -404,7 +404,9 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
         // The host-facing ends are consumed by the async metrics task;
         // the device-facing ends are passed to boot_and_run via BootExtras.
         // On-demand pull is a future enhancement; only push-to-OTel is wired here.
-        let extras = if matches!(
+        let mut extras = hitz_vmm::BootExtras::none();
+
+        if matches!(
             boot_config.guest_agent,
             hitz_api::GuestAgentMode::Auto | hitz_api::GuestAgentMode::Custom(_)
         ) {
@@ -418,12 +420,8 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
                 handle.rx_tx,
                 shutdown_rx,
             )));
-            hitz_vmm::BootExtras {
-                vsock_channels: Some((rx_receiver, tx_sender)),
-            }
-        } else {
-            hitz_vmm::BootExtras::none()
-        };
+            extras.vsock_channels = Some((rx_receiver, tx_sender));
+        }
 
         let store_exit = Arc::clone(&self.store);
 
@@ -440,6 +438,42 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
 
             // Start port forwarders if networking is configured and rules exist.
             let _port_fwd = start_port_forwarding(&boot_config).await;
+
+            // Start network interface if configured
+            let mut _net_io_handle = None;
+            if let Some(ref net_cfg) = boot_config.net {
+                let guest_mac = if let Some(ref mac_str) = net_cfg.mac {
+                    hitz_net::parse_mac(mac_str).unwrap_or_else(|_| hitz_net::random_mac())
+                } else {
+                    hitz_net::random_mac()
+                };
+
+                let gateway_mac: [u8; 6] = [0xAA, 0xBB, 0xCC, 0x00, 0x00, 0x01];
+                let (gateway_ip, _) = hitz_net::parse_cidr(&net_cfg.host_ip).unwrap_or(([0; 4], 0));
+
+                let (tx_sender, tx_receiver) = crossbeam_channel::unbounded();
+                let (rx_sender, rx_receiver) = crossbeam_channel::unbounded();
+
+                let adapter_name = net_cfg.adapter_name.as_deref().unwrap_or("hitz-net");
+
+                match hitz_net::start_net_io(
+                    adapter_name,
+                    &net_cfg.host_ip,
+                    guest_mac,
+                    gateway_mac,
+                    gateway_ip,
+                    tx_receiver,
+                    rx_sender,
+                ) {
+                    Ok(handle) => {
+                        _net_io_handle = Some(handle);
+                        extras.net_channels = Some((guest_mac, rx_receiver, tx_sender));
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to start network IO: {}", e);
+                    }
+                }
+            }
 
             let result = tokio::task::spawn_blocking(move || {
                 hitz_vmm::boot_and_run(&*hv, &boot_config, serial_buf, stop_flag, extras)

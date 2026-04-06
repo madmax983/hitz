@@ -57,14 +57,24 @@ impl VirtioNetDevice {
         let (tx_sender, tx_receiver) = crossbeam_channel::unbounded();
         let (rx_sender, rx_receiver) = crossbeam_channel::unbounded();
 
-        let device = Self {
+        let device = Self::with_channels(mac, rx_receiver, tx_sender);
+
+        (device, tx_receiver, rx_sender)
+    }
+
+    /// Construct a virtio-net device using existing channels.
+    #[must_use]
+    pub fn with_channels(
+        mac: [u8; 6],
+        rx_receiver: Receiver<Vec<u8>>,
+        tx_sender: Sender<Vec<u8>>,
+    ) -> Self {
+        Self {
             mac,
             tx_sender,
             rx_receiver,
             rx_pending: VecDeque::new(),
-        };
-
-        (device, tx_receiver, rx_sender)
+        }
     }
 
     /// Process a TX descriptor chain: read the guest's outgoing frame,

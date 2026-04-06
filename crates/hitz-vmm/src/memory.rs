@@ -11,7 +11,7 @@
 //!
 //! # The Hero's Journey
 //! ```
-//! # use hitz_vmm::memory::GuestMemory;
+//! # use hitz_vmm::GuestMemory;
 //! # use hitz_hal::Gpa;
 //! // 1. Create the empty memory manager.
 //! let mut mem = GuestMemory::new();
@@ -86,7 +86,7 @@ impl Drop for GuestRegion {
 ///
 /// # Examples
 /// ```
-/// # use hitz_vmm::memory::GuestMemory;
+/// # use hitz_vmm::GuestMemory;
 /// # use hitz_hal::Gpa;
 /// let mut mem = GuestMemory::new();
 /// mem.add_region(Gpa::new(0x1000), 4096).unwrap();
@@ -106,7 +106,7 @@ impl GuestMemory {
     ///
     /// # Examples
     /// ```
-    /// # use hitz_vmm::memory::GuestMemory;
+    /// # use hitz_vmm::GuestMemory;
     /// let mem = GuestMemory::new();
     /// ```
     #[must_use]
@@ -246,7 +246,7 @@ impl GuestMemory {
     ///
     /// # Examples
     /// ```
-    /// # use hitz_vmm::memory::GuestMemory;
+    /// # use hitz_vmm::GuestMemory;
     /// # use hitz_hal::Gpa;
     /// let mut mem = GuestMemory::new();
     /// mem.add_region(Gpa::new(0), 4096).unwrap();
@@ -269,7 +269,7 @@ impl GuestMemory {
     ///
     /// # Examples
     /// ```
-    /// # use hitz_vmm::memory::GuestMemory;
+    /// # use hitz_vmm::GuestMemory;
     /// # use hitz_hal::Gpa;
     /// let mut mem = GuestMemory::new();
     /// mem.add_region(Gpa::new(0), 4096).unwrap();

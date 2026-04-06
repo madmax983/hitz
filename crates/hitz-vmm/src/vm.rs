@@ -20,13 +20,11 @@ use hitz_devices::MmioBus;
 use hitz_devices::SerialDevice;
 use hitz_devices::VirtioBlockDevice;
 use hitz_devices::VirtioMmioTransport;
-use hitz_devices::VirtioNetDevice;
 use hitz_devices::VirtioVsockDevice;
 use hitz_devices::VsockPacket;
 use hitz_hal::{
     Gpa, GuestMemAccess, Hypervisor, MemFlags, MemSizeMiB, Partition, PartitionConfig, Vcpu, VcpuId,
 };
-use hitz_net::{parse_cidr, parse_mac, random_mac};
 
 use crate::boot_regs;
 use crate::memory::GuestMemory;
@@ -78,15 +76,27 @@ pub struct BootExtras {
         crossbeam_channel::Receiver<VsockPacket>,
         crossbeam_channel::Sender<VsockPacket>,
     )>,
+    /// Device-facing network channel ends and MAC:
+    /// - `.0`: MAC address for the guest interface
+    /// - `.1`: receiver for host→guest RX packets (device reads from this)
+    /// - `.2`: sender for guest→host TX packets (device writes to this)
+    ///
+    /// If `None`, no virtio-net device is instantiated regardless of `VmConfig`.
+    pub net_channels: Option<(
+        [u8; 6],
+        crossbeam_channel::Receiver<Vec<u8>>,
+        crossbeam_channel::Sender<Vec<u8>>,
+    )>,
 }
 
 impl BootExtras {
-    /// No vsock channels — used when the guest agent is disabled or the
-    /// caller (CLI, tests) does not need vsock.
+    /// No extra channels — used when the guest agent/networking is disabled or the
+    /// caller (CLI, tests) does not need them.
     #[must_use]
     pub const fn none() -> Self {
         Self {
             vsock_channels: None,
+            net_channels: None,
         }
     }
 }
@@ -150,7 +160,7 @@ pub enum VmError {
 /// # The Hero's Journey
 /// ```rust
 /// # use hitz_vmm::VmRunResult;
-/// # use hitz_vmm::run_loop::ExitReason;
+/// # use hitz_vmm::ExitReason;
 /// #
 /// let result = VmRunResult {
 ///     exit_reason: ExitReason::Halt,
@@ -209,6 +219,33 @@ pub struct VmRunResult {
 /// Validation is strictly a pre-flight check. It verifies the *existence* of the files,
 /// but does not parse them to verify they are valid ELF/bzImage kernels, valid cpio
 /// archives, or valid raw disk images.
+/// Simple internal helper to extract the 4 octets from a CIDR string (e.g. "192.168.1.1/24").
+fn parse_ip_octets(ip: &str) -> Result<[u8; 4], VmError> {
+    let mut parts = ip.split('/');
+    let ip_str = parts.next().unwrap_or("");
+    let mut octets = [0u8; 4];
+    let mut idx = 0;
+    for part in ip_str.split('.') {
+        if idx >= 4 {
+            return Err(VmError::Config(format!("Invalid IP format: {ip}")));
+        }
+        octets[idx] = part
+            .parse::<u8>()
+            .map_err(|_| VmError::Config(format!("Invalid IP octet in: {ip}")))?;
+        idx += 1;
+    }
+    if idx != 4 {
+        return Err(VmError::Config(format!("Invalid IP format: {ip}")));
+    }
+    Ok(octets)
+}
+
+/// # Abstract
+/// Validates a [`VmConfig`] prior to initiating the boot sequence.
+///
+/// Ensures that all requisite file paths (such as the kernel, initramfs, and disk images)
+/// exist on the host filesystem. This prevents the VM from attempting a boot sequence
+/// that is doomed to fail due to missing dependencies.
 pub fn validate_config(config: &VmConfig) -> Result<(), VmError> {
     if !config.kernel_path.exists() {
         return Err(VmError::Config(format!(
@@ -434,8 +471,8 @@ pub fn boot_and_run<H: Hypervisor, W: Write + Send + 'static>(
 
     // Append static IP configuration for the guest's network interface.
     if let Some(ref net_cfg) = config.net {
-        let (guest_ip, _) = parse_cidr(&net_cfg.guest_ip).map_err(VmError::Config)?;
-        let (gateway_ip, _) = parse_cidr(&net_cfg.host_ip).map_err(VmError::Config)?;
+        let guest_ip = parse_ip_octets(&net_cfg.guest_ip)?;
+        let gateway_ip = parse_ip_octets(&net_cfg.host_ip)?;
         let _ = write!(
             cmdline,
             " ip={}.{}.{}.{}::{}.{}.{}.{}:255.255.255.0::eth0:off",
@@ -507,44 +544,16 @@ pub fn boot_and_run<H: Hypervisor, W: Write + Send + 'static>(
     }
 
     // ── 13b. Optional virtio-net ──
-    //
-    // The `net_io_handle` must stay alive until after the run loop exits;
-    // its `Drop` impl signals the I/O thread to stop and joins it.
-    let net_io_handle: Option<hitz_net::NetIoHandle> = if let Some(ref net_cfg) = config.net {
-        let guest_mac = if let Some(ref mac_str) = net_cfg.mac {
-            parse_mac(mac_str).map_err(VmError::Config)?
-        } else {
-            random_mac()
-        };
-
-        let gateway_mac: [u8; 6] = [0xAA, 0xBB, 0xCC, 0x00, 0x00, 0x01];
-        let (gateway_ip, _) = parse_cidr(&net_cfg.host_ip).map_err(VmError::Config)?;
-
-        let (net_dev, tx_receiver, rx_sender) = VirtioNetDevice::new(guest_mac);
+    if let Some((guest_mac, rx_receiver, tx_sender)) = extras.net_channels {
+        // Construct the virtio-net device using channels passed down from hitz-daemon via BootExtras.
+        let net_dev =
+            hitz_devices::VirtioNetDevice::with_channels(guest_mac, rx_receiver, tx_sender);
 
         let mem: Arc<dyn GuestMemAccess> = guest_mem_arc.clone();
         let net_transport = VirtioMmioTransport::new(net_dev, mem, VIRTIO_IRQ_NET);
         let net_base = VIRTIO_MMIO_BASE + VIRTIO_MMIO_SIZE;
         mmio_bus.register(net_base, VIRTIO_MMIO_SIZE, Box::new(net_transport));
-
-        // Removed unnecessary `.clone()` and `String` allocation for the default adapter name.
-        let adapter_name = net_cfg.adapter_name.as_deref().unwrap_or("hitz-net");
-
-        let handle = hitz_net::start_net_io(
-            adapter_name,
-            &net_cfg.host_ip,
-            guest_mac,
-            gateway_mac,
-            gateway_ip,
-            tx_receiver,
-            rx_sender,
-        )
-        .map_err(|e| VmError::Config(format!("network setup: {e}")))?;
-
-        Some(handle)
-    } else {
-        None
-    };
+    }
 
     // ── 13c. Optional virtio-vsock (guest metrics agent) ──────────────────────
     //
@@ -586,7 +595,6 @@ pub fn boot_and_run<H: Hypervisor, W: Write + Send + 'static>(
         // Ensure watchdog exits (set flag so it doesn't spin forever on normal exit).
         stop_flag.store(true, Ordering::Relaxed);
         let _ = watchdog.join();
-        drop(net_io_handle);
         return Ok(VmRunResult { exit_reason });
     }
 
@@ -702,7 +710,6 @@ pub fn boot_and_run<H: Hypervisor, W: Write + Send + 'static>(
         let _ = handle.join();
     }
 
-    drop(net_io_handle);
     Ok(VmRunResult {
         exit_reason: final_reason,
     })

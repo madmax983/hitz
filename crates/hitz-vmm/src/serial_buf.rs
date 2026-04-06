@@ -9,7 +9,7 @@
 //!
 //! # The Hero's Journey
 //! ```
-//! # use hitz_vmm::serial_buf::SerialBuf;
+//! # use hitz_vmm::SerialBuf;
 //! # use std::io::Write;
 //! // 1. Create a new serial buffer.
 //! let mut buf = SerialBuf::new();
@@ -22,7 +22,7 @@
 //!
 //! // 4. The reader can then pull bytes out.
 //! # tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap().block_on(async {
-//! let bytes = reader.read_chunk().await.unwrap();
+//! let bytes: Vec<u8> = reader.read_chunk().await.unwrap();
 //! assert_eq!(&bytes, b"Booting hitz VM...");
 //! # });
 //! ```
@@ -67,7 +67,7 @@ impl SerialBuf {
     ///
     /// # Examples
     /// ```
-    /// # use hitz_vmm::serial_buf::SerialBuf;
+    /// # use hitz_vmm::SerialBuf;
     /// let mut buf = SerialBuf::new();
     /// ```
     ///
