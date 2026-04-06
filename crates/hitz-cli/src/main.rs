@@ -12,6 +12,9 @@
 mod analyzer;
 mod pipe_client;
 
+use comfy_table::presets::UTF8_FULL;
+use comfy_table::{Cell, Color, Table};
+use crossterm::style::Stylize;
 use std::ffi::OsString;
 use std::io::{BufWriter, Write, stdout};
 use std::path::PathBuf;
@@ -1068,7 +1071,6 @@ fn print_action_result(
 }
 
 async fn handle_vm_create(args: &VmCreateArgs) -> Result<()> {
-    use crossterm::style::Stylize;
     let net = if args.net {
         Some(hitz_api::NetConfig {
             mac: args.mac.clone(),
@@ -1213,7 +1215,6 @@ async fn handle_vm_status(args: &VmIdArgs) -> Result<()> {
     if status.is_success() {
         if let Ok(info) = serde_json::from_str::<hitz_api::VmInfo>(&resp) {
             use comfy_table::presets::NOTHING;
-            use comfy_table::{Cell, Color, Table};
 
             let mut table = Table::new();
             let _ = table.load_preset(NOTHING);
@@ -1330,7 +1331,6 @@ async fn handle_vm_list(args: &VmListArgs) -> Result<()> {
         pipe_client::pipe_request(&args.pipe, args.tcp, Method::GET, "/vms", None).await?;
     if status.is_success() {
         if let Ok(vms) = serde_json::from_str::<Vec<hitz_api::VmInfo>>(&resp) {
-            use comfy_table::{Cell, Color, Table};
             let mut table = Table::new();
             let _ = table.set_header(vec!["ID", "State", "RAM (MiB)", "CPUs", "Exit Reason"]);
 
@@ -1699,7 +1699,6 @@ async fn handle_vm_metrics(args: &VmIdArgs) -> Result<()> {
 }
 
 async fn handle_vm_record(args: &VmRecordArgs) -> Result<()> {
-    use crossterm::style::Stylize;
     use std::time::Instant;
 
     let mut file = std::fs::OpenOptions::new()
@@ -1802,7 +1801,6 @@ async fn handle_vm_export_metrics(args: &VmExportArgs) -> Result<()> {
             serde_json::from_str(&resp).context("failed to parse metrics response")?;
         let json = serde_json::to_string_pretty(&snap).context("failed to serialize metrics")?;
         std::fs::write(&args.out, json).context("failed to write metrics export to file")?;
-        use crossterm::style::Stylize;
         println!(
             "{}",
             format!("✓ Exported metrics to {}", args.out.display()).green()
@@ -1846,9 +1844,8 @@ fn run_vm_command(cmd: VmCommand) -> Result<()> {
     })
 }
 
+#[allow(clippy::too_many_lines)]
 async fn handle_vm_analyze(args: &VmIdArgs) -> Result<()> {
-    use crossterm::style::Stylize;
-
     println!("{}", format!("Analyzing VM '{}'...", args.id).cyan());
 
     // Fetch VM Info
@@ -1883,7 +1880,7 @@ async fn handle_vm_analyze(args: &VmIdArgs) -> Result<()> {
     let info: hitz_api::VmInfo = match serde_json::from_str(&resp_info) {
         Ok(i) => i,
         Err(e) => {
-            println!("{}", format!("✗ Failed to parse VM info: {}", e).red());
+            println!("{}", format!("✗ Failed to parse VM info: {e}").red());
             return Ok(());
         }
     };
@@ -1932,40 +1929,48 @@ async fn handle_vm_analyze(args: &VmIdArgs) -> Result<()> {
     let metrics: hitz_api::MetricsSnapshot = match serde_json::from_str(&resp_metrics) {
         Ok(m) => m,
         Err(e) => {
-            println!("{}", format!("✗ Failed to parse VM metrics: {}", e).red());
+            println!("{}", format!("✗ Failed to parse VM metrics: {e}").red());
             return Ok(());
         }
     };
 
     let insights = analyzer::analyze_vm(&info, &metrics);
 
-    println!("\nAnalysis Report for VM '{}'", args.id);
-    println!("----------------------------------------");
+    let mut table = Table::new();
+    let _ = table.load_preset(UTF8_FULL).set_header(vec![
+        Cell::new("Level").add_attribute(comfy_table::Attribute::Bold),
+        Cell::new("Message").add_attribute(comfy_table::Attribute::Bold),
+    ]);
+
+    println!(
+        "\n{}",
+        format!("📊 Analysis Report for VM '{}'", args.id)
+            .bold()
+            .cyan()
+    );
 
     if insights.is_empty() {
-        println!("{}", "No insights generated.".dark_grey());
+        let _ = table.add_row(vec![
+            Cell::new("OK").fg(Color::Green),
+            Cell::new("No issues detected. VM is running smoothly.").fg(Color::Green),
+        ]);
     } else {
-        use comfy_table::presets::NOTHING;
-        use comfy_table::{Cell, Color, Table};
-        let mut table = Table::new();
-        let _ = table.load_preset(NOTHING);
-
         for insight in insights {
             let (level_cell, msg_cell) = match insight.level {
                 analyzer::WarningLevel::Critical => (
-                    Cell::new("[CRIT]")
+                    Cell::new("CRIT")
                         .fg(Color::Red)
                         .add_attribute(comfy_table::Attribute::Bold),
                     Cell::new(insight.message).fg(Color::Red),
                 ),
                 analyzer::WarningLevel::Warning => (
-                    Cell::new("[WARN]")
+                    Cell::new("WARN")
                         .fg(Color::Yellow)
                         .add_attribute(comfy_table::Attribute::Bold),
                     Cell::new(insight.message).fg(Color::Yellow),
                 ),
                 analyzer::WarningLevel::Info => (
-                    Cell::new("[INFO]")
+                    Cell::new("INFO")
                         .fg(Color::Blue)
                         .add_attribute(comfy_table::Attribute::Bold),
                     Cell::new(insight.message),
@@ -1973,8 +1978,8 @@ async fn handle_vm_analyze(args: &VmIdArgs) -> Result<()> {
             };
             let _ = table.add_row(vec![level_cell, msg_cell]);
         }
-        println!("{table}");
     }
+    println!("{table}");
 
     Ok(())
 }
