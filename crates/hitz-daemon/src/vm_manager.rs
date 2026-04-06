@@ -374,9 +374,6 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
         // Persist Running state before spawning the VM task.
         self.store.save_state(id, VmState::Running)?;
 
-        // Inject guest agent overlay into initramfs if agent is enabled.
-        let boot_config = inject_guest_agent(config, id);
-
         // Record guest RAM size as a one-shot gauge.
         {
             let meter = opentelemetry::global::meter("hitz");
@@ -389,6 +386,9 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
                 &[KeyValue::new("vm.id", id.to_string())],
             );
         }
+
+        // Inject guest agent overlay into initramfs if agent is enabled.
+        let boot_config = inject_guest_agent(config, id);
 
         // Increment the running-VM count.
         self.vm_count.add(1, &[KeyValue::new("state", "running")]);

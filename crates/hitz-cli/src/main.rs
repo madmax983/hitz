@@ -1067,27 +1067,27 @@ fn print_action_result(
     }
 }
 
-async fn handle_vm_create(args: &VmCreateArgs) -> Result<()> {
-    use crossterm::style::Stylize;
+async fn handle_vm_create(args: Box<VmCreateArgs>) -> Result<()> {
+    let args = *args;
     let net = if args.net {
         Some(hitz_api::NetConfig {
-            mac: args.mac.clone(),
-            host_ip: args.host_ip.clone(),
-            guest_ip: args.guest_ip.clone(),
+            mac: args.mac,
+            host_ip: args.host_ip,
+            guest_ip: args.guest_ip,
             adapter_name: None,
         })
     } else {
         None
     };
     let config = VmConfig {
-        kernel_path: args.kernel.clone(),
-        initramfs_path: args.initramfs.clone(),
-        disk_path: args.disk.clone(),
+        kernel_path: args.kernel,
+        initramfs_path: args.initramfs,
+        disk_path: args.disk,
         ram_mib: args.ram,
         cpus: args.cpus,
-        cmdline: Some(args.cmdline.clone()),
+        cmdline: Some(args.cmdline),
         net,
-        ports: args.ports.clone(),
+        ports: args.ports,
         guest_cid: DEFAULT_GUEST_CID,
         guest_agent: GuestAgentMode::Auto,
     };
@@ -1100,6 +1100,7 @@ async fn handle_vm_create(args: &VmCreateArgs) -> Result<()> {
         Some(&body),
     )
     .await?;
+
     print_action_result(
         status,
         &resp,
@@ -1109,7 +1110,8 @@ async fn handle_vm_create(args: &VmCreateArgs) -> Result<()> {
     Ok(())
 }
 
-async fn handle_vm_clone(args: &VmCloneArgs) -> Result<()> {
+async fn handle_vm_clone(args: Box<VmCloneArgs>) -> Result<()> {
+    let args = *args;
     let body = serde_json::to_string(&CloneVmRequest {
         dest_id: args.dest_id.clone(),
     })
@@ -1827,8 +1829,8 @@ fn run_vm_command(cmd: VmCommand) -> Result<()> {
 
     rt.block_on(async {
         match cmd {
-            VmCommand::Create(args) => handle_vm_create(&args).await,
-            VmCommand::Clone(args) => handle_vm_clone(&args).await,
+            VmCommand::Create(args) => handle_vm_create(args).await,
+            VmCommand::Clone(args) => handle_vm_clone(args).await,
             VmCommand::Start(args) => handle_vm_start(&args).await,
             VmCommand::Stop(args) => handle_vm_stop(&args).await,
             VmCommand::Restart(args) => handle_vm_restart(&args).await,
