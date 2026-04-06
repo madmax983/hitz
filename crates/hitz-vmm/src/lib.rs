@@ -71,7 +71,8 @@ pub(crate) mod boot_regs;
 pub(crate) mod cpio;
 pub(crate) mod error;
 pub(crate) mod memory;
-pub(crate) mod mmio_decode;
+#[doc(hidden)]
+pub mod mmio_decode;
 pub(crate) mod run_loop;
 pub(crate) mod serial_buf;
 pub(crate) mod vm;
@@ -85,6 +86,7 @@ pub use run_loop::{ExitReason, SharedDevices, run_vcpu_loop};
 pub use serial_buf::{SerialBuf, SerialReader};
 pub use vm::{BootExtras, VmError, VmRunResult, boot_and_run, validate_config};
 pub use vsock_io::VsockIoHandle;
+
 /// havoc
 #[cfg(test)]
 pub(crate) mod havoc;

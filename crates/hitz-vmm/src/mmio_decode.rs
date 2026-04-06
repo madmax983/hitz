@@ -18,7 +18,31 @@
 
 use hitz_hal::StandardRegs;
 
+/// # Abstract
 /// Decoded MMIO instruction information.
+///
+/// Encapsulates the parsed output of [`decode_mmio_instruction`]. It breaks down the raw
+/// bytes of an x86 `MOV` instruction into actionable components (register, size, and immediate
+/// values) for the hypervisor to emulate the memory-mapped I/O access.
+///
+/// # The Hero's Journey
+/// ```rust
+/// # use hitz_vmm::mmio_decode::{DecodedMmio, decode_mmio_instruction};
+/// // The raw instruction: `MOV eax, [rbx]`
+/// let instruction_bytes = [0x8B, 0x03];
+///
+/// let decoded = decode_mmio_instruction(&instruction_bytes)
+///     .expect("valid MMIO instruction");
+///
+/// assert_eq!(decoded.register, 0); // RAX/EAX
+/// assert_eq!(decoded.size, 4);     // 32-bit access
+/// assert_eq!(decoded.instruction_len, 2);
+/// ```
+///
+/// # The Fine Print
+/// The `instruction_len` is critical on WHP since the API does not provide the instruction
+/// length automatically on MMIO exits. You *must* advance the instruction pointer (`RIP`)
+/// by this length after emulation.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DecodedMmio {
     /// GP register index 0–15 (x86 encoding order).
@@ -36,9 +60,31 @@ pub struct DecodedMmio {
     pub instruction_len: u8,
 }
 
+/// # Abstract
 /// Decode an x86 MMIO instruction from raw bytes.
 ///
-/// Returns `None` if the instruction is not a recognized MOV pattern.
+/// Parses a stream of raw machine code bytes to identify and extract the properties of
+/// `MOV` instructions commonly used in virtio-MMIO accesses.
+///
+/// # The Hero's Journey
+/// ```rust
+/// # use hitz_vmm::mmio_decode::decode_mmio_instruction;
+/// // Example: `MOV [rip+disp32], imm32`
+/// // Writing an immediate value (0x7472_6976) to memory
+/// let bytes = [
+///     0xC7, 0x05, 0x10, 0x20, 0x30, 0x40, // opcode + ModR/M + disp32
+///     0x76, 0x69, 0x72, 0x74,             // imm32 = "virt"
+/// ];
+///
+/// let decoded = decode_mmio_instruction(&bytes).unwrap();
+/// assert_eq!(decoded.size, 4);
+/// assert_eq!(decoded.immediate, Some(0x7472_6976));
+/// ```
+///
+/// # The Fine Print
+/// Returns `None` if the instruction is not a recognized `MOV` pattern, if the byte slice
+/// is too short, or if it encounters an unsupported addressing mode (such as those requiring
+/// segment overrides).
 #[must_use]
 pub fn decode_mmio_instruction(bytes: &[u8]) -> Option<DecodedMmio> {
     if bytes.is_empty() {
