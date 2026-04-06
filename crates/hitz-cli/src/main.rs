@@ -346,6 +346,8 @@ enum VmCommand {
     Record(Box<VmRecordArgs>),
     /// Analyze VM health based on configuration and current metrics.
     Analyze(VmIdArgs),
+    /// Analyze a recorded metrics JSON Lines file for historical trends.
+    AnalyzeRecord(Box<VmAnalyzeRecordArgs>),
 }
 
 /// Arguments for `vm clone`.
@@ -364,6 +366,14 @@ struct VmCloneArgs {
     /// Connect to daemon via TCP instead of named pipe.
     #[arg(long)]
     tcp: Option<std::net::SocketAddr>,
+}
+
+/// Arguments for `vm analyze-record`.
+#[derive(Parser)]
+struct VmAnalyzeRecordArgs {
+    /// Path to the recorded JSON Lines file to analyze.
+    #[arg(short, long)]
+    file: PathBuf,
 }
 
 /// Arguments for `vm record`.
@@ -1842,8 +1852,84 @@ fn run_vm_command(cmd: VmCommand) -> Result<()> {
             VmCommand::ExportMetrics(args) => handle_vm_export_metrics(&args).await,
             VmCommand::Record(args) => handle_vm_record(&args).await,
             VmCommand::Analyze(args) => handle_vm_analyze(&args).await,
+            VmCommand::AnalyzeRecord(args) => handle_vm_analyze_record(&args).await,
         }
     })
+}
+
+async fn handle_vm_analyze_record(args: &VmAnalyzeRecordArgs) -> Result<()> {
+    use crossterm::style::Stylize;
+
+    println!(
+        "{}",
+        format!("Analyzing record file '{}'...", args.file.display()).cyan()
+    );
+
+    let content = std::fs::read_to_string(&args.file).context("failed to read record file")?;
+    let mut snapshots = Vec::new();
+
+    for (i, line) in content.lines().enumerate() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let snap: hitz_api::MetricsSnapshot = match serde_json::from_str(line) {
+            Ok(s) => s,
+            Err(e) => {
+                println!(
+                    "{}",
+                    format!("✗ Failed to parse line {}: {}", i + 1, e).yellow()
+                );
+                continue;
+            }
+        };
+        snapshots.push(snap);
+    }
+
+    if snapshots.is_empty() {
+        println!("{}", "No valid metric snapshots found in file.".yellow());
+        return Ok(());
+    }
+
+    println!(
+        "Loaded {} snapshots (time range: {}ms)",
+        snapshots.len(),
+        snapshots.last().unwrap().timestamp_ms - snapshots.first().unwrap().timestamp_ms
+    );
+
+    let insights = analyzer::analyze_record_history(&snapshots);
+
+    println!("\nHistorical Trend Report");
+    println!("----------------------------------------");
+
+    if insights.is_empty() {
+        println!("{}", "No significant trends or anomalies detected.".dark_grey());
+    } else {
+        use comfy_table::presets::NOTHING;
+        use comfy_table::{Cell, Color, Table};
+        let mut table = Table::new();
+        table.load_preset(NOTHING);
+        table.set_header(vec!["Level", "Insight"]);
+
+        for insight in insights {
+            let level_str = insight.level.to_string();
+            let mut level_cell = Cell::new(&level_str);
+            match insight.level {
+                analyzer::WarningLevel::Info => {
+                    level_cell = level_cell.fg(Color::Blue);
+                }
+                analyzer::WarningLevel::Warning => {
+                    level_cell = level_cell.fg(Color::Yellow);
+                }
+                analyzer::WarningLevel::Critical => {
+                    level_cell = level_cell.fg(Color::Red);
+                }
+            }
+            table.add_row(vec![level_cell, Cell::new(insight.message)]);
+        }
+        println!("{table}");
+    }
+
+    Ok(())
 }
 
 async fn handle_vm_analyze(args: &VmIdArgs) -> Result<()> {
