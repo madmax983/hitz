@@ -20,6 +20,7 @@ use hitz_hal::StandardRegs;
 
 /// Decoded MMIO instruction information.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(clippy::redundant_pub_crate)]
 pub(crate) struct DecodedMmio {
     /// GP register index 0–15 (x86 encoding order).
     ///

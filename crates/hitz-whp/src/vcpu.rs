@@ -50,7 +50,7 @@ impl Drop for WhpVcpu {
 /// `WHvCancelRunVirtualProcessor` from any thread. Created via
 /// [`Vcpu::cancel_handle`].
 #[derive(Clone)]
-pub(crate) struct WhpCancelHandle {
+pub struct WhpCancelHandle {
     partition: Arc<PartitionInner>,
     index: u32,
 }

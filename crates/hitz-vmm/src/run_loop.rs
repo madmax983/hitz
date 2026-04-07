@@ -328,6 +328,7 @@ fn handle_io_port<V: Vcpu, W: Write>(
 }
 
 /// Advance RIP past the faulting instruction.
+#[allow(clippy::redundant_pub_crate)]
 pub(crate) fn advance_rip<V: Vcpu>(vcpu: &mut V, instruction_len: u8) -> Result<(), HalError> {
     let mut regs = vcpu.get_regs()?;
     regs.rip = regs.rip.wrapping_add(u64::from(instruction_len));
@@ -338,6 +339,7 @@ pub(crate) fn advance_rip<V: Vcpu>(vcpu: &mut V, instruction_len: u8) -> Result<
 ///
 /// Combines both updates into a single `set_regs` call to minimize
 /// round-trips to the hypervisor.
+#[allow(clippy::redundant_pub_crate)]
 pub(crate) fn advance_rip_with_rax<V: Vcpu>(
     vcpu: &mut V,
     instruction_len: u8,
