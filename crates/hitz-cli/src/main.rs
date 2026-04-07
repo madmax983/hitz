@@ -346,6 +346,8 @@ enum VmCommand {
     Record(Box<VmRecordArgs>),
     /// Analyze VM health based on configuration and current metrics.
     Analyze(VmIdArgs),
+    /// Estimate VM carbon footprint based on real-time resource metrics.
+    Eco(VmIdArgs),
 }
 
 /// Arguments for `vm clone`.
@@ -1840,8 +1842,77 @@ fn run_vm_command(cmd: VmCommand) -> Result<()> {
             VmCommand::ExportMetrics(args) => handle_vm_export_metrics(&args).await,
             VmCommand::Record(args) => handle_vm_record(&args).await,
             VmCommand::Analyze(args) => handle_vm_analyze(&args).await,
+            VmCommand::Eco(args) => handle_vm_eco(&args).await,
         }
     })
+}
+
+async fn handle_vm_eco(args: &VmIdArgs) -> Result<()> {
+    use crossterm::style::Stylize;
+    use hitz_api::EcoMetrics;
+
+    println!("{}", format!("Estimating Eco Footprint for VM '{}'...", args.id).cyan());
+
+    // Fetch Metrics
+    let (status_metrics, resp_metrics) = pipe_client::pipe_request(
+        &args.pipe,
+        args.tcp,
+        Method::GET,
+        &format!("/vms/{}/metrics", args.id),
+        None,
+    )
+    .await?;
+
+    if !status_metrics.is_success() {
+        print_error_response(
+            status_metrics,
+            &resp_metrics,
+            &format!("Failed to get VM {} metrics", args.id),
+        );
+        return Ok(());
+    }
+
+    let metrics: hitz_api::MetricsSnapshot = match serde_json::from_str(&resp_metrics) {
+        Ok(m) => m,
+        Err(e) => {
+            println!("{}", format!("✗ Failed to parse VM metrics: {e}").red());
+            return Ok(());
+        }
+    };
+
+    let footprint = metrics.calculate_footprint();
+
+    println!("\n{}", format!(" 🌱 Eco Footprint Estimate for VM '{}' ", args.id).bold().on_green().white());
+    println!();
+
+    use comfy_table::presets::UTF8_FULL_CONDENSED;
+    use comfy_table::{Cell, Color, Table};
+    let mut table = Table::new();
+    let _ = table.load_preset(UTF8_FULL_CONDENSED);
+
+    let _ = table.set_header(vec![
+        Cell::new("Metric").add_attribute(comfy_table::Attribute::Bold),
+        Cell::new("Value").add_attribute(comfy_table::Attribute::Bold),
+    ]);
+
+    let _ = table.add_row(vec![
+        Cell::new("⚡ Power Consumption"),
+        Cell::new(format!("{:.2} Watts", footprint.power_watts)).fg(Color::Yellow),
+    ]);
+    let _ = table.add_row(vec![
+        Cell::new("🏭 Carbon Intensity"),
+        Cell::new(format!("{:.2} gCO2eq/kWh", footprint.carbon_intensity)).fg(Color::DarkGrey),
+    ]);
+    let _ = table.add_row(vec![
+        Cell::new("☁️ Carbon Emissions"),
+        Cell::new(format!("{:.4} gCO2eq/hr", footprint.emissions_gco2_per_hr)).fg(Color::Red),
+    ]);
+
+    println!("{table}");
+    println!();
+    println!("{}", "Note: These values are estimations based on real-time resource utilization.".dark_grey());
+
+    Ok(())
 }
 
 #[allow(clippy::too_many_lines)]
@@ -1918,7 +1989,13 @@ async fn handle_vm_analyze(args: &VmIdArgs) -> Result<()> {
 
     let insights = analyzer::analyze_vm(&info, &metrics);
 
-    println!("\n{}", format!(" 🔍 Analysis Report for VM '{}' ", args.id).bold().on_blue().white());
+    println!(
+        "\n{}",
+        format!(" 🔍 Analysis Report for VM '{}' ", args.id)
+            .bold()
+            .on_blue()
+            .white()
+    );
     println!();
 
     if insights.is_empty() {

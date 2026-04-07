@@ -24,6 +24,9 @@ pub mod health;
 #[cfg(feature = "health_check")]
 pub use health::*;
 
+pub mod eco;
+pub use eco::*;
+
 use serde::{Deserialize, Serialize};
 
 /// Default kernel command line for Linux direct boot.

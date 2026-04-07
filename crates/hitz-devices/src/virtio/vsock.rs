@@ -241,7 +241,10 @@ impl VirtioVsockDevice {
                 }
             }
 
-            if let Some(hdr) = (raw.len() >= VSOCK_HDR_SIZE).then(|| VsockHdr::from_bytes(&raw)).flatten() {
+            if let Some(hdr) = (raw.len() >= VSOCK_HDR_SIZE)
+                .then(|| VsockHdr::from_bytes(&raw))
+                .flatten()
+            {
                 let payload_end = VSOCK_HDR_SIZE + hdr.len as usize;
                 let payload = raw.get(VSOCK_HDR_SIZE..payload_end).unwrap_or(&[]).to_vec();
                 // Non-blocking send; if channel is closed, drop packet.
