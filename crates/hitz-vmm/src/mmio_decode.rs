@@ -74,62 +74,19 @@ pub fn decode_mmio_instruction(bytes: &[u8]) -> Option<DecodedMmio> {
     }
 
     let mut pos = 0;
-    let mut has_operand_size_prefix = false;
-    let mut rex: u8 = 0;
-
-    // -- 1. Parse prefixes ----------------------------------------------------
-    loop {
-        if pos >= bytes.len() {
-            return None;
-        }
-        match bytes[pos] {
-            0x66 => {
-                has_operand_size_prefix = true;
-                pos += 1;
-            }
-            b @ 0x40..=0x4F => {
-                rex = b;
-                pos += 1;
-            }
-            _ => break,
-        }
-    }
+    let (has_operand_size_prefix, rex) = parse_prefixes(bytes, &mut pos)?;
 
     let rex_r = (rex >> 2) & 1;
 
-    // -- 2. Read opcode -------------------------------------------------------
-    if pos >= bytes.len() {
-        return None;
-    }
-    let opcode = bytes[pos];
+    let opcode = *bytes.get(pos)?;
     pos += 1;
 
-    // -- 3. Read ModR/M -------------------------------------------------------
-    if pos >= bytes.len() {
-        return None;
-    }
-    let modrm = bytes[pos];
+    let modrm = *bytes.get(pos)?;
     pos += 1;
 
     let reg_field = ((modrm >> 3) & 7) | (rex_r << 3);
 
-    // -- 4. Skip SIB + displacement (common to all opcodes) ---------------------
-    let has_sib = needs_sib(modrm);
-    if has_sib && pos >= bytes.len() {
-        return None;
-    }
-    let sib = if has_sib {
-        let s = bytes[pos];
-        pos += 1;
-        s
-    } else {
-        0
-    };
-    let disp_size = displacement_size(modrm, has_sib, sib);
-    if pos + disp_size > bytes.len() {
-        return None;
-    }
-    pos += disp_size;
+    parse_sib_and_disp(bytes, modrm, &mut pos)?;
 
     // -- 5. Opcode-specific decoding --------------------------------------------
     match opcode {
@@ -144,6 +101,47 @@ pub fn decode_mmio_instruction(bytes: &[u8]) -> Option<DecodedMmio> {
         0xC7 => decode_mov_rm_imm(bytes, has_operand_size_prefix, modrm, pos),
         _ => None,
     }
+}
+
+fn parse_prefixes(bytes: &[u8], pos: &mut usize) -> Option<(bool, u8)> {
+    let mut has_operand_size_prefix = false;
+    let mut rex: u8 = 0;
+
+    loop {
+        let b = *bytes.get(*pos)?;
+        match b {
+            0x66 => {
+                has_operand_size_prefix = true;
+                *pos += 1;
+            }
+            b @ 0x40..=0x4F => {
+                rex = b;
+                *pos += 1;
+            }
+            _ => break,
+        }
+    }
+    Some((has_operand_size_prefix, rex))
+}
+
+fn parse_sib_and_disp(bytes: &[u8], modrm: u8, pos: &mut usize) -> Option<()> {
+    let has_sib = needs_sib(modrm);
+
+    let sib = if has_sib {
+        let s = *bytes.get(*pos)?;
+        *pos += 1;
+        s
+    } else {
+        0
+    };
+
+    let disp_size = displacement_size(modrm, has_sib, sib);
+    if *pos + disp_size > bytes.len() {
+        return None;
+    }
+    *pos += disp_size;
+
+    Some(())
 }
 
 #[allow(clippy::cast_possible_truncation)]

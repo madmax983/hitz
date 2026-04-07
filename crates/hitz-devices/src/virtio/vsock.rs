@@ -428,6 +428,7 @@ mod tests {
         }
     }
     impl GuestMemAccess for MockMem {
+        #[allow(clippy::significant_drop_tightening)]
         fn read_guest(&self, gpa: u64, buf: &mut [u8]) -> Result<(), HalError> {
             let mem = self.inner.lock().unwrap();
             let start = gpa as usize;
@@ -441,6 +442,7 @@ mod tests {
             buf.copy_from_slice(&mem[start..start + buf.len()]);
             Ok(())
         }
+        #[allow(clippy::significant_drop_tightening)]
         fn write_guest(&self, gpa: u64, data: &[u8]) -> Result<(), HalError> {
             let mut mem = self.inner.lock().unwrap();
             let start = gpa as usize;

@@ -243,6 +243,7 @@ mod tests {
         assert_eq!(stats[0].active(), u64::MAX);
         assert_eq!(stats[0].total(), u64::MAX);
 
+        #[allow(clippy::expect_used)]
         let mem = parse_proc_meminfo(
             "MemTotal: 18446744073709551615 kB\nMemFree: 18446744073709551615 kB",
         )
