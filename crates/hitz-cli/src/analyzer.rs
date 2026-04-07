@@ -97,9 +97,7 @@ pub fn analyze_vm(info: &VmInfo, metrics: &MetricsSnapshot) -> Vec<ResourceInsig
     if rx_errs > 0 || tx_errs > 0 {
         insights.push(ResourceInsight {
             level: WarningLevel::Warning,
-            message: format!(
-                "Network errors detected (RX: {rx_errs}, TX: {tx_errs})"
-            ),
+            message: format!("Network errors detected (RX: {rx_errs}, TX: {tx_errs})"),
         });
     }
 

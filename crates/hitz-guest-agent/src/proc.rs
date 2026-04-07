@@ -26,7 +26,9 @@ impl CpuSample {
 
     /// Total ticks (active + idle).
     pub const fn total(&self) -> u64 {
-        self.active().saturating_add(self.idle).saturating_add(self.iowait)
+        self.active()
+            .saturating_add(self.idle)
+            .saturating_add(self.iowait)
     }
 }
 
@@ -234,15 +236,22 @@ mod tests {
     #[test]
     fn havoc_overflow_proc_stat() {
         // u64::MAX should not panic during parsing/summation
-        let stats = parse_proc_stat_sample("cpu 18446744073709551615 18446744073709551615 18446744073709551615 18446744073709551615 18446744073709551615 18446744073709551615 18446744073709551615");
+        let stats = parse_proc_stat_sample(
+            "cpu 18446744073709551615 18446744073709551615 18446744073709551615 18446744073709551615 18446744073709551615 18446744073709551615 18446744073709551615",
+        );
         assert_eq!(stats.len(), 1);
         assert_eq!(stats[0].active(), u64::MAX);
         assert_eq!(stats[0].total(), u64::MAX);
 
-        let mem = parse_proc_meminfo("MemTotal: 18446744073709551615 kB\nMemFree: 18446744073709551615 kB").expect("parse");
+        let mem = parse_proc_meminfo(
+            "MemTotal: 18446744073709551615 kB\nMemFree: 18446744073709551615 kB",
+        )
+        .expect("parse");
         assert_eq!(mem.total_bytes, u64::MAX);
 
-        let disks = parse_proc_diskstats("   8   0 vda 100 0 18446744073709551615 20 50 0 18446744073709551615 10 0 30 30\n");
+        let disks = parse_proc_diskstats(
+            "   8   0 vda 100 0 18446744073709551615 20 50 0 18446744073709551615 10 0 30 30\n",
+        );
         assert_eq!(disks[0].read_bytes, u64::MAX);
         assert_eq!(disks[0].write_bytes, u64::MAX);
     }
@@ -301,11 +310,15 @@ mod tests {
 
     #[test]
     fn havoc_fuzz_parse_proc_meminfo_no_panic() {
-        let _ = parse_proc_meminfo("MemTotal: 9999999999999999999\nMemFree: 9999999999999999999\nBuffers: 9999999999999999999\nCached: 9999999999999999999\nSwapTotal: 9999999999999999999\nSwapFree: 9999999999999999999\n");
+        let _ = parse_proc_meminfo(
+            "MemTotal: 9999999999999999999\nMemFree: 9999999999999999999\nBuffers: 9999999999999999999\nCached: 9999999999999999999\nSwapTotal: 9999999999999999999\nSwapFree: 9999999999999999999\n",
+        );
     }
 
     #[test]
     fn havoc_fuzz_parse_proc_diskstats_no_panic() {
-        let _ = parse_proc_diskstats(" 8       0 sda 9999999999999999999 0 9999999999999999999 0 9999999999999999999 0 9999999999999999999\n");
+        let _ = parse_proc_diskstats(
+            " 8       0 sda 9999999999999999999 0 9999999999999999999 0 9999999999999999999 0 9999999999999999999\n",
+        );
     }
 }
