@@ -75,10 +75,8 @@ impl PortForwardManager {
                 loop {
                     match listener.accept().await {
                         Ok((mut inbound, _peer)) => {
-                            connections_total_l
-                                .add(1, &[kv.clone()]);
-                            relays_active_l
-                                .add(1, &[kv.clone()]);
+                            connections_total_l.add(1, &[kv.clone()]);
+                            relays_active_l.add(1, &[kv.clone()]);
 
                             let relays_active_r = relays_active_l.clone();
                             let kv_r = kv.clone();

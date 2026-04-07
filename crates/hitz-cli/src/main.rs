@@ -1532,12 +1532,12 @@ async fn handle_vm_top(args: &VmIdArgs) -> Result<()> {
                         .split(bottom_chunks[0]);
 
                     // Disk Table
-                    // Removed intermediate `.collect::<Vec<_>>()` allocation by passing
-                    // the iterator directly to `Table::new`, which accepts `IntoIterator`.
-                    // This avoids heap allocations per frame.
+                    // ⚡ Bolt Optimization: Removed intermediate `.collect::<Vec<_>>()` allocation by passing
+                    // the iterator directly to `Table::new`. We also replaced `vec![...]` with
+                    // static arrays `[...]` for `Row::new` to eliminate heap allocations per frame on the UI hot path.
                     let disk_table = Table::new(
                         snap.disks.iter().map(|d| {
-                            Row::new(vec![
+                            Row::new([
                                 d.name.clone(),
                                 format!("{}", d.read_bytes / 1024),
                                 format!("{}", d.write_bytes / 1024),
@@ -1550,17 +1550,17 @@ async fn handle_vm_top(args: &VmIdArgs) -> Result<()> {
                         ],
                     )
                     .header(
-                        Row::new(vec!["Device", "Read KB", "Write KB"])
+                        Row::new(["Device", "Read KB", "Write KB"])
                             .style(Style::default().add_modifier(Modifier::BOLD)),
                     )
                     .block(Block::default().title("Disks").borders(Borders::ALL));
                     f.render_widget(disk_table, io_chunks[0]);
 
                     // Network Table
-                    // Removed intermediate `.collect::<Vec<_>>()` allocation.
+                    // ⚡ Bolt Optimization: Replaced `vec![...]` with arrays for zero-allocation rows.
                     let net_table = Table::new(
                         snap.networks.iter().map(|n| {
-                            Row::new(vec![
+                            Row::new([
                                 n.interface.clone(),
                                 format!("{}", n.rx_bytes / 1024),
                                 format!("{}", n.tx_bytes / 1024),
@@ -1573,17 +1573,17 @@ async fn handle_vm_top(args: &VmIdArgs) -> Result<()> {
                         ],
                     )
                     .header(
-                        Row::new(vec!["Interface", "Rx KB", "Tx KB"])
+                        Row::new(["Interface", "Rx KB", "Tx KB"])
                             .style(Style::default().add_modifier(Modifier::BOLD)),
                     )
                     .block(Block::default().title("Networks").borders(Borders::ALL));
                     f.render_widget(net_table, io_chunks[1]);
 
                     // Processes Table
-                    // Removed intermediate `.collect::<Vec<_>>()` allocation.
+                    // ⚡ Bolt Optimization: Replaced `vec![...]` with arrays for zero-allocation rows.
                     let proc_table = Table::new(
                         snap.processes.iter().map(|p| {
-                            Row::new(vec![
+                            Row::new([
                                 p.pid.to_string(),
                                 p.name.clone(),
                                 format!("{:.1}%", p.cpu_pct),
@@ -1598,7 +1598,7 @@ async fn handle_vm_top(args: &VmIdArgs) -> Result<()> {
                         ],
                     )
                     .header(
-                        Row::new(vec!["PID", "Name", "CPU", "RSS"])
+                        Row::new(["PID", "Name", "CPU", "RSS"])
                             .style(Style::default().add_modifier(Modifier::BOLD)),
                     )
                     .block(
@@ -1918,7 +1918,13 @@ async fn handle_vm_analyze(args: &VmIdArgs) -> Result<()> {
 
     let insights = analyzer::analyze_vm(&info, &metrics);
 
-    println!("\n{}", format!(" 🔍 Analysis Report for VM '{}' ", args.id).bold().on_blue().white());
+    println!(
+        "\n{}",
+        format!(" 🔍 Analysis Report for VM '{}' ", args.id)
+            .bold()
+            .on_blue()
+            .white()
+    );
     println!();
 
     if insights.is_empty() {
@@ -2062,7 +2068,7 @@ async fn handle_vm_dashboard(args: &VmListArgs) -> Result<()> {
                 };
                 let exit_reason = vm.exit_reason.clone().unwrap_or_else(|| "-".to_string());
 
-                Row::new(vec![
+                Row::new([
                     Cell::from(vm.id.clone()),
                     Cell::from(state_str).style(Style::default().fg(state_color)),
                     Cell::from(vm.config.ram_mib.to_string()),
@@ -2082,7 +2088,7 @@ async fn handle_vm_dashboard(args: &VmListArgs) -> Result<()> {
                 ],
             )
             .header(
-                Row::new(vec!["ID", "State", "RAM (MiB)", "CPUs", "Exit Reason"]).style(
+                Row::new(["ID", "State", "RAM (MiB)", "CPUs", "Exit Reason"]).style(
                     Style::default()
                         .fg(Color::Yellow)
                         .add_modifier(Modifier::BOLD),
