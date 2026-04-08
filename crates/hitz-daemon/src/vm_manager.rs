@@ -375,7 +375,7 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
         self.store.save_state(id, VmState::Running)?;
 
         // Inject guest agent overlay into initramfs if agent is enabled.
-        let boot_config = inject_guest_agent(config.clone(), id);
+        let boot_config = inject_guest_agent(config, id);
 
         // Record guest RAM size as a one-shot gauge.
         {
