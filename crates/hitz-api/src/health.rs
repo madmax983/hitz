@@ -1,7 +1,49 @@
+//! Health assessment module for evaluating system telemetry.
+//!
+//! # Abstract
+//! This module provides the tools necessary to evaluate the current health
+//! of a system based on its telemetry metrics. It defines what it means to be
+//! healthy, warns when things are getting hot, and screams when the system is on fire.
+//!
+//! # The Hero's Journey
+//! ```rust
+//! use hitz_api::health::{HealthCheck, HealthStatus};
+//! use hitz_api::{MetricsSnapshot, CpuMetrics, MemoryMetrics};
+//!
+//! // We have some metrics from our micro-VM
+//! let metrics = MetricsSnapshot {
+//!     timestamp_ms: 1_700_000_000_000,
+//!     cpu: CpuMetrics { total_pct: 95.0, per_core: vec![95.0], load_avg: [2.0, 1.5, 1.0] },
+//!     memory: MemoryMetrics { total_bytes: 100, used_bytes: 10, free_bytes: 90, buffers_bytes: 0, cached_bytes: 0, swap_total: 0, swap_used: 0 },
+//!     disks: vec![],
+//!     networks: vec![],
+//!     processes: vec![],
+//! };
+//!
+//! // We assess the health of the system
+//! let health = metrics.assess_health();
+//!
+//! // Because the CPU is at 95%, we are in a critical state!
+//! assert_eq!(health.status, HealthStatus::Critical);
+//! assert!(health.reasons[0].contains("Critical CPU usage"));
+//! ```
+
 use crate::MetricsSnapshot;
 use serde::{Deserialize, Serialize};
 
 /// The overall health status of the system or component.
+///
+/// # Abstract
+/// An enum representing the three states of being for a micro-VM:
+/// perfectly fine, starting to sweat, and actively melting down.
+///
+/// # The Hero's Journey
+/// ```rust
+/// use hitz_api::health::HealthStatus;
+///
+/// let my_status = HealthStatus::Healthy;
+/// assert_eq!(my_status, HealthStatus::Healthy);
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum HealthStatus {
     /// System is operating within normal parameters.
@@ -13,6 +55,23 @@ pub enum HealthStatus {
 }
 
 /// The result of a health assessment.
+///
+/// # Abstract
+/// A concrete report card for the system. It not only tells you the current
+/// [`HealthStatus`], but if things aren't [`HealthStatus::Healthy`], it provides
+/// human-readable reasons explaining *why*.
+///
+/// # The Hero's Journey
+/// ```rust
+/// use hitz_api::health::{SystemHealth, HealthStatus};
+///
+/// let report = SystemHealth {
+///     status: HealthStatus::Warning,
+///     reasons: vec!["CPU is getting a bit warm".to_string()],
+/// };
+///
+/// assert_eq!(report.status, HealthStatus::Warning);
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SystemHealth {
     /// The aggregated health status.
@@ -23,12 +82,49 @@ pub struct SystemHealth {
 }
 
 /// Trait for types that can be evaluated for system health.
+///
+/// # Abstract
+/// Any type that can be examined to determine if the system is healthy
+/// should implement this trait. It provides a standard interface for
+/// getting a [`SystemHealth`] report.
+///
+/// # The Hero's Journey
+/// ```rust
+/// use hitz_api::health::{HealthCheck, SystemHealth, HealthStatus};
+///
+/// struct MySystem;
+///
+/// impl HealthCheck for MySystem {
+///     fn assess_health(&self) -> SystemHealth {
+///         SystemHealth {
+///             status: HealthStatus::Healthy,
+///             reasons: vec![],
+///         }
+///     }
+/// }
+///
+/// let sys = MySystem;
+/// let report = sys.assess_health();
+/// assert_eq!(report.status, HealthStatus::Healthy);
+/// ```
 pub trait HealthCheck {
     /// Assesses the health of the entity and returns a `SystemHealth` report.
     fn assess_health(&self) -> SystemHealth;
 }
 
 impl HealthCheck for MetricsSnapshot {
+    /// Assesses the health of the micro-VM based on its metrics.
+    ///
+    /// # Abstract
+    /// Evaluates the CPU, memory, swap, and network metrics to determine the
+    /// overall health of the system.
+    ///
+    /// # Details
+    /// The evaluation is based on thresholds:
+    /// - **CPU**: > 90% is Critical, > 75% is Warning
+    /// - **Memory**: > 90% is Critical, > 75% is Warning
+    /// - **Swap**: > 50% is Critical, > 20% is Warning
+    /// - **Network Errors**: > 100 is Critical, > 10 is Warning
     #[allow(clippy::cast_precision_loss, clippy::similar_names)]
     fn assess_health(&self) -> SystemHealth {
         let mut status = HealthStatus::Healthy;
