@@ -270,14 +270,16 @@ mod tests {
             let (rx_tx, rx_rx) = crossbeam_channel::unbounded();
             let mut fwd_cnt = 0;
             // Create a default header using from_bytes
+            #[allow(clippy::unwrap_used)]
             let mut hdr = VsockHdr::from_bytes(&[0; 44]).unwrap();
             hdr.op = case.op;
             hdr.dst_port = case.dst_port;
-            hdr.len = case.payload.len() as u32;
+            hdr.len = u32::try_from(case.payload.len()).unwrap_or(0);
 
             handle_packet("test-vm", &hdr, &case.payload, &rx_tx, &mut fwd_cnt);
 
             if let Some(expected_op) = case.expected_op {
+                #[allow(clippy::expect_used, clippy::expect_fun_call)]
                 let response = rx_rx
                     .try_recv()
                     .expect(&format!("{}: expected response", case.name));
