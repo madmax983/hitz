@@ -196,4 +196,104 @@ mod tests {
         };
         publish_to_otel("test-vm", &snap);
     }
+
+    #[test]
+    fn test_handle_packet() {
+        struct TestCase {
+            name: &'static str,
+            op: u16,
+            dst_port: u32,
+            payload: Vec<u8>,
+            expected_op: Option<VsockOp>,
+        }
+
+        let cases = vec![
+            TestCase {
+                name: "Request should get Response",
+                op: VsockOp::Request as u16,
+                dst_port: VSOCK_METRICS_PORT,
+                payload: vec![],
+                expected_op: Some(VsockOp::Response),
+            },
+            TestCase {
+                name: "Rw to wrong port is ignored",
+                op: VsockOp::Rw as u16,
+                dst_port: 9999, // wrong port
+                payload: vec![],
+                expected_op: None,
+            },
+            TestCase {
+                name: "Rw to correct port gets CreditUpdate",
+                op: VsockOp::Rw as u16,
+                dst_port: VSOCK_METRICS_PORT,
+                payload: vec![], // empty payload won't panic, handled safely
+                expected_op: Some(VsockOp::CreditUpdate),
+            },
+            TestCase {
+                name: "Rw short payload (<4 bytes)",
+                op: VsockOp::Rw as u16,
+                dst_port: VSOCK_METRICS_PORT,
+                payload: vec![1, 2], // 2 bytes instead of 4
+                expected_op: Some(VsockOp::CreditUpdate),
+            },
+            TestCase {
+                name: "Rw mismatch payload length",
+                op: VsockOp::Rw as u16,
+                dst_port: VSOCK_METRICS_PORT,
+                payload: vec![100, 0, 0, 0, 1, 2, 3], // Header says 100, but only 3 bytes data
+                expected_op: Some(VsockOp::CreditUpdate),
+            },
+            TestCase {
+                name: "Shutdown gets Rst",
+                op: VsockOp::Shutdown as u16,
+                dst_port: VSOCK_METRICS_PORT,
+                payload: vec![],
+                expected_op: Some(VsockOp::Rst),
+            },
+            TestCase {
+                name: "Rst gets Rst",
+                op: VsockOp::Rst as u16,
+                dst_port: VSOCK_METRICS_PORT,
+                payload: vec![],
+                expected_op: Some(VsockOp::Rst),
+            },
+            TestCase {
+                name: "Unknown op gets ignored",
+                op: 999, // invalid op
+                dst_port: VSOCK_METRICS_PORT,
+                payload: vec![],
+                expected_op: None,
+            },
+        ];
+
+        for case in cases {
+            let (rx_tx, rx_rx) = crossbeam_channel::unbounded();
+            let mut fwd_cnt = 0;
+            // Create a default header using from_bytes
+            let mut hdr = VsockHdr::from_bytes(&[0; 44]).unwrap();
+            hdr.op = case.op;
+            hdr.dst_port = case.dst_port;
+            hdr.len = case.payload.len() as u32;
+
+            handle_packet("test-vm", &hdr, &case.payload, &rx_tx, &mut fwd_cnt);
+
+            if let Some(expected_op) = case.expected_op {
+                let response = rx_rx
+                    .try_recv()
+                    .expect(&format!("{}: expected response", case.name));
+                let (res_hdr, _) = response;
+                assert_eq!(
+                    res_hdr.op, expected_op as u16,
+                    "{}: response op mismatch",
+                    case.name
+                );
+            } else {
+                assert!(
+                    rx_rx.try_recv().is_err(),
+                    "{}: expected no response",
+                    case.name
+                );
+            }
+        }
+    }
 }
