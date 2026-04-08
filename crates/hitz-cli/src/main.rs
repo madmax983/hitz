@@ -2066,7 +2066,10 @@ async fn handle_vm_dashboard(args: &VmListArgs) -> Result<()> {
                     hitz_api::VmState::Failed => Color::Red,
                     hitz_api::VmState::Created => Color::Cyan,
                 };
-                let exit_reason = vm.exit_reason.clone().unwrap_or_else(|| "-".to_string());
+                // ⚡ Bolt Optimization:
+                // Removed `.clone()` and `.unwrap_or_else(|| "-".to_string())` which allocate Strings unnecessarily.
+                // Using `.as_deref().unwrap_or("-")` and directly mapping `&str` avoids heap allocations.
+                let exit_reason = vm.exit_reason.as_deref().unwrap_or("-");
 
                 Row::new([
                     Cell::from(vm.id.clone()),

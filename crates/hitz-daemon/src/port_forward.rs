@@ -69,14 +69,14 @@ impl PortForwardManager {
             // ⚡ Bolt Optimization:
             // By creating a single `KeyValue` with an `i64` value instead of using `.to_string()`,
             // we eliminate 3 `String` heap allocations (`.clone()`) per incoming TCP connection on the hot path.
-            let kv = KeyValue::new("host_port", rule.host_port as i64);
+            let kv = KeyValue::new("host_port", i64::from(rule.host_port));
 
             let handle = tokio::spawn(async move {
                 loop {
                     match listener.accept().await {
                         Ok((mut inbound, _peer)) => {
-                            connections_total_l.add(1, &[kv.clone()]);
-                            relays_active_l.add(1, &[kv.clone()]);
+                            connections_total_l.add(1, std::slice::from_ref(&kv));
+                            relays_active_l.add(1, std::slice::from_ref(&kv));
 
                             let relays_active_r = relays_active_l.clone();
                             let kv_r = kv.clone();
