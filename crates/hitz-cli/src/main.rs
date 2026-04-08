@@ -928,6 +928,7 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
 
     // ── System ──
     let mut sys_table = Table::new();
+    let _ = sys_table.load_preset(comfy_table::presets::UTF8_FULL_CONDENSED);
 
     // Pre-allocating a single `String` buffer with estimated capacity
     // and using `write!` macro directly removes the intermediate heap
@@ -970,6 +971,7 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
     if !snap.disks.is_empty() {
         let _ = writeln!(out);
         let mut disk_table = Table::new();
+        let _ = disk_table.load_preset(comfy_table::presets::UTF8_FULL_CONDENSED);
         let _ = disk_table.set_header(vec![
             Cell::new("Disk").add_attribute(Attribute::Bold),
             Cell::new("Reads").add_attribute(Attribute::Bold),
@@ -996,6 +998,7 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
     if !snap.networks.is_empty() {
         let _ = writeln!(out);
         let mut net_table = Table::new();
+        let _ = net_table.load_preset(comfy_table::presets::UTF8_FULL_CONDENSED);
         let _ = net_table.set_header(vec![
             Cell::new("Interface").add_attribute(Attribute::Bold),
             Cell::new("RX KB").add_attribute(Attribute::Bold),
@@ -1022,6 +1025,7 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
     if !snap.processes.is_empty() {
         let _ = writeln!(out);
         let mut proc_table = Table::new();
+        let _ = proc_table.load_preset(comfy_table::presets::UTF8_FULL_CONDENSED);
         let _ = proc_table.set_header(vec![
             Cell::new("PID").add_attribute(Attribute::Bold),
             Cell::new("Name").add_attribute(Attribute::Bold),
@@ -1218,6 +1222,7 @@ async fn handle_vm_status(args: &VmIdArgs) -> Result<()> {
             use comfy_table::{Cell, Color, Table};
 
             let mut table = Table::new();
+            let _ = table.load_preset(comfy_table::presets::UTF8_FULL_CONDENSED);
 
             let state_cell = match info.state {
                 hitz_api::VmState::Running => Cell::new("Running").fg(Color::Green),
@@ -1331,6 +1336,7 @@ async fn handle_vm_list(args: &VmListArgs) -> Result<()> {
         if let Ok(vms) = serde_json::from_str::<Vec<hitz_api::VmInfo>>(&resp) {
             use comfy_table::{Cell, Color, Table};
             let mut table = Table::new();
+            let _ = table.load_preset(comfy_table::presets::UTF8_FULL_CONDENSED);
             let _ = table.set_header(vec!["ID", "State", "RAM (MiB)", "CPUs", "Exit Reason"]);
 
             for info in vms {
