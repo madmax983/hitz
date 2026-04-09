@@ -1340,7 +1340,9 @@ async fn handle_vm_list(args: &VmListArgs) -> Result<()> {
                     hitz_api::VmState::Failed => Cell::new("Failed").fg(Color::Red),
                     hitz_api::VmState::Created => Cell::new("Created").fg(Color::Cyan),
                 };
-                let exit_reason = info.exit_reason.unwrap_or_else(|| "-".to_string());
+                // ⚡ Bolt Optimization: Replace `.unwrap_or_else(|| "-".to_string())` with `.as_deref().unwrap_or("-")`
+                // This eliminates an unnecessary `String` allocation on the hot path of formatting CLI output.
+                let exit_reason = info.exit_reason.as_deref().unwrap_or("-");
                 let _ = table.add_row([
                     Cell::new(&info.id),
                     state_cell,
@@ -1954,7 +1956,7 @@ async fn handle_vm_analyze(args: &VmIdArgs) -> Result<()> {
                     Cell::new(insight.message),
                 ),
             };
-            let _ = table.add_row([level_cell, msg_cell]);
+            let _ = table.add_row(vec![level_cell, msg_cell]);
         }
         println!("{table}");
     }
