@@ -951,13 +951,13 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
     let total_mib = snap.memory.total_bytes / (1024 * 1024);
     let mem_str = format!("{used_mib} MiB / {total_mib} MiB");
 
-    let _ = sys_table.add_row(vec![
+    let _ = sys_table.add_row([
         Cell::new("CPU Total").add_attribute(Attribute::Bold),
         Cell::new(format!("{:.1}%", snap.cpu.total_pct)),
         Cell::new("Cores").add_attribute(Attribute::Bold),
         Cell::new(cores_str),
     ]);
-    let _ = sys_table.add_row(vec![
+    let _ = sys_table.add_row([
         Cell::new("CPU Load").add_attribute(Attribute::Bold),
         Cell::new(cpu_load),
         Cell::new("Memory").add_attribute(Attribute::Bold),
@@ -970,7 +970,7 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
     if !snap.disks.is_empty() {
         let _ = writeln!(out);
         let mut disk_table = Table::new();
-        let _ = disk_table.set_header(vec![
+        let _ = disk_table.set_header([
             Cell::new("Disk").add_attribute(Attribute::Bold),
             Cell::new("Reads").add_attribute(Attribute::Bold),
             Cell::new("Writes").add_attribute(Attribute::Bold),
@@ -981,7 +981,7 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
         for disk in &snap.disks {
             let read_kb = disk.read_bytes / 1024;
             let write_kb = disk.write_bytes / 1024;
-            let _ = disk_table.add_row(vec![
+            let _ = disk_table.add_row([
                 disk.name.clone(),
                 disk.reads_total.to_string(),
                 disk.writes_total.to_string(),
@@ -996,7 +996,7 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
     if !snap.networks.is_empty() {
         let _ = writeln!(out);
         let mut net_table = Table::new();
-        let _ = net_table.set_header(vec![
+        let _ = net_table.set_header([
             Cell::new("Interface").add_attribute(Attribute::Bold),
             Cell::new("RX KB").add_attribute(Attribute::Bold),
             Cell::new("TX KB").add_attribute(Attribute::Bold),
@@ -1007,7 +1007,7 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
         for net in &snap.networks {
             let rx_kb = net.rx_bytes / 1024;
             let tx_kb = net.tx_bytes / 1024;
-            let _ = net_table.add_row(vec![
+            let _ = net_table.add_row([
                 net.interface.clone(),
                 rx_kb.to_string(),
                 tx_kb.to_string(),
@@ -1022,7 +1022,7 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
     if !snap.processes.is_empty() {
         let _ = writeln!(out);
         let mut proc_table = Table::new();
-        let _ = proc_table.set_header(vec![
+        let _ = proc_table.set_header([
             Cell::new("PID").add_attribute(Attribute::Bold),
             Cell::new("Name").add_attribute(Attribute::Bold),
             Cell::new("CPU %").add_attribute(Attribute::Bold),
@@ -1031,7 +1031,7 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
 
         for proc in &snap.processes {
             let rss_mb = proc.rss_bytes / (1024 * 1024);
-            let _ = proc_table.add_row(vec![
+            let _ = proc_table.add_row([
                 proc.pid.to_string(),
                 proc.name.clone(),
                 format!("{:.1}%", proc.cpu_pct),
@@ -1226,35 +1226,35 @@ async fn handle_vm_status(args: &VmIdArgs) -> Result<()> {
                 hitz_api::VmState::Created => Cell::new("Created").fg(Color::Cyan),
             };
 
-            let _ = table.add_row(vec![
+            let _ = table.add_row([
                 Cell::new("ID:").add_attribute(comfy_table::Attribute::Bold),
                 Cell::new(&info.id),
             ]);
-            let _ = table.add_row(vec![
+            let _ = table.add_row([
                 Cell::new("State:").add_attribute(comfy_table::Attribute::Bold),
                 state_cell,
             ]);
-            let _ = table.add_row(vec![
+            let _ = table.add_row([
                 Cell::new("Kernel:").add_attribute(comfy_table::Attribute::Bold),
                 Cell::new(info.config.kernel_path.display().to_string()),
             ]);
             if let Some(ref path) = info.config.initramfs_path {
-                let _ = table.add_row(vec![
+                let _ = table.add_row([
                     Cell::new("Initramfs:").add_attribute(comfy_table::Attribute::Bold),
                     Cell::new(path.display().to_string()),
                 ]);
             }
             if let Some(ref path) = info.config.disk_path {
-                let _ = table.add_row(vec![
+                let _ = table.add_row([
                     Cell::new("Disk:").add_attribute(comfy_table::Attribute::Bold),
                     Cell::new(path.display().to_string()),
                 ]);
             }
-            let _ = table.add_row(vec![
+            let _ = table.add_row([
                 Cell::new("RAM:").add_attribute(comfy_table::Attribute::Bold),
                 Cell::new(format!("{} MiB", info.config.ram_mib)),
             ]);
-            let _ = table.add_row(vec![
+            let _ = table.add_row([
                 Cell::new("CPUs:").add_attribute(comfy_table::Attribute::Bold),
                 Cell::new(info.config.cpus.to_string()),
             ]);
@@ -1263,11 +1263,11 @@ async fn handle_vm_status(args: &VmIdArgs) -> Result<()> {
                 hitz_api::GuestAgentMode::Custom(ref p) => format!("Custom ({})", p.display()),
                 hitz_api::GuestAgentMode::Disabled => "Disabled".to_string(),
             };
-            let _ = table.add_row(vec![
+            let _ = table.add_row([
                 Cell::new("Guest Agent:").add_attribute(comfy_table::Attribute::Bold),
                 Cell::new(agent_str),
             ]);
-            let _ = table.add_row(vec![
+            let _ = table.add_row([
                 Cell::new("Guest CID:").add_attribute(comfy_table::Attribute::Bold),
                 Cell::new(info.config.guest_cid.to_string()),
             ]);
@@ -1277,7 +1277,7 @@ async fn handle_vm_status(args: &VmIdArgs) -> Result<()> {
                     "Host IP: {}, Guest IP: {}, MAC: {}",
                     net.host_ip, net.guest_ip, mac_str
                 );
-                let _ = table.add_row(vec![
+                let _ = table.add_row([
                     Cell::new("Network:").add_attribute(comfy_table::Attribute::Bold),
                     Cell::new(net_str),
                 ]);
@@ -1296,13 +1296,13 @@ async fn handle_vm_status(args: &VmIdArgs) -> Result<()> {
                     }
                     let _ = write!(ports_str, "0.0.0.0:{} -> {}", p.host_port, p.guest_port);
                 }
-                let _ = table.add_row(vec![
+                let _ = table.add_row([
                     Cell::new("Ports:").add_attribute(comfy_table::Attribute::Bold),
                     Cell::new(ports_str),
                 ]);
             }
             if let Some(reason) = &info.exit_reason {
-                let _ = table.add_row(vec![
+                let _ = table.add_row([
                     Cell::new("Exit:").add_attribute(comfy_table::Attribute::Bold),
                     Cell::new(reason),
                 ]);
@@ -1331,7 +1331,7 @@ async fn handle_vm_list(args: &VmListArgs) -> Result<()> {
         if let Ok(vms) = serde_json::from_str::<Vec<hitz_api::VmInfo>>(&resp) {
             use comfy_table::{Cell, Color, Table};
             let mut table = Table::new();
-            let _ = table.set_header(vec!["ID", "State", "RAM (MiB)", "CPUs", "Exit Reason"]);
+            let _ = table.set_header(["ID", "State", "RAM (MiB)", "CPUs", "Exit Reason"]);
 
             for info in vms {
                 let state_cell = match info.state {
@@ -1341,7 +1341,7 @@ async fn handle_vm_list(args: &VmListArgs) -> Result<()> {
                     hitz_api::VmState::Created => Cell::new("Created").fg(Color::Cyan),
                 };
                 let exit_reason = info.exit_reason.unwrap_or_else(|| "-".to_string());
-                let _ = table.add_row(vec![
+                let _ = table.add_row([
                     Cell::new(&info.id),
                     state_cell,
                     Cell::new(info.config.ram_mib.to_string()),
@@ -1928,7 +1928,7 @@ async fn handle_vm_analyze(args: &VmIdArgs) -> Result<()> {
         let mut table = Table::new();
         let _ = table.load_preset(UTF8_FULL_CONDENSED);
 
-        let _ = table.set_header(vec![
+        let _ = table.set_header([
             Cell::new("Level").add_attribute(comfy_table::Attribute::Bold),
             Cell::new("Insight").add_attribute(comfy_table::Attribute::Bold),
         ]);
@@ -1954,7 +1954,8 @@ async fn handle_vm_analyze(args: &VmIdArgs) -> Result<()> {
                     Cell::new(insight.message),
                 ),
             };
-            let _ = table.add_row(vec![level_cell, msg_cell]);
+            #[allow(clippy::tuple_array_conversions)]
+            let _ = table.add_row([level_cell, msg_cell]);
         }
         println!("{table}");
     }
