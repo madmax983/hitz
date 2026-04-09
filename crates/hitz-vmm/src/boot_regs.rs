@@ -250,8 +250,9 @@ pub fn write_gdt(mem: &GuestMemory) -> Result<(), MemError> {
 /// #     fn set_sregs(&mut self, _sregs: &SpecialRegs) -> Result<(), hitz_hal::HalError> { Ok(()) }
 /// #     fn inject_interrupt(&mut self, _vector: u8) -> Result<(), hitz_hal::HalError> { Ok(()) }
 /// #     fn request_interrupt_window(&mut self) -> Result<(), hitz_hal::HalError> { Ok(()) }
-/// #     fn cancel_handle(&self) -> hitz_hal::VcpuCancelHandle { unimplemented!() }
-/// #     fn cancel_via(_handle: &hitz_hal::VcpuCancelHandle) -> Result<(), hitz_hal::HalError> { Ok(()) }
+/// #     type CancelHandle = ();
+/// #     fn cancel_handle(&self) -> Self::CancelHandle {}
+/// #     fn cancel_via(_handle: &Self::CancelHandle) -> Result<(), hitz_hal::HalError> { Ok(()) }
 /// # }
 /// #
 /// # let mut vcpu = DummyVcpu;
@@ -338,8 +339,9 @@ pub fn configure_sregs(vcpu: &mut impl Vcpu, pml4_gpa: Gpa) -> Result<(), hitz_h
 /// #     fn set_sregs(&mut self, _sregs: &SpecialRegs) -> Result<(), hitz_hal::HalError> { Ok(()) }
 /// #     fn inject_interrupt(&mut self, _vector: u8) -> Result<(), hitz_hal::HalError> { Ok(()) }
 /// #     fn request_interrupt_window(&mut self) -> Result<(), hitz_hal::HalError> { Ok(()) }
-/// #     fn cancel_handle(&self) -> hitz_hal::VcpuCancelHandle { unimplemented!() }
-/// #     fn cancel_via(_handle: &hitz_hal::VcpuCancelHandle) -> Result<(), hitz_hal::HalError> { Ok(()) }
+/// #     type CancelHandle = ();
+/// #     fn cancel_handle(&self) -> Self::CancelHandle {}
+/// #     fn cancel_via(_handle: &Self::CancelHandle) -> Result<(), hitz_hal::HalError> { Ok(()) }
 /// # }
 /// #
 /// # let mut vcpu = DummyVcpu;
