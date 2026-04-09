@@ -1954,7 +1954,7 @@ async fn handle_vm_analyze(args: &VmIdArgs) -> Result<()> {
                     Cell::new(insight.message),
                 ),
             };
-            let _ = table.add_row([level_cell, msg_cell]);
+            let _ = table.add_row(<[Cell; 2]>::from((level_cell, msg_cell)));
         }
         println!("{table}");
     }

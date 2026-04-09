@@ -1,34 +1,19 @@
 //! WHP partition — owns a `WHV_PARTITION_HANDLE`.
 
+//! WHP partition — owns a `WHV_PARTITION_HANDLE`.
+
 use std::sync::Arc;
 
 use hitz_hal::{Gpa, HalError, MemFlags, Partition, PartitionConfig, VcpuId};
 use windows::Win32::System::Hypervisor::{
-    WHV_MAP_GPA_RANGE_FLAGS, WHV_PARTITION_HANDLE, WHV_PARTITION_PROPERTY, WHvCreatePartition,
-    WHvDeletePartition, WHvMapGpaRange, WHvPartitionPropertyCodeLocalApicEmulationMode,
-    WHvPartitionPropertyCodeProcessorCount, WHvSetPartitionProperty, WHvSetupPartition,
-    WHvUnmapGpaRange, WHvX64LocalApicEmulationModeXApic,
+    WHV_MAP_GPA_RANGE_FLAGS, WHV_PARTITION_PROPERTY, WHvCreatePartition, WHvMapGpaRange,
+    WHvPartitionPropertyCodeLocalApicEmulationMode, WHvPartitionPropertyCodeProcessorCount,
+    WHvSetPartitionProperty, WHvSetupPartition, WHvUnmapGpaRange,
+    WHvX64LocalApicEmulationModeXApic,
 };
 
+use crate::inner::PartitionInner;
 use crate::vcpu::WhpVcpu;
-
-/// Shared state for a WHP partition, accessible by all vCPUs.
-pub struct PartitionInner {
-    /// The WHP partition handle.
-    pub(crate) handle: WHV_PARTITION_HANDLE,
-}
-
-// SAFETY: WHV_PARTITION_HANDLE is a process-wide handle that can be used
-// from any thread. WHP APIs are documented as thread-safe per-partition.
-unsafe impl Send for PartitionInner {}
-unsafe impl Sync for PartitionInner {}
-
-impl Drop for PartitionInner {
-    fn drop(&mut self) {
-        // SAFETY: We own the partition handle and are tearing it down.
-        let _ = unsafe { WHvDeletePartition(self.handle) };
-    }
-}
 
 /// WHP partition implementing [`hitz_hal::Partition`].
 pub struct WhpPartition {

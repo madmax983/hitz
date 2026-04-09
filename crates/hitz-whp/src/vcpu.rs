@@ -10,7 +10,7 @@ use windows::Win32::System::Hypervisor::{
 };
 
 use crate::convert;
-use crate::partition::PartitionInner;
+use crate::inner::PartitionInner;
 
 /// WHP virtual processor implementing [`hitz_hal::Vcpu`].
 pub struct WhpVcpu {
