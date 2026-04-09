@@ -68,35 +68,35 @@ fn record_exit(counter: &Counter<u64>, reason: &'static str) {
 ///
 /// # The Hero's Journey
 ///
-/// ```rust
-/// # use hitz_vmm::run_loop::{run_vcpu_loop, SharedDevices, ExitReason};
-/// # use hitz_devices::{MmioBus, SerialDevice};
-/// # use hitz_hal::{GuestMemAccess, Vcpu, StandardRegs, SpecialRegs, VcpuExit};
-/// # use std::sync::{Arc, Mutex};
-/// # use std::sync::atomic::{AtomicBool, Ordering};
-/// #
-/// # // Minimal dummy struct to implement the required trait bounds for the doc test.
-/// # struct DummyVcpu;
-/// # impl Vcpu for DummyVcpu {
-/// #     fn run(&mut self) -> Result<VcpuExit, hitz_hal::HalError> { Ok(VcpuExit::Halt) }
-/// #     fn get_regs(&self) -> Result<StandardRegs, hitz_hal::HalError> { Ok(StandardRegs::default()) }
-/// #     fn set_regs(&mut self, _regs: &StandardRegs) -> Result<(), hitz_hal::HalError> { Ok(()) }
-/// #     fn get_sregs(&self) -> Result<SpecialRegs, hitz_hal::HalError> { unimplemented!() }
-/// #     fn set_sregs(&mut self, _sregs: &SpecialRegs) -> Result<(), hitz_hal::HalError> { Ok(()) }
-/// #     fn inject_interrupt(&mut self, _vector: u8) -> Result<(), hitz_hal::HalError> { Ok(()) }
-/// #     fn request_interrupt_window(&mut self) -> Result<(), hitz_hal::HalError> { Ok(()) }
-/// #     fn cancel_handle(&self) -> hitz_hal::VcpuCancelHandle { unimplemented!() }
-/// #     fn cancel_via(_handle: &hitz_hal::VcpuCancelHandle) -> Result<(), hitz_hal::HalError> { Ok(()) }
-/// # }
-/// #
-/// # struct DummyMem;
-/// # impl GuestMemAccess for DummyMem {
-/// #     fn read(&self, _gpa: u64, _buf: &mut [u8]) -> Result<(), hitz_hal::HalError> { Ok(()) }
-/// #     fn write(&self, _gpa: u64, _buf: &[u8]) -> Result<(), hitz_hal::HalError> { Ok(()) }
-/// # }
-/// #
-/// # let mut vcpu = DummyVcpu;
-/// # let mem = DummyMem;
+/// ```text
+/// use hitz_vmm::run_loop::{run_vcpu_loop, SharedDevices, ExitReason};
+/// use hitz_devices::{MmioBus, SerialDevice};
+/// use hitz_hal::{GuestMemAccess, Vcpu, StandardRegs, SpecialRegs, VcpuExit};
+/// use std::sync::{Arc, Mutex};
+/// use std::sync::atomic::{AtomicBool, Ordering};
+///
+/// // Minimal dummy struct to implement the required trait bounds for the doc test.
+/// struct DummyVcpu;
+/// impl Vcpu for DummyVcpu {
+///     fn run(&mut self) -> Result<VcpuExit, hitz_hal::HalError> { Ok(VcpuExit::Halt) }
+///     fn get_regs(&self) -> Result<StandardRegs, hitz_hal::HalError> { Ok(StandardRegs::default()) }
+///     fn set_regs(&mut self, _regs: &StandardRegs) -> Result<(), hitz_hal::HalError> { Ok(()) }
+///     fn get_sregs(&self) -> Result<SpecialRegs, hitz_hal::HalError> { unimplemented!() }
+///     fn set_sregs(&mut self, _sregs: &SpecialRegs) -> Result<(), hitz_hal::HalError> { Ok(()) }
+///     fn inject_interrupt(&mut self, _vector: u8) -> Result<(), hitz_hal::HalError> { Ok(()) }
+///     fn request_interrupt_window(&mut self) -> Result<(), hitz_hal::HalError> { Ok(()) }
+///     fn cancel_handle(&self) -> hitz_hal::VcpuCancelHandle { unimplemented!() }
+///     fn cancel_via(_handle: &hitz_hal::VcpuCancelHandle) -> Result<(), hitz_hal::HalError> { Ok(()) }
+/// }
+///
+/// struct DummyMem;
+/// impl GuestMemAccess for DummyMem {
+///     fn read_guest(&self, _gpa: u64, _buf: &mut [u8]) -> Result<(), hitz_hal::HalError> { Ok(()) }
+///     fn write_guest(&self, _gpa: u64, _buf: &[u8]) -> Result<(), hitz_hal::HalError> { Ok(()) }
+/// }
+///
+/// let mut vcpu = DummyVcpu;
+/// let mem = DummyMem;
 /// let devices = Mutex::new(SharedDevices {
 ///     serial: SerialDevice::new(std::io::sink()),
 ///     mmio_bus: MmioBus::new(),
@@ -107,7 +107,7 @@ fn record_exit(counter: &Counter<u64>, reason: &'static str) {
 /// let result = run_vcpu_loop(&mut vcpu, &devices, &mem, &stop_flag);
 ///
 /// // In this dummy example, the vCPU immediately halts.
-/// assert!(matches!(result.unwrap(), ExitReason::Halt));
+/// assert!(matches!(result.expect("should halt"), ExitReason::Halt));
 /// ```
 ///
 /// # The Fine Print
@@ -367,5 +367,131 @@ mod tests {
             .build();
         counter.add(1, &[KeyValue::new("exit_reason", "Halt")]);
         // If we reach here without panic, the test passes.
+    }
+
+    struct DummyVcpu {
+        regs: hitz_hal::StandardRegs,
+        sregs: hitz_hal::SpecialRegs,
+        exit: VcpuExit,
+    }
+
+    impl Vcpu for DummyVcpu {
+        type CancelHandle = ();
+        fn cancel_handle(&self) -> Self::CancelHandle {}
+        fn cancel_via(_handle: &Self::CancelHandle) -> Result<(), HalError> { Ok(()) }
+        fn run(&mut self) -> Result<VcpuExit, HalError> {
+            match &self.exit {
+                VcpuExit::Halt => Ok(VcpuExit::Halt),
+                VcpuExit::Canceled => Ok(VcpuExit::Canceled),
+                VcpuExit::Unknown(c) => Ok(VcpuExit::Unknown(*c)),
+                _ => unimplemented!(),
+            }
+        }
+        fn get_regs(&self) -> Result<hitz_hal::StandardRegs, HalError> { Ok(self.regs.clone()) }
+        fn set_regs(&mut self, regs: &hitz_hal::StandardRegs) -> Result<(), HalError> {
+            self.regs = regs.clone();
+            Ok(())
+        }
+        fn get_sregs(&self) -> Result<hitz_hal::SpecialRegs, HalError> { Ok(self.sregs.clone()) }
+        fn set_sregs(&mut self, sregs: &hitz_hal::SpecialRegs) -> Result<(), HalError> {
+            self.sregs = sregs.clone();
+            Ok(())
+        }
+        fn inject_interrupt(&mut self, _vector: u8) -> Result<(), HalError> { Ok(()) }
+        fn request_interrupt_window(&mut self) -> Result<(), HalError> { Ok(()) }
+    }
+
+    struct DummyMem;
+    impl GuestMemAccess for DummyMem {
+        fn read_guest(&self, _gpa: u64, _buf: &mut [u8]) -> Result<(), HalError> { Ok(()) }
+        fn write_guest(&self, _gpa: u64, _buf: &[u8]) -> Result<(), HalError> { Ok(()) }
+    }
+
+    #[test]
+    fn test_advance_rip() {
+        let mut vcpu = DummyVcpu {
+            regs: hitz_hal::StandardRegs { rip: 100, ..Default::default() },
+            sregs: Default::default(),
+            exit: VcpuExit::Halt,
+        };
+        advance_rip(&mut vcpu, 5).expect("advance_rip should succeed");
+        assert_eq!(vcpu.regs.rip, 105);
+    }
+
+    #[test]
+    fn test_advance_rip_wrapping() {
+        let mut vcpu = DummyVcpu {
+            regs: hitz_hal::StandardRegs { rip: u64::MAX, ..Default::default() },
+            sregs: Default::default(),
+            exit: VcpuExit::Halt,
+        };
+        advance_rip(&mut vcpu, 1).expect("advance_rip should succeed");
+        assert_eq!(vcpu.regs.rip, 0);
+    }
+
+    #[test]
+    fn test_advance_rip_with_rax() {
+        let mut vcpu = DummyVcpu {
+            regs: hitz_hal::StandardRegs { rip: 100, rax: 0, ..Default::default() },
+            sregs: Default::default(),
+            exit: VcpuExit::Halt,
+        };
+        advance_rip_with_rax(&mut vcpu, 5, 42).expect("advance_rip_with_rax should succeed");
+        assert_eq!(vcpu.regs.rip, 105);
+        assert_eq!(vcpu.regs.rax, 42);
+    }
+
+    #[test]
+    fn test_run_vcpu_loop_halt() {
+        let mut vcpu = DummyVcpu {
+            regs: Default::default(),
+            sregs: Default::default(),
+            exit: VcpuExit::Halt,
+        };
+        let devices = Mutex::new(SharedDevices {
+            serial: SerialDevice::new(std::io::sink()),
+            mmio_bus: MmioBus::new(),
+        });
+        let mem = DummyMem;
+        let stop_flag = AtomicBool::new(false);
+        let result = run_vcpu_loop(&mut vcpu, &devices, &mem, &stop_flag).expect("run_vcpu_loop should succeed");
+        assert_eq!(result, ExitReason::Halt);
+    }
+
+    #[test]
+    fn test_run_vcpu_loop_canceled() {
+        let mut vcpu = DummyVcpu {
+            regs: Default::default(),
+            sregs: Default::default(),
+            exit: VcpuExit::Halt,
+        };
+        let devices = Mutex::new(SharedDevices {
+            serial: SerialDevice::new(std::io::sink()),
+            mmio_bus: MmioBus::new(),
+        });
+        let mem = DummyMem;
+        let stop_flag = AtomicBool::new(true);
+        let result = run_vcpu_loop(&mut vcpu, &devices, &mem, &stop_flag).expect("run_vcpu_loop should succeed");
+        assert_eq!(result, ExitReason::Canceled);
+    }
+
+    #[test]
+    fn test_run_vcpu_loop_max_iterations() {
+        let mut vcpu = DummyVcpu {
+            regs: Default::default(),
+            sregs: Default::default(),
+            exit: VcpuExit::Canceled, // Using Canceled to avoid returning immediately from run loop so we can test limits
+        };
+        let devices = Mutex::new(SharedDevices {
+            serial: SerialDevice::new(std::io::sink()),
+            mmio_bus: MmioBus::new(),
+        });
+        let mem = DummyMem;
+        let stop_flag = AtomicBool::new(false);
+        let result = run_vcpu_loop(&mut vcpu, &devices, &mem, &stop_flag).expect("run_vcpu_loop should succeed");
+        assert!(matches!(result, ExitReason::Unexpected(_)));
+        if let ExitReason::Unexpected(msg) = result {
+            assert!(msg.contains("iteration limit reached"));
+        }
     }
 }
