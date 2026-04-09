@@ -753,4 +753,174 @@ mod tests {
         assert_eq!(read_u32(&mut t, MMIO_QUEUE_READY), 1);
         assert!(t.queues[0].queue.is_ready());
     }
+
+    #[test]
+    fn queue_sel_out_of_bounds() {
+        struct OneQueueBackend;
+        impl VirtioBackend for OneQueueBackend {
+            fn device_id(&self) -> u32 {
+                42
+            }
+            fn device_features(&self) -> u64 {
+                0
+            }
+            fn process_queue(&mut self, _idx: u16, _q: &mut VirtQueue, _m: &dyn GuestMemAccess) {}
+            fn read_config(&self, _off: u64, _data: &mut [u8]) {}
+            fn write_config(&mut self, _off: u64, _data: &[u8]) {}
+            fn queue_count(&self) -> usize {
+                1
+            }
+        }
+        let mem = Arc::new(MockMem::new(0x10000));
+        let mut t = VirtioMmioTransport::new(OneQueueBackend, mem.clone(), 5);
+
+        // Try to select queue 1 (out of bounds).
+        let _ = t.mmio_write(MMIO_QUEUE_SEL, &1u32.to_le_bytes(), &*mem);
+        // Should not change queue_sel from 0.
+        assert_eq!(t.queue_sel, 0);
+    }
+
+    #[test]
+    fn write_unmapped_returns_none() {
+        let mut t = make_transport();
+        assert_eq!(write_u32(&mut t, 0xFFFF, 0), None);
+    }
+
+    #[test]
+    fn read_unmapped_returns_0() {
+        let mut t = make_transport();
+        assert_eq!(read_u32(&mut t, 0xFFFF), 0);
+    }
+
+    #[test]
+    fn write_queue_num_modifies_selected_queue() {
+        let mut t = make_transport();
+
+        // Write to valid queue 0
+        write_u32(&mut t, MMIO_QUEUE_SEL, 0);
+        write_u32(&mut t, MMIO_QUEUE_NUM, 16);
+        assert_eq!(t.queues[0].num, 16);
+    }
+
+    #[test]
+    fn write_driver_features_paging() {
+        let mut t = make_transport();
+
+        // Write low 32 bits
+        write_u32(&mut t, MMIO_DRIVER_FEATURES_SEL, 0);
+        write_u32(&mut t, MMIO_DRIVER_FEATURES, 0x1234_5678);
+        assert_eq!(t.driver_features, 0x1234_5678);
+
+        // Write high 32 bits
+        write_u32(&mut t, MMIO_DRIVER_FEATURES_SEL, 1);
+        write_u32(&mut t, MMIO_DRIVER_FEATURES, 0x9ABC_DEF0);
+        assert_eq!(t.driver_features, 0x9ABC_DEF0_1234_5678);
+
+        // Re-write low 32 bits
+        write_u32(&mut t, MMIO_DRIVER_FEATURES_SEL, 0);
+        write_u32(&mut t, MMIO_DRIVER_FEATURES, 0x0000_0000);
+        assert_eq!(t.driver_features, 0x9ABC_DEF0_0000_0000);
+    }
+
+    #[test]
+    fn write_queue_address_registers() {
+        let mut t = make_transport();
+
+        // Write to valid queue 0
+        write_u32(&mut t, MMIO_QUEUE_SEL, 0);
+
+        write_u32(&mut t, MMIO_QUEUE_DESC_LOW, 0x1111);
+        write_u32(&mut t, MMIO_QUEUE_DESC_HIGH, 0x2222);
+
+        write_u32(&mut t, MMIO_QUEUE_AVAIL_LOW, 0x3333);
+        write_u32(&mut t, MMIO_QUEUE_AVAIL_HIGH, 0x4444);
+
+        write_u32(&mut t, MMIO_QUEUE_USED_LOW, 0x5555);
+        write_u32(&mut t, MMIO_QUEUE_USED_HIGH, 0x6666);
+
+        assert_eq!(t.queues[0].desc_low, 0x1111);
+        assert_eq!(t.queues[0].desc_high, 0x2222);
+        assert_eq!(t.queues[0].avail_low, 0x3333);
+        assert_eq!(t.queues[0].avail_high, 0x4444);
+        assert_eq!(t.queues[0].used_low, 0x5555);
+        assert_eq!(t.queues[0].used_high, 0x6666);
+    }
+
+    #[test]
+    fn write_config_generation_does_nothing() {
+        let mut t = make_transport();
+        assert_eq!(t.config_generation, 0);
+        write_u32(&mut t, MMIO_CONFIG_GENERATION, 1);
+        assert_eq!(t.config_generation, 0);
+    }
+
+    #[test]
+    fn poll_rx_returns_none_if_no_queues_or_false() {
+        let mut t = make_transport();
+        assert_eq!(t.poll_rx(), None);
+    }
+
+    #[test]
+    fn poll_rx_returns_irq_if_backend_poll_rx_true() {
+        struct PollRxBackend;
+        impl VirtioBackend for PollRxBackend {
+            fn device_id(&self) -> u32 {
+                42
+            }
+            fn device_features(&self) -> u64 {
+                0
+            }
+            fn process_queue(&mut self, _idx: u16, _q: &mut VirtQueue, _m: &dyn GuestMemAccess) {}
+            fn read_config(&self, _off: u64, _data: &mut [u8]) {}
+            fn write_config(&mut self, _off: u64, _data: &[u8]) {}
+            fn queue_count(&self) -> usize {
+                1
+            }
+            fn poll_rx(&mut self, _rx_queue: &mut VirtQueue, _mem: &dyn GuestMemAccess) -> bool {
+                true
+            }
+        }
+
+        let mem = Arc::new(MockMem::new(0x10000));
+        let mut t = VirtioMmioTransport::new(PollRxBackend, mem, 5);
+
+        assert_eq!(t.poll_rx(), Some(5));
+        assert_eq!(t.interrupt_status, 1);
+    }
+
+    #[test]
+    fn write_config_space_unmapped() {
+        let mut t = make_transport();
+        let fake_mem = MockMem::new(16);
+        let data = 0xDEAD_BEEFu32.to_le_bytes();
+
+        // Write exactly at the end of config space.
+        // Actually, DummyBackend config is 16 bytes.
+        // Write beyond 16 bytes config space.
+        t.mmio_write(MMIO_CONFIG_START + 16, &data, &fake_mem);
+
+        let mut buf = [0u8; 4];
+        t.mmio_read(MMIO_CONFIG_START + 16, &mut buf);
+        assert_eq!(u32::from_le_bytes(buf), 0); // Out of bounds read returns 0 (no copy)
+    }
+
+    #[test]
+    fn write_unaligned_length_returns_none() {
+        let mut t = make_transport();
+        let mem = Arc::new(MockMem::new(16));
+
+        // Write only 2 bytes (unaligned length). Should pad and process.
+        let data: [u8; 2] = [0x11, 0x22];
+        assert_eq!(t.mmio_write(MMIO_MAGIC, &data, &*mem), None);
+    }
+
+    #[test]
+    fn mmio_read_short_data() {
+        let mut t = make_transport();
+
+        let mut buf = [0u8; 2];
+        t.mmio_read(MMIO_MAGIC, &mut buf);
+        // Magic is 0x74726976 (LE: 76 69 72 74)
+        assert_eq!(buf, [0x76, 0x69]);
+    }
 }
