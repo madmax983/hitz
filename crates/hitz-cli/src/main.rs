@@ -1924,7 +1924,7 @@ async fn handle_vm_analyze(args: &VmIdArgs) -> Result<()> {
         println!("{}", "  ✅ System is healthy. No issues detected.".green());
     } else {
         use comfy_table::presets::UTF8_FULL_CONDENSED;
-        use comfy_table::{Cell, Color, Table};
+        use comfy_table::{Cell, Table};
         let mut table = Table::new();
         let _ = table.load_preset(UTF8_FULL_CONDENSED);
 
@@ -1934,32 +1934,36 @@ async fn handle_vm_analyze(args: &VmIdArgs) -> Result<()> {
         ]);
 
         for insight in insights {
-            let (level_cell, msg_cell) = match insight.level {
-                analyzer::WarningLevel::Critical => (
-                    Cell::new("🚨 CRITICAL")
-                        .fg(Color::Red)
-                        .add_attribute(comfy_table::Attribute::Bold),
-                    Cell::new(insight.message).fg(Color::Red),
-                ),
-                analyzer::WarningLevel::Warning => (
-                    Cell::new("⚠️ WARNING")
-                        .fg(Color::Yellow)
-                        .add_attribute(comfy_table::Attribute::Bold),
-                    Cell::new(insight.message).fg(Color::Yellow),
-                ),
-                analyzer::WarningLevel::Info => (
-                    Cell::new("ℹ️ INFO")
-                        .fg(Color::Blue)
-                        .add_attribute(comfy_table::Attribute::Bold),
-                    Cell::new(insight.message),
-                ),
-            };
-            let _ = table.add_row([level_cell, msg_cell]);
+            let _ = table.add_row(insight_row(&insight));
         }
         println!("{table}");
     }
 
     Ok(())
+}
+
+fn insight_row(insight: &crate::analyzer::ResourceInsight) -> [comfy_table::Cell; 2] {
+    use comfy_table::{Cell, Color};
+    match insight.level {
+        analyzer::WarningLevel::Critical => [
+            Cell::new("🚨 CRITICAL")
+                .fg(Color::Red)
+                .add_attribute(comfy_table::Attribute::Bold),
+            Cell::new(insight.message.clone()).fg(Color::Red),
+        ],
+        analyzer::WarningLevel::Warning => [
+            Cell::new("⚠️ WARNING")
+                .fg(Color::Yellow)
+                .add_attribute(comfy_table::Attribute::Bold),
+            Cell::new(insight.message.clone()).fg(Color::Yellow),
+        ],
+        analyzer::WarningLevel::Info => [
+            Cell::new("ℹ️ INFO")
+                .fg(Color::Blue)
+                .add_attribute(comfy_table::Attribute::Bold),
+            Cell::new(insight.message.clone()),
+        ],
+    }
 }
 
 #[allow(clippy::too_many_lines)]
