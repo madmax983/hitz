@@ -143,7 +143,7 @@ pub fn run_vcpu_loop<V: Vcpu, W: Write>(
         .build();
 
     loop {
-        iterations += 1;
+        iterations = iterations.saturating_add(1);
         if iterations > MAX_RUN_ITERATIONS {
             record_exit(&exit_counter, "Unexpected");
             return Ok(ExitReason::Unexpected(

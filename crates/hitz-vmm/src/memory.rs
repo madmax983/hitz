@@ -208,7 +208,7 @@ impl GuestMemory {
             .regions
             .binary_search_by(|r| {
                 let start = r.gpa_start.as_u64();
-                let end = start + r.size as u64;
+                let end = start.saturating_add(r.size as u64);
                 if addr < start {
                     std::cmp::Ordering::Greater
                 } else if addr >= end {
@@ -222,8 +222,8 @@ impl GuestMemory {
         let region = &self.regions[idx];
         // This VMM targets x86-64 only; 32-bit truncation is not a concern.
         #[allow(clippy::cast_possible_truncation)]
-        let offset = (addr - region.gpa_start.as_u64()) as usize;
-        let remaining = region.size - offset;
+        let offset = addr.saturating_sub(region.gpa_start.as_u64()) as usize;
+        let remaining = region.size.saturating_sub(offset);
 
         if len > remaining {
             return Err(MemError::OutOfBounds { gpa: addr, len });
