@@ -1,17 +1,58 @@
+//! Simulator module for generating synthetic telemetry streams.
+//!
+//! # Abstract
+//! This module provides a synthetic [`VmSimulator`] that produces realistic,
+//! time-series telemetry data without requiring an actual micro-VM to be running.
+//! It is useful for testing, continuous integration, and validating alerting
+//! thresholds (e.g., via the [`health`](crate::health) module).
+//!
+//! # The Hero's Journey
+//!
+//! ```rust
+//! use hitz_api::simulator::{VmSimulator, WorkloadProfile};
+//!
+//! // 1. Create a new simulator designed to trigger a CPU alert
+//! let mut simulator = VmSimulator::new(WorkloadProfile::CpuSpike);
+//!
+//! // 2. Consume metrics over time
+//! for _ in 0..5 {
+//!     let metrics = simulator.next().expect("Simulator never ends");
+//!     println!("Current CPU: {}%", metrics.cpu.total_pct);
+//! }
+//! ```
+//!
+//! # The Fine Print
+//! This simulator implements [`Iterator`] and will run indefinitely.
+//! Ensure you place limits on consumption if running in a bounded test environment.
+
 use crate::{CpuMetrics, MemoryMetrics, MetricsSnapshot};
 
 /// Determines the simulated workload pattern.
+///
+/// # Abstract
+/// This enum defines the behavior of the [`VmSimulator`] over time. By selecting
+/// a profile, developers can reliably recreate specific stress conditions
+/// (like resource exhaustion or CPU pinning) to ensure their telemetry
+/// pipelines and alerting systems react appropriately.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WorkloadProfile {
-    /// Simulates a sudden spike in CPU usage.
+    /// Simulates a sudden, aggressive spike in CPU usage, eventually reaching
+    /// near 100% saturation. Ideal for testing threshold alerts.
     CpuSpike,
-    /// Simulates a steady increase in memory usage.
+    /// Simulates a steady, unbounded increase in memory usage over time.
+    /// Useful for observing out-of-memory (OOM) prediction logic.
     MemoryLeak,
-    /// Simulates normal idle operations.
+    /// Simulates normal, baseline idle operations with minimal variance.
     Idle,
 }
 
 /// A simulator that generates synthetic VM telemetry over time.
+///
+/// # Abstract
+/// `VmSimulator` acts as an infinite stream of [`MetricsSnapshot`] objects,
+/// tailored to the specific [`WorkloadProfile`] provided at creation. Because
+/// it implements the standard library's `Iterator` trait, you can easily compose
+/// it with other iterator adapters.
 #[derive(Debug)]
 pub struct VmSimulator {
     profile: WorkloadProfile,
@@ -20,6 +61,14 @@ pub struct VmSimulator {
 
 impl VmSimulator {
     /// Creates a new `VmSimulator` with the specified profile.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use hitz_api::simulator::{VmSimulator, WorkloadProfile};
+    ///
+    /// let sim = VmSimulator::new(WorkloadProfile::MemoryLeak);
+    /// ```
     #[must_use]
     pub const fn new(profile: WorkloadProfile) -> Self {
         Self {
