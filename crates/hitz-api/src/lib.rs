@@ -24,6 +24,12 @@ pub mod health;
 #[cfg(feature = "health_check")]
 pub use health::*;
 
+#[cfg(feature = "simulator")]
+/// Simulator module for generating synthetic telemetry streams.
+pub mod simulator;
+#[cfg(feature = "simulator")]
+pub use simulator::*;
+
 use serde::{Deserialize, Serialize};
 
 /// Default kernel command line for Linux direct boot.
