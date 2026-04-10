@@ -505,6 +505,21 @@ pub fn boot_and_run<H: Hypervisor, W: Write + Send + 'static>(
     // ── 14. Run vCPU threads ──
     let devices = Arc::new(Mutex::new(SharedDevices { serial, mmio_bus }));
 
+    run_vcpus::<H, W>(vcpus, devices, guest_mem_arc, stop_flag, net_io_handle)
+}
+
+#[allow(
+    clippy::needless_pass_by_value,
+    clippy::expect_used,
+    clippy::too_many_lines
+)]
+fn run_vcpus<H: Hypervisor, W: Write + Send + 'static>(
+    mut vcpus: Vec<<H::Partition as Partition>::Vcpu>,
+    devices: Arc<Mutex<SharedDevices<W>>>,
+    guest_mem_arc: Arc<GuestMemory>,
+    stop_flag: Arc<AtomicBool>,
+    net_io_handle: Option<hitz_net::NetIoHandle>,
+) -> Result<VmRunResult, VmError> {
     if vcpus.len() == 1 {
         // Watchdog cancels the vCPU if stop_flag fires while guest is halted.
         let cancel_handle = vcpus[0].cancel_handle();

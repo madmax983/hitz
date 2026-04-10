@@ -150,7 +150,9 @@ mod tests {
             .finish();
 
         // Mode is encoded in the ASCII header at offset 14..22 (8 bytes)
+        #[allow(clippy::expect_used)]
         let mode_hex = std::str::from_utf8(&archive[14..22]).expect("valid utf8");
+        #[allow(clippy::expect_used)]
         let parsed_mode = u32::from_str_radix(mode_hex, 16).expect("valid hex");
 
         // Ensure 0o100_000 (S_IFREG) is set
