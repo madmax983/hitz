@@ -155,8 +155,9 @@ fn read_uptime_secs() -> f64 {
 fn parse_proc_pid_stat(pid: u32, content: &str) -> Option<hitz_api::ProcMetrics> {
     let open = content.find('(')?;
     let close = content.rfind(')')?;
-    let name = content[open + 1..close].to_string();
-    let mut iter = content[close + 2..].split_ascii_whitespace();
+    let name = content.get(open + 1..close)?.to_string();
+    let remaining = content.get(close + 2..)?;
+    let mut iter = remaining.split_ascii_whitespace();
 
     // According to proc(5) for /proc/[pid]/stat:
     // (1) pid
@@ -252,5 +253,25 @@ fn main() {
     #[cfg(not(unix))]
     {
         eprintln!("hitz-agent: not supported on this platform");
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn havoc_fuzz_parse_proc_pid_stat(s in ".*\\(.*\\).*") {
+            let _ = parse_proc_pid_stat(1, &s);
+        }
+    }
+
+    #[test]
+    fn havoc_test_parse_proc_pid_stat_out_of_bounds() {
+        let content = "(a)";
+        assert!(parse_proc_pid_stat(1, content).is_none());
     }
 }
