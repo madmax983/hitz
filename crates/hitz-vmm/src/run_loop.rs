@@ -161,14 +161,9 @@ pub fn run_vcpu_loop<V: Vcpu, W: Write>(
 
         let exit = vcpu.run()?;
 
-        if let Some(reason) = dispatch_exit(
-            vcpu,
-            devices,
-            mem,
-            exit,
-            &mut pending_irq,
-            &exit_counter,
-        )? {
+        if let Some(reason) =
+            dispatch_exit(vcpu, devices, mem, exit, &mut pending_irq, &exit_counter)?
+        {
             return Ok(reason);
         }
     }
@@ -406,7 +401,9 @@ mod tests {
     impl Vcpu for DummyVcpu {
         type CancelHandle = ();
         fn cancel_handle(&self) -> Self::CancelHandle {}
-        fn cancel_via(_handle: &Self::CancelHandle) -> Result<(), HalError> { Ok(()) }
+        fn cancel_via(_handle: &Self::CancelHandle) -> Result<(), HalError> {
+            Ok(())
+        }
         fn run(&mut self) -> Result<VcpuExit, HalError> {
             match &self.exit {
                 VcpuExit::Halt => Ok(VcpuExit::Halt),
@@ -415,30 +412,45 @@ mod tests {
                 _ => unimplemented!(),
             }
         }
-        fn get_regs(&self) -> Result<hitz_hal::StandardRegs, HalError> { Ok(self.regs.clone()) }
+        fn get_regs(&self) -> Result<hitz_hal::StandardRegs, HalError> {
+            Ok(self.regs.clone())
+        }
         fn set_regs(&mut self, regs: &hitz_hal::StandardRegs) -> Result<(), HalError> {
             self.regs = regs.clone();
             Ok(())
         }
-        fn get_sregs(&self) -> Result<hitz_hal::SpecialRegs, HalError> { Ok(self.sregs.clone()) }
+        fn get_sregs(&self) -> Result<hitz_hal::SpecialRegs, HalError> {
+            Ok(self.sregs.clone())
+        }
         fn set_sregs(&mut self, sregs: &hitz_hal::SpecialRegs) -> Result<(), HalError> {
             self.sregs = sregs.clone();
             Ok(())
         }
-        fn inject_interrupt(&mut self, _vector: u8) -> Result<(), HalError> { Ok(()) }
-        fn request_interrupt_window(&mut self) -> Result<(), HalError> { Ok(()) }
+        fn inject_interrupt(&mut self, _vector: u8) -> Result<(), HalError> {
+            Ok(())
+        }
+        fn request_interrupt_window(&mut self) -> Result<(), HalError> {
+            Ok(())
+        }
     }
 
     struct DummyMem;
     impl GuestMemAccess for DummyMem {
-        fn read_guest(&self, _gpa: u64, _buf: &mut [u8]) -> Result<(), HalError> { Ok(()) }
-        fn write_guest(&self, _gpa: u64, _buf: &[u8]) -> Result<(), HalError> { Ok(()) }
+        fn read_guest(&self, _gpa: u64, _buf: &mut [u8]) -> Result<(), HalError> {
+            Ok(())
+        }
+        fn write_guest(&self, _gpa: u64, _buf: &[u8]) -> Result<(), HalError> {
+            Ok(())
+        }
     }
 
     #[test]
     fn test_advance_rip() {
         let mut vcpu = DummyVcpu {
-            regs: hitz_hal::StandardRegs { rip: 100, ..Default::default() },
+            regs: hitz_hal::StandardRegs {
+                rip: 100,
+                ..Default::default()
+            },
             sregs: Default::default(),
             exit: VcpuExit::Halt,
         };
@@ -449,7 +461,10 @@ mod tests {
     #[test]
     fn test_advance_rip_wrapping() {
         let mut vcpu = DummyVcpu {
-            regs: hitz_hal::StandardRegs { rip: u64::MAX, ..Default::default() },
+            regs: hitz_hal::StandardRegs {
+                rip: u64::MAX,
+                ..Default::default()
+            },
             sregs: Default::default(),
             exit: VcpuExit::Halt,
         };
@@ -460,7 +475,11 @@ mod tests {
     #[test]
     fn test_advance_rip_with_rax() {
         let mut vcpu = DummyVcpu {
-            regs: hitz_hal::StandardRegs { rip: 100, rax: 0, ..Default::default() },
+            regs: hitz_hal::StandardRegs {
+                rip: 100,
+                rax: 0,
+                ..Default::default()
+            },
             sregs: Default::default(),
             exit: VcpuExit::Halt,
         };
@@ -482,7 +501,8 @@ mod tests {
         });
         let mem = DummyMem;
         let stop_flag = AtomicBool::new(false);
-        let result = run_vcpu_loop(&mut vcpu, &devices, &mem, &stop_flag).expect("run_vcpu_loop should succeed");
+        let result = run_vcpu_loop(&mut vcpu, &devices, &mem, &stop_flag)
+            .expect("run_vcpu_loop should succeed");
         assert_eq!(result, ExitReason::Halt);
     }
 
@@ -499,7 +519,8 @@ mod tests {
         });
         let mem = DummyMem;
         let stop_flag = AtomicBool::new(true);
-        let result = run_vcpu_loop(&mut vcpu, &devices, &mem, &stop_flag).expect("run_vcpu_loop should succeed");
+        let result = run_vcpu_loop(&mut vcpu, &devices, &mem, &stop_flag)
+            .expect("run_vcpu_loop should succeed");
         assert_eq!(result, ExitReason::Canceled);
     }
 
@@ -516,7 +537,8 @@ mod tests {
         });
         let mem = DummyMem;
         let stop_flag = AtomicBool::new(false);
-        let result = run_vcpu_loop(&mut vcpu, &devices, &mem, &stop_flag).expect("run_vcpu_loop should succeed");
+        let result = run_vcpu_loop(&mut vcpu, &devices, &mem, &stop_flag)
+            .expect("run_vcpu_loop should succeed");
         assert!(matches!(result, ExitReason::Unexpected(_)));
         if let ExitReason::Unexpected(msg) = result {
             assert!(msg.contains("iteration limit reached"));

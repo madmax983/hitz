@@ -1,13 +1,13 @@
 #![allow(missing_docs)]
 #![allow(clippy::unwrap_used)]
 
-use hitz_hal::{Gpa, MmioExit, Vcpu, HalError, VcpuExit, StandardRegs, SpecialRegs};
-use hitz_vmm::run_loop::{run_vcpu_loop, SharedDevices};
 use hitz_devices::{MmioBus, SerialDevice};
 use hitz_hal::GuestMemAccess;
+use hitz_hal::{Gpa, HalError, MmioExit, SpecialRegs, StandardRegs, Vcpu, VcpuExit};
+use hitz_vmm::run_loop::{SharedDevices, run_vcpu_loop};
+use proptest::prelude::*;
 use std::sync::Mutex;
 use std::sync::atomic::AtomicBool;
-use proptest::prelude::*;
 
 struct MaliciousVcpu {
     exit_to_return: VcpuExit,
@@ -31,21 +31,43 @@ impl Vcpu for MaliciousVcpu {
         Ok(exit)
     }
 
-    fn cancel_handle(&self) -> Self::CancelHandle { () }
-    fn cancel_via(_: &Self::CancelHandle) -> Result<(), HalError> { Ok(()) }
-    fn get_regs(&self) -> Result<StandardRegs, HalError> { Ok(StandardRegs::default()) }
-    fn set_regs(&mut self, _: &StandardRegs) -> Result<(), HalError> { Ok(()) }
-    fn get_sregs(&self) -> Result<SpecialRegs, HalError> { Ok(SpecialRegs::default()) }
-    fn set_sregs(&mut self, _: &SpecialRegs) -> Result<(), HalError> { Ok(()) }
-    fn request_interrupt_window(&mut self) -> Result<(), HalError> { Ok(()) }
-    fn inject_interrupt(&mut self, _: u8) -> Result<(), HalError> { Ok(()) }
-    fn cancel(&self) -> Result<(), HalError> { Ok(()) }
+    fn cancel_handle(&self) -> Self::CancelHandle {
+        ()
+    }
+    fn cancel_via(_: &Self::CancelHandle) -> Result<(), HalError> {
+        Ok(())
+    }
+    fn get_regs(&self) -> Result<StandardRegs, HalError> {
+        Ok(StandardRegs::default())
+    }
+    fn set_regs(&mut self, _: &StandardRegs) -> Result<(), HalError> {
+        Ok(())
+    }
+    fn get_sregs(&self) -> Result<SpecialRegs, HalError> {
+        Ok(SpecialRegs::default())
+    }
+    fn set_sregs(&mut self, _: &SpecialRegs) -> Result<(), HalError> {
+        Ok(())
+    }
+    fn request_interrupt_window(&mut self) -> Result<(), HalError> {
+        Ok(())
+    }
+    fn inject_interrupt(&mut self, _: u8) -> Result<(), HalError> {
+        Ok(())
+    }
+    fn cancel(&self) -> Result<(), HalError> {
+        Ok(())
+    }
 }
 
 struct DummyMem;
 impl GuestMemAccess for DummyMem {
-    fn read_guest(&self, _: u64, _: &mut [u8]) -> Result<(), HalError> { Ok(()) }
-    fn write_guest(&self, _: u64, _: &[u8]) -> Result<(), HalError> { Ok(()) }
+    fn read_guest(&self, _: u64, _: &mut [u8]) -> Result<(), HalError> {
+        Ok(())
+    }
+    fn write_guest(&self, _: u64, _: &[u8]) -> Result<(), HalError> {
+        Ok(())
+    }
 }
 
 proptest! {
