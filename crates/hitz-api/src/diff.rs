@@ -66,7 +66,8 @@ impl CalculateDiff for MetricsSnapshot {
 
         let elapsed_secs = (self.timestamp_ms - previous.timestamp_ms) as f64 / 1000.0;
 
-        let mut disks = Vec::new();
+        // Pre-allocate to avoid dynamic heap reallocations during iteration
+        let mut disks = Vec::with_capacity(self.disks.len());
         for current_disk in &self.disks {
             if let Some(prev_disk) = previous.disks.iter().find(|d| d.name == current_disk.name) {
                 disks.push(DiskRate {
@@ -95,7 +96,8 @@ impl CalculateDiff for MetricsSnapshot {
             }
         }
 
-        let mut networks = Vec::new();
+        // Pre-allocate to avoid dynamic heap reallocations during iteration
+        let mut networks = Vec::with_capacity(self.networks.len());
         for current_net in &self.networks {
             if let Some(prev_net) = previous
                 .networks
