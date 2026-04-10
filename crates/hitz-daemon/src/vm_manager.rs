@@ -385,7 +385,7 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
                 .with_description("Guest RAM in bytes at VM start")
                 .build();
             memory_gauge.record(
-                u64::from(config.ram_mib) * 1024 * 1024,
+                u64::from(boot_config.ram_mib) * 1024 * 1024,
                 &[KeyValue::new("vm.id", id.to_string())],
             );
         }
@@ -837,18 +837,20 @@ fn inject_guest_agent(mut config: VmConfig, id: &str) -> VmConfig {
     };
 
     let overlay = crate::agent::build_agent_overlay(&agent_bytes);
-    let mut combined = config
-        .initramfs_path
-        .as_ref()
-        .map_or_else(Vec::new, |path| std::fs::read(path).unwrap_or_default());
+    let mut combined = config.initramfs_path.as_ref().map_or_else(
+        || Vec::with_capacity(overlay.len()),
+        |path| {
+            let mut data = std::fs::read(path).unwrap_or_default();
+            data.reserve(overlay.len());
+            data
+        },
+    );
     combined.extend_from_slice(&overlay);
     let tmp = std::env::temp_dir().join(format!("hitz-initrd-{id}.cpio"));
     if std::fs::write(&tmp, &combined).is_ok() {
         config.initramfs_path = Some(tmp);
-        config
-    } else {
-        config
     }
+    config
 }
 
 /// Helper function to set up port forwarding for a VM
