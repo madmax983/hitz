@@ -38,6 +38,42 @@ struct MmioSlot {
 }
 
 /// Routes MMIO accesses to the correct device based on GPA.
+/// A memory-mapped I/O (MMIO) bus that multiplexes reads and writes to virtual devices.
+///
+/// # Abstract
+///
+/// `MmioBus` acts as the switchboard for guest memory accesses that fall into the MMIO
+/// range (typically above RAM or in a reserved hole). It holds a collection of registered
+/// devices (which implement the [`MmioDevice`] trait) and routes `mmio_read` and
+/// `mmio_write` calls to the correct device based on the address.
+///
+/// # The Hero's Journey
+///
+/// ```
+/// # use hitz_devices::mmio_bus::{MmioBus, MmioDevice};
+/// # use hitz_hal::GuestMemAccess;
+/// #
+/// # struct DummyDevice;
+/// # impl MmioDevice for DummyDevice {
+/// #     fn mmio_read(&mut self, _: u64, buf: &mut [u8]) { buf.fill(0x42); }
+/// #     fn mmio_write(&mut self, _: u64, _: &[u8], _: &dyn GuestMemAccess) -> Option<u8> { None }
+/// # }
+/// // 1. Create the MMIO bus.
+/// let mut bus = MmioBus::new();
+///
+/// // 2. Register a device at base address 0x1000 with size 256 bytes.
+/// bus.register(0x1000, 256, Box::new(DummyDevice));
+///
+/// // 3. The guest reads 4 bytes from address 0x1004.
+/// let mut buf = [0u8; 4];
+/// bus.read(0x1004, &mut buf);
+/// assert_eq!(buf, [0x42, 0x42, 0x42, 0x42]);
+/// ```
+///
+/// # The Fine Print
+///
+/// Devices must not overlap. Attempting to register overlapping address ranges
+/// will cause a panic to prevent unpredictable routing and memory corruption.
 pub struct MmioBus {
     slots: Vec<MmioSlot>,
 }
