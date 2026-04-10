@@ -98,7 +98,13 @@ fn handle_packet(
 /// All calls are no-ops when no `OTel` provider is registered.
 pub fn publish_to_otel(vm_id: &str, snap: &MetricsSnapshot) {
     let meter = opentelemetry::global::meter("hitz");
-    let labels = [KeyValue::new("vm.id", vm_id.to_string())];
+
+    // ⚡ Bolt Optimization:
+    // We pre-allocate the `vm.id` KeyValue to avoid `vm_id.to_string()` heap allocations
+    // inside the loops for cores, disks, and network interfaces. We also replace
+    // `i.to_string()` with `i as i64` for CPU cores to prevent allocation per core.
+    let vm_id_kv = KeyValue::new("vm.id", vm_id.to_string());
+    let labels = [vm_id_kv.clone()];
 
     meter
         .f64_gauge("hitz.guest.cpu_usage")
@@ -108,8 +114,8 @@ pub fn publish_to_otel(vm_id: &str, snap: &MetricsSnapshot) {
 
     for (i, &pct) in snap.cpu.per_core.iter().enumerate() {
         let core_labels = [
-            KeyValue::new("vm.id", vm_id.to_string()),
-            KeyValue::new("cpu", i.to_string()),
+            vm_id_kv.clone(),
+            KeyValue::new("cpu", i as i64),
         ];
         meter
             .f64_gauge("hitz.guest.cpu_usage_per_core")
@@ -131,7 +137,7 @@ pub fn publish_to_otel(vm_id: &str, snap: &MetricsSnapshot) {
 
     for disk in &snap.disks {
         let disk_labels = [
-            KeyValue::new("vm.id", vm_id.to_string()),
+            vm_id_kv.clone(),
             KeyValue::new("disk", disk.name.clone()),
         ];
         meter
@@ -146,7 +152,7 @@ pub fn publish_to_otel(vm_id: &str, snap: &MetricsSnapshot) {
 
     for net in &snap.networks {
         let net_labels = [
-            KeyValue::new("vm.id", vm_id.to_string()),
+            vm_id_kv.clone(),
             KeyValue::new("interface", net.interface.clone()),
         ];
         meter
