@@ -113,10 +113,7 @@ pub fn publish_to_otel(vm_id: &str, snap: &MetricsSnapshot) {
         .record(f64::from(snap.cpu.total_pct), &labels);
 
     for (i, &pct) in snap.cpu.per_core.iter().enumerate() {
-        let core_labels = [
-            vm_id_kv.clone(),
-            KeyValue::new("cpu", i as i64),
-        ];
+        let core_labels = [vm_id_kv.clone(), KeyValue::new("cpu", i as i64)];
         meter
             .f64_gauge("hitz.guest.cpu_usage_per_core")
             .build()
@@ -136,10 +133,7 @@ pub fn publish_to_otel(vm_id: &str, snap: &MetricsSnapshot) {
         .record(snap.memory.total_bytes, &labels);
 
     for disk in &snap.disks {
-        let disk_labels = [
-            vm_id_kv.clone(),
-            KeyValue::new("disk", disk.name.clone()),
-        ];
+        let disk_labels = [vm_id_kv.clone(), KeyValue::new("disk", disk.name.clone())];
         meter
             .u64_counter("hitz.guest.disk_read_bytes_total")
             .build()

@@ -33,10 +33,10 @@
 
 use std::io::{self, Write};
 
-#[cfg(not(loom))]
-use std::sync::{Arc, Mutex};
 #[cfg(loom)]
 use loom::sync::{Arc, Mutex};
+#[cfg(not(loom))]
+use std::sync::{Arc, Mutex};
 
 use tokio::sync::Notify;
 
