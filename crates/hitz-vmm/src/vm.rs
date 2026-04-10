@@ -214,7 +214,10 @@ pub fn validate_config(config: &VmConfig) -> Result<(), VmError> {
 
     impl<'a> SafePath<'a> {
         fn new(path: &'a std::path::Path) -> Result<Self, VmError> {
-            if path.components().any(|c| c == std::path::Component::ParentDir) {
+            if path
+                .components()
+                .any(|c| c == std::path::Component::ParentDir)
+            {
                 return Err(VmError::Config(format!(
                     "path traversal detected: {}",
                     path.display()
@@ -749,7 +752,6 @@ mod tests {
         }
     }
 
-
     #[test]
     fn validate_config_path_traversal() {
         let tmp = tempfile::NamedTempFile::new().expect("create temp file");
@@ -765,7 +767,8 @@ mod tests {
         let mut config2 = config.clone();
         config2.kernel_path = std::path::PathBuf::from("vmlinux-5.15..1");
         // Since we didn't touch exists() we just want to ensure it doesn't fail with path traversal
-        let err2 = validate_config(&config2).expect_err("should reject not found but not traversal");
+        let err2 =
+            validate_config(&config2).expect_err("should reject not found but not traversal");
         assert!(!err2.to_string().contains("path traversal detected"));
     }
     #[test]

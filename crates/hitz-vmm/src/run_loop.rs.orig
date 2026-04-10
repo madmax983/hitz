@@ -565,7 +565,7 @@ mod tests {
         };
         handle_io_port(&mut vcpu, &mut serial, &io).expect("handle_io_port should succeed");
         assert_eq!(vcpu.regs.rip, 102);
-        assert_eq!(serial.writer(), &vec![b'A']);
+        assert_eq!(serial.writer(), b"A".as_ref());
     }
 
     #[test]
