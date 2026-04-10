@@ -346,6 +346,8 @@ enum VmCommand {
     Record(Box<VmRecordArgs>),
     /// Analyze VM health based on configuration and current metrics.
     Analyze(VmIdArgs),
+    /// Replay metrics recording and output a timeline of health state changes.
+    Timeline(VmTimelineArgs),
 }
 
 /// Arguments for `vm clone`.
@@ -391,6 +393,14 @@ struct VmRecordArgs {
     /// Connect to daemon via TCP instead of named pipe.
     #[arg(long)]
     tcp: Option<std::net::SocketAddr>,
+}
+
+/// Arguments for `vm timeline`.
+#[derive(Parser)]
+struct VmTimelineArgs {
+    /// Path to the recorded metrics stream (JSON Lines format).
+    #[arg(short, long)]
+    in_file: PathBuf,
 }
 
 /// Arguments for `vm create`.
@@ -1786,6 +1796,103 @@ async fn handle_vm_record(args: &VmRecordArgs) -> Result<()> {
     Ok(())
 }
 
+#[allow(clippy::too_many_lines)]
+fn handle_vm_timeline(args: &VmTimelineArgs) -> Result<()> {
+    use crossterm::style::Stylize;
+    use hitz_api::health::{HealthCheck, HealthStatus};
+    use std::io::{BufRead, BufReader};
+
+    let file = std::fs::File::open(&args.in_file)
+        .context(format!("Failed to open {}", args.in_file.display()))?;
+    let reader = BufReader::new(file);
+
+    println!(
+        "{}",
+        format!(
+            "Analyzing health timeline from {}...",
+            args.in_file.display()
+        )
+        .cyan()
+    );
+    println!();
+
+    let mut current_status = None;
+    let mut current_reasons: Vec<String> = Vec::new();
+
+    let mut line_count = 0;
+    let mut initial_timestamp = None;
+
+    for (line_num, line_result) in reader.lines().enumerate() {
+        let line = line_result.context("Failed to read line from file")?;
+        if line.trim().is_empty() {
+            continue;
+        }
+
+        let snap: hitz_api::MetricsSnapshot = match serde_json::from_str(&line) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!(
+                    "{}",
+                    format!("✗ Failed to parse metrics on line {}: {}", line_num + 1, e).red()
+                );
+                continue;
+            }
+        };
+
+        if initial_timestamp.is_none() {
+            initial_timestamp = Some(snap.timestamp_ms);
+        }
+
+        line_count += 1;
+
+        let health = snap.assess_health();
+        let status_changed = current_status != Some(health.status);
+        let reasons_changed = current_reasons != health.reasons;
+
+        if status_changed || reasons_changed {
+            let elapsed_ms = snap
+                .timestamp_ms
+                .saturating_sub(initial_timestamp.unwrap_or(snap.timestamp_ms));
+            let elapsed_secs = elapsed_ms / 1000;
+            let time_str = format!("[T+{:02}:{:02}]", elapsed_secs / 60, elapsed_secs % 60);
+
+            let status_msg = match health.status {
+                HealthStatus::Healthy => "Healthy".green(),
+                HealthStatus::Warning => "Warning".yellow(),
+                HealthStatus::Critical => "Critical".red(),
+            };
+
+            if status_changed {
+                println!("{time_str} Health transitioned to {status_msg}");
+            } else if reasons_changed {
+                println!("{time_str} Health updated: {status_msg}");
+            }
+
+            for reason in &health.reasons {
+                if !current_reasons.contains(reason) {
+                    println!("           + {reason}");
+                }
+            }
+            for reason in &current_reasons {
+                if !health.reasons.contains(reason) {
+                    println!("           - {reason}");
+                }
+            }
+
+            current_status = Some(health.status);
+            current_reasons = health.reasons;
+        }
+    }
+
+    println!();
+    println!(
+        "{}",
+        format!("✓ Analysis complete. Processed {line_count} samples.").green()
+    );
+
+    Ok(())
+}
+
 async fn handle_vm_export_metrics(args: &VmExportArgs) -> Result<()> {
     let (status, resp) = pipe_client::pipe_request(
         &args.pipe,
@@ -1840,6 +1947,7 @@ fn run_vm_command(cmd: VmCommand) -> Result<()> {
             VmCommand::ExportMetrics(args) => handle_vm_export_metrics(&args).await,
             VmCommand::Record(args) => handle_vm_record(&args).await,
             VmCommand::Analyze(args) => handle_vm_analyze(&args).await,
+            VmCommand::Timeline(args) => handle_vm_timeline(&args),
         }
     })
 }
@@ -2470,6 +2578,15 @@ mod top_tests {
         let _args = crate::VmListArgs {
             pipe: "pipe".to_string(),
             tcp: None,
+        };
+        assert!(true);
+    }
+
+    #[test]
+    #[allow(clippy::assertions_on_constants)]
+    fn run_vm_timeline_command_definition_compiles() {
+        let _args = crate::VmTimelineArgs {
+            in_file: PathBuf::from("metrics.jsonl"),
         };
         assert!(true);
     }
