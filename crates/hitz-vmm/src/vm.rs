@@ -210,6 +210,27 @@ pub struct VmRunResult {
 /// but does not parse them to verify they are valid ELF/bzImage kernels, valid cpio
 /// archives, or valid raw disk images.
 pub fn validate_config(config: &VmConfig) -> Result<(), VmError> {
+    struct SafePath<'a>(&'a std::path::Path);
+
+    impl<'a> SafePath<'a> {
+        fn new(path: &'a std::path::Path) -> Result<Self, VmError> {
+            if path.components().any(|c| c == std::path::Component::ParentDir) {
+                return Err(VmError::Config(format!(
+                    "path traversal detected: {}",
+                    path.display()
+                )));
+            }
+            Ok(Self(path))
+        }
+    }
+
+    let _kernel_path = SafePath::new(&config.kernel_path)?;
+    if let Some(ref path) = config.initramfs_path {
+        let _initramfs_path = SafePath::new(path)?;
+    }
+    if let Some(ref path) = config.disk_path {
+        let _disk_path = SafePath::new(path)?;
+    }
     if !config.kernel_path.exists() {
         return Err(VmError::Config(format!(
             "kernel not found: {}",
@@ -728,6 +749,25 @@ mod tests {
         }
     }
 
+
+    #[test]
+    fn validate_config_path_traversal() {
+        let tmp = tempfile::NamedTempFile::new().expect("create temp file");
+        let valid_path = tmp.path().to_path_buf();
+
+        let mut config = valid_config(valid_path);
+        config.kernel_path = std::path::PathBuf::from("/etc/../shadow");
+
+        let err = validate_config(&config).expect_err("should reject path traversal");
+        assert!(err.to_string().contains("path traversal detected"));
+
+        // Legitimate filenames with two dots should pass
+        let mut config2 = config.clone();
+        config2.kernel_path = std::path::PathBuf::from("vmlinux-5.15..1");
+        // Since we didn't touch exists() we just want to ensure it doesn't fail with path traversal
+        let err2 = validate_config(&config2).expect_err("should reject not found but not traversal");
+        assert!(!err2.to_string().contains("path traversal detected"));
+    }
     #[test]
     fn validate_config_table_driven() {
         struct TestCase {
