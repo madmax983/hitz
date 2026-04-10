@@ -13,7 +13,7 @@ path = "src/main.rs"
 workspace = true
 
 [dependencies]
-hitz-api.workspace = true
+hitz-api = { workspace = true, features = ["health_check"] }
 hitz-hal.workspace = true
 hitz-vmm.workspace = true
 hitz-whp.workspace = true
