@@ -1,9 +1,53 @@
 //! Calculating differences and rates between telemetry snapshots.
+//!
+//! # Abstract
+//! This module provides the tools necessary to calculate rates of change
+//! over time (per second) by comparing two telemetry snapshots. This is essential
+//! for converting raw, monotonically increasing counters (like bytes read from disk)
+//! into actionable metrics (like bytes/sec).
+//!
+//! # The Hero's Journey
+//!
+//! ```rust
+//! use hitz_api::{MetricsSnapshot, CpuMetrics, MemoryMetrics};
+//! use hitz_api::diff::{CalculateDiff, MetricsDiff};
+//!
+//! // We create an initial snapshot at time = 1000ms
+//! let snap1 = MetricsSnapshot {
+//!     timestamp_ms: 1000,
+//!     cpu: CpuMetrics { total_pct: 10.0, per_core: vec![10.0], load_avg: [0.1, 0.1, 0.1] },
+//!     memory: MemoryMetrics { total_bytes: 1024, used_bytes: 512, free_bytes: 512, buffers_bytes: 0, cached_bytes: 0, swap_total: 0, swap_used: 0 },
+//!     disks: vec![],
+//!     networks: vec![],
+//!     processes: vec![],
+//! };
+//!
+//! // We create a second snapshot 2 seconds later (time = 3000ms)
+//! let snap2 = MetricsSnapshot {
+//!     timestamp_ms: 3000,
+//!     cpu: CpuMetrics { total_pct: 15.0, per_core: vec![15.0], load_avg: [0.1, 0.1, 0.1] },
+//!     memory: MemoryMetrics { total_bytes: 1024, used_bytes: 512, free_bytes: 512, buffers_bytes: 0, cached_bytes: 0, swap_total: 0, swap_used: 0 },
+//!     disks: vec![],
+//!     networks: vec![],
+//!     processes: vec![],
+//! };
+//!
+//! // Calculate the difference!
+//! let diff = snap2.diff(&snap1).expect("snap2 is newer than snap1");
+//!
+//! // The diff accurately reflects the 2-second elapsed time
+//! assert_eq!(diff.elapsed_secs, 2.0);
+//! ```
 
 use crate::MetricsSnapshot;
 use serde::{Deserialize, Serialize};
 
 /// Calculated rates of change per second between two [`MetricsSnapshot`]s.
+///
+/// # Abstract
+/// This struct holds the unified record of calculated rates. It takes the absolute
+/// counter values from a `MetricsSnapshot` (like total bytes read) and normalizes
+/// them into a "per second" rate.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MetricsDiff {
     /// Time elapsed between the two snapshots in seconds.
@@ -45,13 +89,49 @@ pub struct NetRate {
 }
 
 /// A trait for types that can calculate the difference between themselves.
+///
+/// # Abstract
+/// This trait establishes a standardized interface for objects that represent
+/// an absolute value at a specific point in time (like a snapshot of counters)
+/// to produce a relative rate of change when compared to an older snapshot.
+///
+/// # The Hero's Journey
+///
+/// ```rust
+/// use hitz_api::diff::CalculateDiff;
+///
+/// struct MyCounter { time: u64, count: u64 }
+/// struct MyRate { ops_per_sec: f64 }
+///
+/// impl CalculateDiff for MyCounter {
+///     type Diff = MyRate;
+///
+///     fn diff(&self, previous: &Self) -> Option<Self::Diff> {
+///         if self.time <= previous.time { return None; }
+///         let elapsed = (self.time - previous.time) as f64;
+///         let ops = (self.count.saturating_sub(previous.count)) as f64;
+///         Some(MyRate { ops_per_sec: ops / elapsed })
+///     }
+/// }
+///
+/// let c1 = MyCounter { time: 1, count: 10 };
+/// let c2 = MyCounter { time: 3, count: 50 }; // 40 ops over 2 seconds
+///
+/// let rate = c2.diff(&c1).unwrap();
+/// assert_eq!(rate.ops_per_sec, 20.0);
+/// ```
 pub trait CalculateDiff {
     /// The resulting difference type.
     type Diff;
 
     /// Calculates the difference between `self` and `previous`.
     ///
-    /// Returns `None` if the duration between the two is zero or negative.
+    /// # Details
+    /// Implementations should return the difference relative to the elapsed
+    /// time between the two objects.
+    ///
+    /// Returns `None` if the duration between `self` and `previous` is zero
+    /// or negative (i.e., `self` is not strictly newer than `previous`).
     fn diff(&self, previous: &Self) -> Option<Self::Diff>;
 }
 
