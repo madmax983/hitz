@@ -1,0 +1,10 @@
+--- crates/hitz-daemon/src/vm_manager.rs
++++ crates/hitz-daemon/src/vm_manager.rs
+@@ -440,7 +440,7 @@
+             let _port_fwd = start_port_forwarding(&boot_config).await;
+
+             let result = tokio::task::spawn_blocking(move || {
+-                hitz_vmm::boot_and_run(&*hv, &boot_config, serial_buf.clone(), stop_flag.clone(), extras)
++                hitz_vmm::boot_and_run(&*hv, &boot_config, serial_buf, stop_flag, extras)
+             })
+             .await;
