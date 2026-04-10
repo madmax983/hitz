@@ -209,14 +209,15 @@ fn install_service(args: &DaemonInstallArgs) -> Result<()> {
         .map(OsString::from)
         .collect();
 
+    // ⚡ Bolt Optimization: Eliminated .clone() and .to_string() heap allocations.
     let display_name = args
         .display_name
-        .clone()
-        .unwrap_or_else(|| "Hitz micro-VM daemon".to_string());
+        .as_deref()
+        .unwrap_or("Hitz micro-VM daemon");
     let description = args
         .description
-        .clone()
-        .unwrap_or_else(|| "Hyper-V micro-VM manager".to_string());
+        .as_deref()
+        .unwrap_or("Hyper-V micro-VM manager");
 
     let start_type = if args.auto_start {
         ServiceStartType::AutoStart
@@ -1340,7 +1341,8 @@ async fn handle_vm_list(args: &VmListArgs) -> Result<()> {
                     hitz_api::VmState::Failed => Cell::new("Failed").fg(Color::Red),
                     hitz_api::VmState::Created => Cell::new("Created").fg(Color::Cyan),
                 };
-                let exit_reason = info.exit_reason.unwrap_or_else(|| "-".to_string());
+                // ⚡ Bolt Optimization: Removed unnecessary .to_string() allocation on the hot path.
+                let exit_reason = info.exit_reason.as_deref().unwrap_or("-");
                 let _ = table.add_row([
                     Cell::new(&info.id),
                     state_cell,
@@ -1954,6 +1956,7 @@ async fn handle_vm_analyze(args: &VmIdArgs) -> Result<()> {
                     Cell::new(insight.message),
                 ),
             };
+            #[allow(clippy::tuple_array_conversions)]
             let _ = table.add_row([level_cell, msg_cell]);
         }
         println!("{table}");
