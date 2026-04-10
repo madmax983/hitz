@@ -126,7 +126,7 @@ fn record_exit(counter: &Counter<u64>, reason: &'static str) {
 /// Panics if the device mutex is poisoned (a vCPU thread panicked while
 /// holding the lock). This is intentional — a poisoned lock means the
 /// device state is inconsistent and recovery is not possible.
-#[allow(clippy::too_many_lines, clippy::expect_used)]
+#[allow(clippy::expect_used)]
 pub fn run_vcpu_loop<V: Vcpu, W: Write>(
     vcpu: &mut V,
     devices: &Mutex<SharedDevices<W>>,
@@ -157,67 +157,95 @@ pub fn run_vcpu_loop<V: Vcpu, W: Write>(
         }
 
         // Poll devices for async I/O (e.g. network RX).
-        {
-            let mut devs = devices.lock().expect("device lock poisoned");
-            if let Some(vector) = devs.mmio_bus.poll_devices()
-                && vcpu.inject_interrupt(vector).is_err()
-            {
-                pending_irq = Some(vector);
-                vcpu.request_interrupt_window()?;
-            }
-        }
+        poll_devices(vcpu, devices, &mut pending_irq)?;
 
         let exit = vcpu.run()?;
 
-        match exit {
-            VcpuExit::IoPort(io) => {
-                record_exit(&exit_counter, "IoPort");
-                let mut devs = devices.lock().expect("device lock poisoned");
-                handle_io_port(vcpu, &mut devs.serial, &io)?;
-            }
-
-            VcpuExit::Halt => {
-                record_exit(&exit_counter, "Halt");
-                return Ok(ExitReason::Halt);
-            }
-            VcpuExit::Shutdown => {
-                record_exit(&exit_counter, "Shutdown");
-                return Ok(ExitReason::Shutdown);
-            }
-
-            VcpuExit::Mmio(mmio) => {
-                record_exit(&exit_counter, "Mmio");
-                handle_mmio(vcpu, devices, mem, &mmio, &mut pending_irq)?;
-            }
-
-            VcpuExit::InterruptWindow => {
-                record_exit(&exit_counter, "InterruptWindow");
-                // Guest is now interruptible. WHP auto-clears the
-                // deliverability notification after this exit fires.
-                if let Some(vector) = pending_irq.take() {
-                    vcpu.inject_interrupt(vector)?;
-                    tracing::debug!(vector, "deferred interrupt injected via interrupt window");
-                }
-            }
-
-            VcpuExit::Canceled => {
-                record_exit(&exit_counter, "Canceled");
-                // vCPU run was canceled (e.g. by another thread).
-                // If we have a pending IRQ, re-request the interrupt window
-                // so we get notified once the guest becomes interruptible.
-                if pending_irq.is_some() {
-                    vcpu.request_interrupt_window()?;
-                }
-            }
-
-            VcpuExit::Unknown(code) => {
-                record_exit(&exit_counter, "Unexpected");
-                return Ok(ExitReason::Unexpected(format!(
-                    "unknown vCPU exit reason: {code:#x}"
-                )));
-            }
+        if let Some(reason) = dispatch_exit(
+            vcpu,
+            devices,
+            mem,
+            exit,
+            &mut pending_irq,
+            &exit_counter,
+        )? {
+            return Ok(reason);
         }
     }
+}
+
+#[allow(clippy::expect_used)]
+fn poll_devices<V: Vcpu, W: Write>(
+    vcpu: &mut V,
+    devices: &Mutex<SharedDevices<W>>,
+    pending_irq: &mut Option<u8>,
+) -> Result<(), HalError> {
+    let mut devs = devices.lock().expect("device lock poisoned");
+    let pending_vector = devs.mmio_bus.poll_devices();
+    drop(devs);
+
+    if let Some(vector) = pending_vector
+        && vcpu.inject_interrupt(vector).is_err()
+    {
+        *pending_irq = Some(vector);
+        vcpu.request_interrupt_window()?;
+    }
+    Ok(())
+}
+
+#[allow(clippy::expect_used)]
+fn dispatch_exit<V: Vcpu, W: Write>(
+    vcpu: &mut V,
+    devices: &Mutex<SharedDevices<W>>,
+    mem: &dyn GuestMemAccess,
+    exit: VcpuExit,
+    pending_irq: &mut Option<u8>,
+    exit_counter: &Counter<u64>,
+) -> Result<Option<ExitReason>, HalError> {
+    match exit {
+        VcpuExit::IoPort(io) => {
+            record_exit(exit_counter, "IoPort");
+            let mut devs = devices.lock().expect("device lock poisoned");
+            handle_io_port(vcpu, &mut devs.serial, &io)?;
+        }
+        VcpuExit::Halt => {
+            record_exit(exit_counter, "Halt");
+            return Ok(Some(ExitReason::Halt));
+        }
+        VcpuExit::Shutdown => {
+            record_exit(exit_counter, "Shutdown");
+            return Ok(Some(ExitReason::Shutdown));
+        }
+        VcpuExit::Mmio(mmio) => {
+            record_exit(exit_counter, "Mmio");
+            handle_mmio(vcpu, devices, mem, &mmio, pending_irq)?;
+        }
+        VcpuExit::InterruptWindow => {
+            record_exit(exit_counter, "InterruptWindow");
+            // Guest is now interruptible. WHP auto-clears the
+            // deliverability notification after this exit fires.
+            if let Some(vector) = pending_irq.take() {
+                vcpu.inject_interrupt(vector)?;
+                tracing::debug!(vector, "deferred interrupt injected via interrupt window");
+            }
+        }
+        VcpuExit::Canceled => {
+            record_exit(exit_counter, "Canceled");
+            // vCPU run was canceled (e.g. by another thread).
+            // If we have a pending IRQ, re-request the interrupt window
+            // so we get notified once the guest becomes interruptible.
+            if pending_irq.is_some() {
+                vcpu.request_interrupt_window()?;
+            }
+        }
+        VcpuExit::Unknown(code) => {
+            record_exit(exit_counter, "Unexpected");
+            return Ok(Some(ExitReason::Unexpected(format!(
+                "unknown vCPU exit reason: {code:#x}"
+            ))));
+        }
+    }
+    Ok(None)
 }
 
 /// Dispatch an MMIO exit to the appropriate device handler.
