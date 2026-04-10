@@ -38,6 +38,34 @@ impl Trigger for NoopTrigger {
 /// Generic over `W: Write` so tests can use `Vec<u8>` while production
 /// uses a pipe or PTY.
 #[derive(Debug)]
+/// A 16550A-compatible UART serial device (COM1).
+///
+/// # Abstract
+///
+/// This structure wraps `vm-superio`'s Serial implementation to provide a virtual
+/// COM port for the guest. It serves as the primary console for early boot messages
+/// and standard I/O interaction with the Linux kernel via PIO (Port I/O).
+///
+/// # The Hero's Journey
+///
+/// ```
+/// # use hitz_devices::serial::SerialDevice;
+/// # use hitz_hal::IoPortExit;
+/// // 1. Create a serial device routing output to a simple vector.
+/// let output = Vec::new();
+/// let mut serial = SerialDevice::new(output);
+///
+/// // 2. Guest writes 'H' to COM1 (I/O port 0x3f8).
+/// serial.write(0x3f8, b"H");
+/// ```
+///
+/// # The Fine Print
+///
+/// - The standard I/O port base for COM1 is `0x3f8`.
+/// - Hitz only exposes writing to the serial port currently. Reads return `0`.
+/// - An interrupt is usually asserted when the Transmit Holding Register (THR) is empty,
+///   but Hitz uses a `NoopTrigger` to avoid injecting unnecessary interrupts since it's
+///   synchronous and fast.
 pub struct SerialDevice<W: Write> {
     inner: Serial<NoopTrigger, NoEvents, W>,
 }

@@ -26,14 +26,39 @@ const RX_QUEUE: u16 = 0;
 /// TX virtqueue index (guest sends frames here).
 const TX_QUEUE: u16 = 1;
 
-/// Virtio network device.
+/// A virtio-net device implementation.
 ///
-/// Communicates with an external I/O thread via crossbeam channels:
-/// - TX frames from the guest are sent to `tx_sender`
-/// - RX frames for the guest arrive on `rx_receiver`
+/// # Abstract
 ///
-/// The [`VirtioNetDevice::new`] constructor returns the device along
-/// with the complementary channel endpoints for the I/O thread.
+/// Provides a paravirtualized network interface to the guest OS. It uses two
+/// virtqueues: one for receiving packets (RX) and one for transmitting packets (TX).
+///
+/// This structure bridges the guest's memory buffers with host-side crossbeam
+/// channels, allowing an asynchronous host network thread to inject received ethernet
+/// frames and drain transmitted frames.
+///
+/// # The Hero's Journey
+///
+/// ```no_run
+/// # use hitz_devices::virtio::net::VirtioNetDevice;
+/// # use crossbeam_channel::unbounded;
+/// # use hitz_devices::virtio::mmio_transport::VirtioMmioTransport;
+/// // 1. Create channels for host-device communication.
+/// let (host_tx, device_rx) = unbounded();
+/// let (device_tx, host_rx) = unbounded();
+///
+/// // 2. Create the virtio-net device.
+/// let mac = [0x02, 0x00, 0x00, 0x00, 0x00, 0x01];
+/// let net_device = VirtioNetDevice::new(mac, device_tx, device_rx);
+///
+/// // 3. Wrap it in a virtio-mmio transport and register it to the MmioBus.
+/// let transport = VirtioMmioTransport::new(net_device);
+/// ```
+///
+/// # The Fine Print
+///
+/// - Requires `VIRTIO_F_VERSION_1` and implements the `VIRTIO_NET_F_MAC` feature.
+/// - The RX and TX queues must be polled periodically on the `MmioBus` via `poll_rx`.
 pub struct VirtioNetDevice {
     /// The device's MAC address (reported in config space).
     mac: [u8; 6],

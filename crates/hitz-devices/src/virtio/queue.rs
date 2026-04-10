@@ -29,9 +29,38 @@ const MAX_QUEUE_SIZE: u16 = 256;
 
 /// A single virtqueue, managing descriptor, available, and used rings.
 ///
-/// The guest configures this via MMIO registers (descriptor table GPA,
-/// available ring GPA, used ring GPA, queue size). The VMM reads/writes
-/// the ring structures through [`GuestMemAccess`].
+/// # Abstract
+///
+/// This structure represents a single Virtio queue (Split Virtqueue). It maintains
+/// pointers to the three vital areas in guest memory: the Descriptor Table, the
+/// Available Ring, and the Used Ring.
+///
+/// # The Hero's Journey
+///
+/// Typically, `VirtQueue` instances are created automatically by the `VirtioMmioTransport`
+/// layer as the guest OS initializes them. Your backend device interacts with them
+/// when processing a queue:
+///
+/// ```
+/// # use hitz_devices::virtio::queue::{VirtQueue, DescriptorChain};
+/// # use hitz_hal::GuestMemAccess;
+/// # fn handle_queue(queue: &mut VirtQueue, mem: &dyn GuestMemAccess) {
+/// // 1. Pop the next available descriptor chain the guest has produced.
+/// while let Some(mut chain) = queue.pop_chain(mem) {
+///     // 2. Process descriptors in the chain...
+///     let head_idx = chain.head_index();
+///
+///     // 3. Mark the chain as used, returning it to the guest.
+///     queue.push_used(mem, head_idx, 0);
+/// }
+/// # }
+/// ```
+///
+/// # The Fine Print
+///
+/// The queue size is bounded (typically 256 for Hitz) and must be a power of two.
+/// The VMM interacts with the raw memory structures through a [`GuestMemAccess`] trait
+/// object to avoid mapping guest rings directly into host virtual memory permanently.
 pub struct VirtQueue {
     /// Queue depth (power of 2, max 256).
     size: u16,
@@ -122,6 +151,7 @@ impl VirtQueue {
     /// On success, returns a [`DescriptorChain`] that iterates over
     /// the descriptors in the chain, plus the head index for later
     /// use in [`push_used`](Self::push_used).
+    #[allow(rustdoc::private_intra_doc_links)]
     pub fn pop_chain(&mut self, mem: &dyn GuestMemAccess) -> Option<DescriptorChain> {
         if !self.ready {
             return None;
@@ -157,6 +187,7 @@ impl VirtQueue {
     ///
     /// `head_idx` is the descriptor chain head (from [`DescriptorChain::head_index`]).
     /// `len` is the total number of bytes written to device-writable descriptors.
+    #[allow(rustdoc::private_intra_doc_links)]
     pub fn push_used(&self, mem: &dyn GuestMemAccess, head_idx: u16, len: u32) {
         // Read current used.idx.
         let Some(idx_gpa) = self.used_gpa.checked_add(2) else {
@@ -190,7 +221,15 @@ impl VirtQueue {
 
 /// An iterator over descriptors in a chain.
 ///
-/// Yields `(gpa, len, is_device_writable)` tuples for each descriptor.
+/// # Abstract
+/// Represents a chain of descriptors starting from the head descriptor.
+/// It yields `Descriptor` elements containing the address, length, and access rights.
+///
+/// # The Hero's Journey
+/// ```
+/// # use hitz_devices::virtio::queue::DescriptorChain;
+/// // Handled internally by `VirtQueue`.
+/// ```
 pub struct DescriptorChain {
     /// Base GPA of the descriptor table.
     desc_gpa: u64,
@@ -205,6 +244,16 @@ pub struct DescriptorChain {
 }
 
 /// A single descriptor from a chain.
+///
+/// # Abstract
+/// Defines a single buffer's guest physical address, its size in bytes,
+/// and whether it's writable by the device.
+///
+/// # The Hero's Journey
+/// ```
+/// # use hitz_devices::virtio::queue::Descriptor;
+/// let desc = Descriptor { gpa: 0x1000, len: 4096, is_device_writable: true };
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Descriptor {
     /// Guest physical address of the buffer.

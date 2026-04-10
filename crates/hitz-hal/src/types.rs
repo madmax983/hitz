@@ -18,6 +18,9 @@ use crate::newtypes::{Gpa, MemSizeMiB, VcpuId};
 ///     memory_size: MemSizeMiB::new(1024),
 /// };
 /// ```
+///
+/// # The Fine Print
+/// Some hypervisors may round `memory_size` up to the nearest page boundary.
 #[derive(Debug, Clone)]
 pub struct PartitionConfig {
     /// Number of virtual CPUs.
@@ -90,6 +93,9 @@ pub enum VcpuExit {
 ///     println!("Guest writing to MMIO");
 /// }
 /// ```
+///
+/// # The Fine Print
+/// `data` holds up to 8 bytes. For smaller accesses, only the lower bytes are valid.
 #[derive(Debug)]
 pub struct MmioExit {
     /// Guest physical address being accessed.
@@ -134,6 +140,9 @@ pub struct MmioExit {
 ///     println!("Guest wrote to COM1");
 /// }
 /// ```
+///
+/// # The Fine Print
+/// Only the lower bytes of `data` are valid (dependent on `len`).
 #[derive(Debug)]
 pub struct IoPortExit {
     /// Port number (0x0000–0xFFFF).
@@ -166,6 +175,9 @@ pub struct IoPortExit {
 /// regs.rip = 0x100000;
 /// regs.rflags = 0x2;
 /// ```
+///
+/// # The Fine Print
+/// Ensure `rflags` has the reserved bit 1 set (0x2) as mandated by x86 architecture.
 #[derive(Debug, Clone, Default)]
 pub struct StandardRegs {
     /// Instruction pointer.
@@ -223,6 +235,9 @@ pub struct StandardRegs {
 /// cs.limit = 0xFFFFFFFF;
 /// cs.type_ = 11; // Execute/Read, accessed
 /// ```
+///
+/// # The Fine Print
+/// `type_` and other flags correspond to the standard x86 segment descriptor format.
 #[derive(Debug, Clone, Default)]
 pub struct SegmentDescriptor {
     /// Base address.
@@ -263,6 +278,9 @@ pub struct SegmentDescriptor {
 ///     limit: 0x1FF,
 /// };
 /// ```
+///
+/// # The Fine Print
+/// `limit` is the size of the table minus 1, in bytes.
 #[derive(Debug, Clone, Default)]
 pub struct DescriptorTable {
     /// Base address.
@@ -285,6 +303,10 @@ pub struct DescriptorTable {
 /// let mut sregs = SpecialRegs::default();
 /// sregs.cr0 = 0x80000011; // Enable Paging + Protection
 /// ```
+///
+/// # The Fine Print
+/// These registers represent the architectural configuration. Incorrect values
+/// will result in an immediate triple fault upon guest entry.
 #[derive(Debug, Clone, Default)]
 pub struct SpecialRegs {
     /// CR0 — contains PE (protection enable), PG (paging), etc.
@@ -335,6 +357,9 @@ pub struct SpecialRegs {
 /// assert!(flags.write);
 /// assert!(!flags.execute);
 /// ```
+///
+/// # The Fine Print
+/// Not all hypervisors support execute-only or write-only memory natively.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MemFlags {
     /// Guest can read from this region.
@@ -384,6 +409,9 @@ impl MemFlags {
 ///     vector: 32, // e.g., timer interrupt
 /// };
 /// ```
+///
+/// # The Fine Print
+/// Hardware interrupts are generally edge-triggered.
 #[derive(Debug, Clone, Copy)]
 pub struct InterruptRequest {
     /// Target vCPU.
