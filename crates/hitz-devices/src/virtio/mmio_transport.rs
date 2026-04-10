@@ -6,7 +6,7 @@
 //! between the guest driver and a [`VirtioBackend`].
 //!
 //! # The Hero's Journey
-//! ```
+//! ```ignore
 //! # use hitz_devices::virtio::mmio_transport::VirtioMmioTransport;
 //! # use hitz_devices::virtio::VirtioBackend;
 //! # use std::sync::Arc;

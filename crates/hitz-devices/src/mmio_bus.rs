@@ -50,7 +50,18 @@ impl MmioBus {
     }
 
     /// Register a device at `base_gpa` occupying `size` bytes.
+    ///
+    /// # Panics
+    /// Panics if the registered region overlaps with an existing device region.
     pub fn register(&mut self, base_gpa: u64, size: u64, device: Box<dyn MmioDevice>) {
+        let end_gpa = base_gpa + size;
+        for slot in &self.slots {
+            let slot_end = slot.base + slot.size;
+            assert!(
+                !(base_gpa < slot_end && end_gpa > slot.base),
+                "overlapping MMIO region registered at {base_gpa:#x}"
+            );
+        }
         self.slots.push(MmioSlot {
             base: base_gpa,
             size,
@@ -185,6 +196,15 @@ mod tests {
         bus.read(0xD000_0010, &mut data);
         // StubDevice ignores offset, always returns read_value.
         assert_eq!(u32::from_le_bytes(data), 0x1234);
+    }
+
+    #[test]
+    #[should_panic(expected = "overlapping MMIO region registered")]
+    fn register_overlapping_region_panics() {
+        let mut bus = MmioBus::new();
+        bus.register(0xD000_0000, 0x1000, Box::new(StubDevice::new(0)));
+        // This should panic
+        bus.register(0xD000_0500, 0x1000, Box::new(StubDevice::new(0)));
     }
 
     #[test]

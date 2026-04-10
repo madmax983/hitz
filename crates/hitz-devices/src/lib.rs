@@ -19,28 +19,43 @@
 //! Devices are instantiated during the VM setup phase and registered with the central `MmioBus`.
 //! Here is a simplified illustration of how devices are attached to the bus:
 //!
-//! ```no_run
-//! use hitz_devices::{MmioBus, SerialDevice, VirtioBlockDevice, VirtioMmioTransport};
-//! use std::sync::{Arc, Mutex};
-//!
+//! ```
+//! # use hitz_devices::{MmioBus, SerialDevice, VirtioBlockDevice, VirtioMmioTransport};
+//! # use std::sync::Arc;
+//! # use std::io::Write;
+//! # struct DummyMem;
+//! # impl hitz_hal::GuestMemAccess for DummyMem {
+//! #     fn read_guest(&self, _addr: u64, _data: &mut [u8]) -> Result<(), hitz_hal::HalError> { Ok(()) }
+//! #     fn write_guest(&self, _addr: u64, _data: &[u8]) -> Result<(), hitz_hal::HalError> { Ok(()) }
+//! # }
+//! # struct DummyWrite;
+//! # impl Write for DummyWrite {
+//! #     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> { Ok(buf.len()) }
+//! #     fn flush(&mut self) -> std::io::Result<()> { Ok(()) }
+//! # }
 //! // 1. Create the central bus
 //! let mut bus = MmioBus::new();
 //!
 //! // 2. Create devices
-//! let mut serial = SerialDevice::new();
-//! let block_backend = VirtioBlockDevice::new("/path/to/root.img".into()).unwrap();
-//! let mut block_device = VirtioMmioTransport::new(block_backend);
+//! let mut serial = SerialDevice::new(DummyWrite);
+//! # #[cfg(unix)]
+//! # let dev_null = "/dev/null";
+//! # #[cfg(windows)]
+//! # let dev_null = "NUL";
+//! let block_backend = VirtioBlockDevice::new(std::fs::File::open(dev_null).unwrap()).unwrap();
+//! let guest_mem = Arc::new(DummyMem);
+//! let mut block_device = VirtioMmioTransport::new(block_backend, guest_mem.clone(), 5);
 //!
 //! // 3. Register devices with specific base addresses and sizes
-//! // Typical serial base is 0x3f8 with size 8
-//! bus.insert(serial, 0x3f8, 8);
+//! // Serial devices are typically handled via PIO directly, but for illustrative
+//! // MMIO registration here we use the virtio block device.
 //!
 //! // Typical virtio MMIO base is 0xd0000000 with size 0x200
-//! bus.insert(block_device, 0xd0000000, 0x200);
+//! bus.register(0xd0000000, 0x200, Box::new(block_device));
 //!
 //! // 4. When a guest access occurs (intercepted by WHP), route it:
 //! // e.g., guest writes 'A' (0x41) to the serial port
-//! bus.write(0x3f8, &[0x41]);
+//! bus.write(0x3f8, &[0x41], guest_mem.as_ref());
 //! ```
 //!
 //! # The Fine Print

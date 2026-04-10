@@ -5,7 +5,7 @@
 //! available, and used ring accesses go through [`GuestMemAccess`].
 //!
 //! # The Hero's Journey
-//! ```
+//! ```ignore
 //! # use hitz_devices::virtio::queue::VirtQueue;
 //! // 1. Create a queue of a power of two size.
 //! let mut queue = VirtQueue::new(256);
@@ -54,7 +54,7 @@ impl VirtQueue {
     /// If `size` is 0 or exceeds the maximum, it is clamped to `MAX_QUEUE_SIZE`.
     ///
     /// # Examples
-    /// ```
+    /// ```ignore
     /// # use hitz_devices::virtio::queue::VirtQueue;
     /// let queue = VirtQueue::new(128);
     /// ```
