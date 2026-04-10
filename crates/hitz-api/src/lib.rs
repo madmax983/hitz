@@ -699,7 +699,8 @@ pub struct VmInfo {
 ///
 /// assert_eq!(err.message, "VM not found: my-vm");
 /// ```
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, thiserror::Error)]
+#[error("{message}")]
 pub struct ApiError {
     /// A human-readable, descriptive error message explaining the failure.
     pub message: String,

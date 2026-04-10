@@ -234,6 +234,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::expect_used)]
     fn havoc_overflow_proc_stat() {
         // u64::MAX should not panic during parsing/summation
         let stats = parse_proc_stat_sample(
