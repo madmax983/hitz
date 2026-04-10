@@ -19,3 +19,4 @@ rmp-serde.workspace = true
 default = []
 health_check = []
 simulator = []
+diff = []
