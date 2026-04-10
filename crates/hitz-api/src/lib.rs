@@ -20,19 +20,19 @@ use std::path::PathBuf;
 
 #[cfg(feature = "health_check")]
 /// Health assessment module for evaluating system telemetry.
-pub mod health;
+mod health;
 #[cfg(feature = "health_check")]
 pub use health::*;
 
 #[cfg(feature = "simulator")]
 /// Simulator module for generating synthetic telemetry streams.
-pub mod simulator;
+mod simulator;
 #[cfg(feature = "simulator")]
 pub use simulator::*;
 
 #[cfg(feature = "diff")]
 /// Diff module for calculating rates of change between telemetry snapshots.
-pub mod diff;
+mod diff;
 #[cfg(feature = "diff")]
 pub use diff::*;
 
