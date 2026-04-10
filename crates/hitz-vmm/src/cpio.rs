@@ -144,6 +144,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::expect_used)]
     fn file_mode_is_regular_file() {
         let archive = CpioBuilder::new()
             .add_file("test.txt", b"hello", 0o777)

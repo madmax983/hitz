@@ -55,10 +55,11 @@ fn havoc_test_notify_race_condition() {
         let mut reader = buf.reader();
 
         let mut writer_buf = buf.clone();
-        tokio::spawn(async move {
+        let handle = tokio::spawn(async move {
             tokio::task::yield_now().await;
             writer_buf.write_all(b"test").unwrap();
         });
+        drop(handle);
 
         // Simulate the gap between lock drop and notified().await
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;

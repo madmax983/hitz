@@ -106,8 +106,10 @@ pub fn run_vcpu_loop<V: Vcpu, W: Write>(
         // Poll devices for async I/O (e.g. network RX).
         {
             let mut devs = devices.lock().expect("device lock poisoned");
-            if let Some(vector) = devs.mmio_bus.poll_devices()
-                && vcpu.inject_interrupt(vector).is_err()
+            if let Some(vector) = devs
+                .mmio_bus
+                .poll_devices()
+                .filter(|&vector| vcpu.inject_interrupt(vector).is_err())
             {
                 pending_irq = Some(vector);
                 vcpu.request_interrupt_window()?;

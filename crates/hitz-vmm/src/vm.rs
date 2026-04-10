@@ -155,17 +155,13 @@ pub fn validate_config(config: &VmConfig) -> Result<(), VmError> {
             config.kernel_path.display()
         )));
     }
-    if let Some(ref path) = config.initramfs_path
-        && !path.exists()
-    {
+    if let Some(path) = config.initramfs_path.as_ref().filter(|p| !p.exists()) {
         return Err(VmError::Config(format!(
             "initramfs not found: {}",
             path.display()
         )));
     }
-    if let Some(ref path) = config.disk_path
-        && !path.exists()
-    {
+    if let Some(path) = config.disk_path.as_ref().filter(|p| !p.exists()) {
         return Err(VmError::Config(format!(
             "disk image not found: {}",
             path.display()
