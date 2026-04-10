@@ -131,18 +131,15 @@ mod tests {
     #[test]
     fn test_cpu_spike_profile() {
         let mut sim = VmSimulator::new(WorkloadProfile::CpuSpike);
-        let mut max_cpu = 0.0;
+        let mut max_cpu: f32 = 0.0;
         for _ in 0..10 {
             if let Some(metrics) = sim.next() {
-                if metrics.cpu.total_pct > max_cpu {
-                    max_cpu = metrics.cpu.total_pct;
-                }
+                max_cpu = max_cpu.max(metrics.cpu.total_pct);
             }
         }
         assert!(
             max_cpu > 90.0,
-            "CPU did not spike above 90%, max was {}",
-            max_cpu
+            "CPU did not spike above 90%, max was {max_cpu}",
         );
     }
 
