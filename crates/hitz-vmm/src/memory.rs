@@ -208,7 +208,7 @@ impl GuestMemory {
             .regions
             .binary_search_by(|r| {
                 let start = r.gpa_start.as_u64();
-                let end = start + r.size as u64;
+                let end = start.saturating_add(r.size as u64);
                 if addr < start {
                     std::cmp::Ordering::Greater
                 } else if addr >= end {
@@ -358,7 +358,7 @@ impl hitz_boot::GuestMemWriter for GuestMemory {
             let chunk = len.min(CHUNK_SIZE);
             self.write_slice(gpa, &zeroes[..chunk])
                 .map_err(|e| hitz_boot::BootError::WriteFailed(e.to_string()))?;
-            gpa = Gpa::new(gpa.as_u64() + chunk as u64);
+            gpa = Gpa::new(gpa.as_u64().saturating_add(chunk as u64));
             len -= chunk;
         }
         Ok(())

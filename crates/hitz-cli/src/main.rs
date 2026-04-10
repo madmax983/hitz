@@ -1954,6 +1954,7 @@ async fn handle_vm_analyze(args: &VmIdArgs) -> Result<()> {
                     Cell::new(insight.message),
                 ),
             };
+            #[allow(clippy::tuple_array_conversions)]
             let _ = table.add_row([level_cell, msg_cell]);
         }
         println!("{table}");

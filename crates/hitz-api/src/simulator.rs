@@ -83,6 +83,7 @@ mod tests {
     fn test_cpu_spike_profile() {
         let mut sim = VmSimulator::new(WorkloadProfile::CpuSpike);
         let mut max_cpu = 0.0;
+        #[allow(clippy::collapsible_if)]
         for _ in 0..10 {
             if let Some(metrics) = sim.next() {
                 if metrics.cpu.total_pct > max_cpu {
@@ -90,11 +91,7 @@ mod tests {
                 }
             }
         }
-        assert!(
-            max_cpu > 90.0,
-            "CPU did not spike above 90%, max was {}",
-            max_cpu
-        );
+        assert!(max_cpu > 90.0, "CPU did not spike above 90%, max was {max_cpu}");
     }
 
     #[cfg(feature = "health_check")]
