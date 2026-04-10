@@ -9,7 +9,7 @@
 //! # The Hero's Journey
 //!
 //! ```rust
-//! use hitz_api::simulator::{VmSimulator, WorkloadProfile};
+//! use hitz_api::{VmSimulator, WorkloadProfile};
 //!
 //! // 1. Create a new simulator designed to trigger a CPU alert
 //! let mut simulator = VmSimulator::new(WorkloadProfile::CpuSpike);
@@ -65,7 +65,7 @@ impl VmSimulator {
     /// # Examples
     ///
     /// ```rust
-    /// use hitz_api::simulator::{VmSimulator, WorkloadProfile};
+    /// use hitz_api::{VmSimulator, WorkloadProfile};
     ///
     /// let sim = VmSimulator::new(WorkloadProfile::MemoryLeak);
     /// ```
@@ -150,7 +150,7 @@ mod tests {
     #[test]
     #[allow(clippy::unwrap_used)]
     fn test_simulator_health_check_integration() {
-        use crate::health::{HealthCheck, HealthStatus};
+        use crate::{HealthCheck, HealthStatus};
 
         let mut sim = VmSimulator::new(WorkloadProfile::CpuSpike);
 

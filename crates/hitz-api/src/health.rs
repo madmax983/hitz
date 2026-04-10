@@ -7,7 +7,7 @@
 //!
 //! # The Hero's Journey
 //! ```rust
-//! use hitz_api::health::{HealthCheck, HealthStatus};
+//! use hitz_api::{HealthCheck, HealthStatus};
 //! use hitz_api::{MetricsSnapshot, CpuMetrics, MemoryMetrics};
 //!
 //! // We have some metrics from our micro-VM
@@ -39,7 +39,7 @@ use serde::{Deserialize, Serialize};
 ///
 /// # The Hero's Journey
 /// ```rust
-/// use hitz_api::health::HealthStatus;
+/// use hitz_api::HealthStatus;
 ///
 /// let my_status = HealthStatus::Healthy;
 /// assert_eq!(my_status, HealthStatus::Healthy);
@@ -63,7 +63,7 @@ pub enum HealthStatus {
 ///
 /// # The Hero's Journey
 /// ```rust
-/// use hitz_api::health::{SystemHealth, HealthStatus};
+/// use hitz_api::{SystemHealth, HealthStatus};
 ///
 /// let report = SystemHealth {
 ///     status: HealthStatus::Warning,
@@ -90,7 +90,7 @@ pub struct SystemHealth {
 ///
 /// # The Hero's Journey
 /// ```rust
-/// use hitz_api::health::{HealthCheck, SystemHealth, HealthStatus};
+/// use hitz_api::{HealthCheck, SystemHealth, HealthStatus};
 ///
 /// struct MySystem;
 ///

@@ -1794,7 +1794,7 @@ async fn handle_vm_record(args: &VmRecordArgs) -> Result<()> {
 #[allow(clippy::too_many_lines)]
 fn handle_vm_timeline(args: &VmTimelineArgs) -> Result<()> {
     use crossterm::style::Stylize;
-    use hitz_api::health::{HealthCheck, HealthStatus};
+    use hitz_api::{HealthCheck, HealthStatus};
     use std::io::{BufRead, BufReader};
 
     let file = std::fs::File::open(&args.in_file)
