@@ -32,7 +32,11 @@
 //! * **Closing**: Once `close()` is called, all new readers and pending `read_next` calls will return `None`.
 
 use std::io::{self, Write};
+
+#[cfg(not(loom))]
 use std::sync::{Arc, Mutex};
+#[cfg(loom)]
+use loom::sync::{Arc, Mutex};
 
 use tokio::sync::Notify;
 
@@ -107,7 +111,10 @@ impl SerialBuf {
     /// Panics if `capacity` is 0.
     #[must_use]
     pub fn reader(&self) -> SerialReader {
+        #[cfg(not(loom))]
         let read_pos = self.inner.lock().map_or(0, |i| i.total_written);
+        #[cfg(loom)]
+        let read_pos = self.inner.lock().total_written;
         SerialReader {
             inner: self.inner.clone(),
             notify: self.notify.clone(),
@@ -120,7 +127,13 @@ impl SerialBuf {
     /// All current and future [`SerialReader::read_chunk`] calls will return
     /// `None` once they have drained any remaining data.
     pub fn close(&self) {
+        #[cfg(not(loom))]
         if let Ok(mut inner) = self.inner.lock() {
+            inner.closed = true;
+        }
+        #[cfg(loom)]
+        {
+            let mut inner = self.inner.lock();
             inner.closed = true;
         }
         self.notify.notify_waiters();
@@ -142,10 +155,14 @@ impl Write for SerialBuf {
     /// checking and loop overhead, turning a linear O(N) operation into O(1)
     /// (or O(2) if the write wraps around the end of the ring).
     fn write(&mut self, data: &[u8]) -> io::Result<usize> {
+        #[cfg(not(loom))]
         let mut inner = self
             .inner
             .lock()
-            .map_err(|e| io::Error::other(e.to_string()))?;
+            .map_err(|_| io::Error::other("device lock poisoned"))?;
+        #[cfg(loom)]
+        let mut inner = self.inner.lock();
+
         let cap = inner.buf.len();
         let len = data.len();
 
@@ -201,7 +218,13 @@ impl SerialReader {
         loop {
             let notified = self.notify.notified();
             {
-                let inner = self.inner.lock().ok()?;
+                #[cfg(not(loom))]
+                let inner = match self.inner.lock() {
+                    Ok(guard) => guard,
+                    Err(_) => return None,
+                };
+                #[cfg(loom)]
+                let inner = self.inner.lock();
                 if self.read_pos < inner.total_written {
                     let available = inner.total_written - self.read_pos;
                     let cap = inner.buf.len();

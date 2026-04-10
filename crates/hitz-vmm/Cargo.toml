@@ -34,5 +34,6 @@ opentelemetry.workspace = true
 windows = { workspace = true, features = ["Win32_System_Memory"] }
 
 [dev-dependencies]
+loom = "0.7.2"
 proptest = "1.11.0"
 tempfile = "3"

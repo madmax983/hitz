@@ -212,4 +212,24 @@ mod havoc_race_tests {
             assert_eq!(c, b"defg");
         });
     }
+
+    #[test]
+    fn havoc_loom_serial_buf() {
+        loom::model(|| {
+            let mut buf = SerialBuf::with_capacity(4);
+
+            let mut buf1 = buf.clone();
+            let t1 = loom::thread::spawn(move || {
+                let _ = buf1.write_all(b"A");
+            });
+
+            let mut buf2 = buf.clone();
+            let t2 = loom::thread::spawn(move || {
+                let _ = buf2.write_all(b"B");
+            });
+
+            t1.join().unwrap();
+            t2.join().unwrap();
+        });
+    }
 }

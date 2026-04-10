@@ -2,7 +2,7 @@
 
 use arbitrary::Arbitrary;
 use libfuzzer_sys::fuzz_target;
-use hitz_vmm::serial_buf::SerialBuf;
+use hitz_vmm::SerialBuf;
 use std::io::Write;
 use std::sync::Arc;
 use std::thread;
@@ -20,7 +20,7 @@ fuzz_target!(|data: FuzzData| {
         return;
     }
 
-    let mut buf = SerialBuf::with_capacity(data.capacity);
+    let buf = SerialBuf::with_capacity(data.capacity);
     let buf_arc = Arc::new(buf);
 
     let reader_count = std::cmp::min(data.reader_count, 10);
@@ -55,8 +55,6 @@ fuzz_target!(|data: FuzzData| {
             if i == close_at {
                 b.close();
             }
-            // Even if closed, writes should just succeed and buffer them, or maybe it ignores.
-            // Actually our implementation allows writing after close, readers just stop.
             let _ = b.write_all(&chunk);
         }
         b.close(); // Make sure we close eventually
