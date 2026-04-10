@@ -30,6 +30,12 @@ pub mod simulator;
 #[cfg(feature = "simulator")]
 pub use simulator::*;
 
+#[cfg(feature = "diff")]
+/// Diff module for calculating rates of change between telemetry snapshots.
+pub mod diff;
+#[cfg(feature = "diff")]
+pub use diff::*;
+
 use serde::{Deserialize, Serialize};
 
 /// Default kernel command line for Linux direct boot.
