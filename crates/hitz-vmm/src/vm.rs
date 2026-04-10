@@ -150,7 +150,7 @@ pub enum VmError {
 /// # The Hero's Journey
 /// ```rust
 /// # use hitz_vmm::VmRunResult;
-/// # use hitz_vmm::run_loop::ExitReason;
+/// # use hitz_vmm::ExitReason;
 /// #
 /// let result = VmRunResult {
 ///     exit_reason: ExitReason::Halt,
@@ -591,9 +591,14 @@ pub fn boot_and_run<H: Hypervisor, W: Write + Send + 'static>(
     }
 
     // Multi-vCPU: spawn a thread per vCPU.
-    let shared_handles: Arc<[_]> = vcpus.iter().map(Vcpu::cancel_handle).collect();
-    let (exit_tx, exit_rx) = mpsc::channel::<Result<ExitReason, hitz_hal::HalError>>();
     let num_vcpus = vcpus.len();
+    // ⚡ Bolt Optimization: Pre-allocate the vector to prevent intermediate
+    // reallocations when collecting `CancelHandle`s for the `Arc<[_]>`.
+    let mut shared_handles_vec = Vec::with_capacity(num_vcpus);
+    shared_handles_vec.extend(vcpus.iter().map(Vcpu::cancel_handle));
+    let shared_handles: Arc<[_]> = shared_handles_vec.into();
+
+    let (exit_tx, exit_rx) = mpsc::channel::<Result<ExitReason, hitz_hal::HalError>>();
 
     // Watchdog: ensures cancel fires even if ALL vCPUs are blocked in run().
     let watchdog = {
@@ -610,61 +615,63 @@ pub fn boot_and_run<H: Hypervisor, W: Write + Send + 'static>(
             .expect("spawn watchdog thread")
     };
 
-    let handles: Vec<_> = vcpus
-        .into_iter()
-        .enumerate()
-        .map(|(idx, mut vcpu)| {
-            let devs = Arc::clone(&devices);
-            let mem = Arc::clone(&guest_mem_arc);
-            let stop = Arc::clone(&stop_flag);
-            let cancel_handles = Arc::clone(&shared_handles);
-            let tx = exit_tx.clone();
+    // ⚡ Bolt Optimization: Replace `.map().collect()` with a pre-allocated vector
+    // and standard `for` loop to eliminate intermediate Vec reallocations when
+    // constructing the vCPU thread handles.
+    let mut handles = Vec::with_capacity(num_vcpus);
+    for (idx, mut vcpu) in vcpus.into_iter().enumerate() {
+        let devs = Arc::clone(&devices);
+        let mem = Arc::clone(&guest_mem_arc);
+        let stop = Arc::clone(&stop_flag);
+        let cancel_handles = Arc::clone(&shared_handles);
+        let tx = exit_tx.clone();
 
-            std::thread::Builder::new()
-                .name(format!("vcpu-{idx}"))
-                .spawn(move || {
-                    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                        run_loop::run_vcpu_loop(&mut vcpu, &devs, &*mem, &stop)
-                    }));
+        let handle = std::thread::Builder::new()
+            .name(format!("vcpu-{idx}"))
+            .spawn(move || {
+                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    run_loop::run_vcpu_loop(&mut vcpu, &devs, &*mem, &stop)
+                }));
 
-                    // On terminal exit or panic, stop and cancel all sibling vCPUs.
-                    match &result {
-                        Ok(
-                            Ok(ExitReason::Halt | ExitReason::Shutdown | ExitReason::Unexpected(_))
-                            | Err(_),
-                        )
-                        | Err(_) => {
-                            stop.store(true, Ordering::Relaxed);
-                            cancel_all_vcpus::<<H::Partition as Partition>::Vcpu>(&cancel_handles);
-                        }
-                        Ok(Ok(ExitReason::Canceled)) => {
-                            // Another vCPU already triggered stop; nothing to do.
-                        }
+                // On terminal exit or panic, stop and cancel all sibling vCPUs.
+                match &result {
+                    Ok(
+                        Ok(ExitReason::Halt | ExitReason::Shutdown | ExitReason::Unexpected(_))
+                        | Err(_),
+                    )
+                    | Err(_) => {
+                        stop.store(true, Ordering::Relaxed);
+                        cancel_all_vcpus::<<H::Partition as Partition>::Vcpu>(&cancel_handles);
                     }
+                    Ok(Ok(ExitReason::Canceled)) => {
+                        // Another vCPU already triggered stop; nothing to do.
+                    }
+                }
 
-                    // Convert panic payload into an ExitReason.
-                    let exit = match result {
-                        Ok(r) => r,
-                        Err(payload) => {
-                            let msg = payload.downcast_ref::<&str>().map_or_else(
-                                || {
-                                    payload
-                                        .downcast_ref::<String>()
-                                        .map_or_else(|| "unknown panic".to_string(), Clone::clone)
-                                },
-                                |s| (*s).to_string(),
-                            );
-                            Ok(ExitReason::Unexpected(format!(
-                                "vCPU {idx} panicked: {msg}"
-                            )))
-                        }
-                    };
+                // Convert panic payload into an ExitReason.
+                let exit = match result {
+                    Ok(r) => r,
+                    Err(payload) => {
+                        let msg = payload.downcast_ref::<&str>().map_or_else(
+                            || {
+                                payload
+                                    .downcast_ref::<String>()
+                                    .map_or_else(|| "unknown panic".to_string(), Clone::clone)
+                            },
+                            |s| (*s).to_string(),
+                        );
+                        Ok(ExitReason::Unexpected(format!(
+                            "vCPU {idx} panicked: {msg}"
+                        )))
+                    }
+                };
 
-                    let _ = tx.send(exit);
-                })
-                .expect("spawn vcpu thread")
-        })
-        .collect();
+                let _ = tx.send(exit);
+            })
+            .expect("spawn vcpu thread");
+
+        handles.push(handle);
+    }
 
     // Drop sender so the receiver knows when all threads are done.
     drop(exit_tx);

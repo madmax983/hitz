@@ -9,7 +9,7 @@
 //!
 //! # The Hero's Journey
 //! ```
-//! # use hitz_vmm::serial_buf::SerialBuf;
+//! # use hitz_vmm::SerialBuf;
 //! # use std::io::Write;
 //! // 1. Create a new serial buffer.
 //! let mut buf = SerialBuf::new();
@@ -67,7 +67,7 @@ impl SerialBuf {
     ///
     /// # Examples
     /// ```
-    /// # use hitz_vmm::serial_buf::SerialBuf;
+    /// # use hitz_vmm::SerialBuf;
     /// let mut buf = SerialBuf::new();
     /// ```
     ///

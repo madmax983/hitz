@@ -77,24 +77,24 @@ mod tests {
         handle
             .rx_tx
             .send((dummy_hdr.clone(), vec![]))
-            .expect("failed to send host->device");
+            .unwrap_or_else(|_| panic!("failed to send host->device"));
 
         let (received_hdr, payload) = rx_receiver
             .try_recv()
-            .expect("failed to receive on device rx");
+            .unwrap_or_else(|_| panic!("failed to receive on device rx"));
         assert_eq!(received_hdr.src_cid, 1, "mismatched src_cid");
         assert_eq!(received_hdr.dst_cid, 2, "mismatched dst_cid");
         assert!(payload.is_empty(), "expected empty payload");
 
         // 2. Device sends to Host (tx direction)
         tx_sender
-            .send((dummy_hdr.clone(), vec![1, 2, 3]))
-            .expect("failed to send device->host");
+            .send((dummy_hdr, vec![1, 2, 3]))
+            .unwrap_or_else(|_| panic!("failed to send device->host"));
 
         let (received_hdr, payload) = handle
             .tx_rx
             .try_recv()
-            .expect("failed to receive on host tx");
+            .unwrap_or_else(|_| panic!("failed to receive on host tx"));
         assert_eq!(received_hdr.src_cid, 1, "mismatched src_cid");
         assert_eq!(received_hdr.dst_cid, 2, "mismatched dst_cid");
         assert_eq!(payload, vec![1, 2, 3], "mismatched payload");
