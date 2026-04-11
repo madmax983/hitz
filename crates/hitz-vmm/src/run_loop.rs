@@ -525,6 +525,27 @@ mod tests {
     }
 
     #[test]
+    fn test_run_vcpu_loop_unknown_exit() {
+        let mut vcpu = DummyVcpu {
+            regs: Default::default(),
+            sregs: Default::default(),
+            exit: VcpuExit::Unknown(0x1337),
+        };
+        let devices = Mutex::new(SharedDevices {
+            serial: SerialDevice::new(std::io::sink()),
+            mmio_bus: MmioBus::new(),
+        });
+        let mem = DummyMem;
+        let stop_flag = AtomicBool::new(false);
+        let result = run_vcpu_loop(&mut vcpu, &devices, &mem, &stop_flag)
+            .expect("run_vcpu_loop should succeed");
+        assert_eq!(
+            result,
+            ExitReason::Unexpected("unknown vCPU exit reason: 0x1337".to_string())
+        );
+    }
+
+    #[test]
     fn test_run_vcpu_loop_max_iterations() {
         let mut vcpu = DummyVcpu {
             regs: Default::default(),
