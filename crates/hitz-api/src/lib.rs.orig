@@ -36,12 +36,6 @@ pub mod diff;
 #[cfg(feature = "diff")]
 pub use diff::*;
 
-#[cfg(feature = "scoring")]
-/// Scoring module for calculating a VM's overall fitness score.
-pub mod scoring;
-#[cfg(feature = "scoring")]
-pub use scoring::*;
-
 use serde::{Deserialize, Serialize};
 
 /// Default kernel command line for Linux direct boot.

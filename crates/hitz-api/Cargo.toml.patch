@@ -1,0 +1,7 @@
+--- crates/hitz-api/Cargo.toml
++++ crates/hitz-api/Cargo.toml
+@@ -16,3 +16,4 @@
+ health_check = []
+ simulator = []
+ diff = []
++scoring = []
