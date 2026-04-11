@@ -343,6 +343,8 @@ enum VmCommand {
     ExportMetrics(Box<VmExportArgs>),
     /// Record metrics over time to JSON Lines format.
     Record(Box<VmRecordArgs>),
+    /// Live TUI graph for VM metrics.
+    Graph(Box<VmGraphArgs>),
 }
 
 /// Arguments for `vm clone`.
@@ -353,6 +355,25 @@ struct VmCloneArgs {
 
     /// Destination VM identifier.
     dest_id: String,
+
+    /// Named pipe path.
+    #[arg(long, default_value = DEFAULT_PIPE)]
+    pipe: String,
+
+    /// Connect to daemon via TCP instead of named pipe.
+    #[arg(long)]
+    tcp: Option<std::net::SocketAddr>,
+}
+
+/// Arguments for `vm graph`.
+#[derive(Parser)]
+struct VmGraphArgs {
+    /// VM identifier.
+    id: String,
+
+    /// Metric to graph (cpu, memory).
+    #[arg(long, default_value = "cpu")]
+    metric: String,
 
     /// Named pipe path.
     #[arg(long, default_value = DEFAULT_PIPE)]
@@ -1851,8 +1872,177 @@ fn run_vm_command(cmd: VmCommand) -> Result<()> {
             VmCommand::Dashboard(args) => handle_vm_dashboard(&args).await,
             VmCommand::ExportMetrics(args) => handle_vm_export_metrics(&args).await,
             VmCommand::Record(args) => handle_vm_record(&args).await,
+            VmCommand::Graph(args) => handle_vm_graph(&args).await,
         }
     })
+}
+
+#[allow(clippy::too_many_lines)]
+async fn handle_vm_graph(args: &VmGraphArgs) -> Result<()> {
+    use crossterm::{
+        event::{self, Event, KeyCode},
+        execute,
+        terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
+    };
+    use ratatui::{
+        Terminal,
+        backend::CrosstermBackend,
+        layout::{Constraint, Direction, Layout},
+        style::{Color, Style},
+        symbols,
+        widgets::{Axis, Block, Borders, Chart, Dataset, GraphType},
+    };
+    use std::time::{Duration, Instant};
+
+    let metric_name = args.metric.to_lowercase();
+
+    // Validate metric choice before entering raw mode
+    if metric_name != "cpu" && metric_name != "memory" {
+        anyhow::bail!("invalid metric '{}', choose 'cpu' or 'memory'", metric_name);
+    }
+
+    enable_raw_mode().context("failed to enable raw mode")?;
+    let mut stdout = std::io::stdout();
+    execute!(stdout, EnterAlternateScreen).context("failed to enter alternate screen")?;
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal = Terminal::new(backend).context("failed to create terminal")?;
+
+    let poll_interval = Duration::from_millis(1000);
+    let mut last_poll = Instant::now() - poll_interval;
+
+    let mut data: Vec<(f64, f64)> = Vec::new();
+    let mut start_time: Option<u64> = None;
+
+    let res: Result<()> = async {
+        loop {
+            if event::poll(Duration::from_millis(100)).context("failed to poll events")? {
+                if let Event::Key(key) = event::read().context("failed to read event")? {
+                    if key.code == KeyCode::Char('q') || key.code == KeyCode::Esc {
+                        break;
+                    }
+                }
+            }
+
+            if last_poll.elapsed() >= poll_interval {
+                last_poll = Instant::now();
+
+                let (status, resp) = pipe_client::pipe_request(
+                    &args.pipe,
+                    args.tcp,
+                    Method::GET,
+                    &format!("/vms/{}/metrics", args.id),
+                    None,
+                )
+                .await?;
+
+                if status.is_success() {
+                    if let Ok(snap) = serde_json::from_str::<hitz_api::MetricsSnapshot>(&resp) {
+                        if start_time.is_none() {
+                            start_time = Some(snap.timestamp_ms);
+                        }
+                        let elapsed_sec =
+                            (snap.timestamp_ms - start_time.unwrap_or(snap.timestamp_ms)) as f64
+                                / 1000.0;
+
+                        let value = if metric_name == "cpu" {
+                            snap.cpu.total_pct as f64
+                        } else {
+                            (snap.memory.used_bytes as f64) / 1024.0 / 1024.0 // MB
+                        };
+
+                        data.push((elapsed_sec, value));
+
+                        // Keep last 60 points
+                        if data.len() > 60 {
+                            let _ = data.remove(0);
+                        }
+                    }
+                }
+            }
+
+            let _ = terminal
+                .draw(|f| {
+                    let max_x = data.last().map(|d| d.0).unwrap_or(60.0).max(60.0);
+                    let min_x = (max_x - 60.0).max(0.0);
+
+                    let max_y = if metric_name == "cpu" {
+                        100.0
+                    } else {
+                        let max_mem = data.iter().map(|d| d.1).fold(100.0_f64, f64::max);
+                        (max_mem * 1.2).max(100.0) // 20% headroom, min 100MB
+                    };
+
+                    let dataset = Dataset::default()
+                        .name(if metric_name == "cpu" {
+                            "CPU %"
+                        } else {
+                            "Memory (MB)"
+                        })
+                        .marker(symbols::Marker::Braille)
+                        .graph_type(GraphType::Line)
+                        .style(Style::default().fg(Color::Cyan))
+                        .data(&data);
+
+                    let chart = Chart::new(vec![dataset])
+                        .block(
+                            Block::default()
+                                .title(format!(
+                                    " VM {} | Live {} | Press 'q' to exit ",
+                                    args.id,
+                                    if metric_name == "cpu" {
+                                        "CPU %"
+                                    } else {
+                                        "Memory (MB)"
+                                    }
+                                ))
+                                .borders(Borders::ALL)
+                                .border_style(Style::default().fg(Color::Blue)),
+                        )
+                        .x_axis(
+                            Axis::default()
+                                .title("Time (s)")
+                                .style(Style::default().fg(Color::Gray))
+                                .bounds([min_x, max_x])
+                                .labels(vec![
+                                    ratatui::text::Line::from(format!("{:.0}", min_x)),
+                                    ratatui::text::Line::from(format!(
+                                        "{:.0}",
+                                        (min_x + max_x) / 2.0
+                                    )),
+                                    ratatui::text::Line::from(format!("{:.0}", max_x)),
+                                ]),
+                        )
+                        .y_axis(
+                            Axis::default()
+                                .title(if metric_name == "cpu" { "%" } else { "MB" })
+                                .style(Style::default().fg(Color::Gray))
+                                .bounds([0.0, max_y])
+                                .labels(vec![
+                                    ratatui::text::Line::from("0"),
+                                    ratatui::text::Line::from(format!("{:.0}", max_y / 2.0)),
+                                    ratatui::text::Line::from(format!("{:.0}", max_y)),
+                                ]),
+                        );
+
+                    let area = Layout::default()
+                        .direction(Direction::Vertical)
+                        .margin(1)
+                        .constraints([Constraint::Percentage(100)])
+                        .split(f.area())[0];
+
+                    f.render_widget(chart, area);
+                })
+                .context("failed to draw terminal")?;
+        }
+        Ok(())
+    }
+    .await;
+
+    let _ = disable_raw_mode();
+    let _ = execute!(terminal.backend_mut(), LeaveAlternateScreen);
+    let _ = terminal.show_cursor();
+
+    res
 }
 
 #[allow(clippy::too_many_lines)]
@@ -2308,7 +2498,7 @@ mod tests {
 
 #[cfg(test)]
 mod top_tests {
-    use crate::{VmExportArgs, VmIdArgs};
+    use crate::{VmExportArgs, VmGraphArgs, VmIdArgs};
     use std::path::PathBuf;
 
     // Just a sanity check to verify the compiler parses everything.
@@ -2358,5 +2548,16 @@ mod top_tests {
             tcp: None,
         };
         assert!(true);
+    }
+
+    #[test]
+    #[allow(clippy::assertions_on_constants)]
+    fn run_vm_graph_command_definition_compiles() {
+        let _args = VmGraphArgs {
+            id: "test".to_string(),
+            metric: "cpu".to_string(),
+            pipe: "pipe".to_string(),
+            tcp: None,
+        };
     }
 }
