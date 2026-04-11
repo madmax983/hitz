@@ -42,7 +42,7 @@ const MAX_QUEUE_SIZE: u16 = 256;
 /// when processing a queue:
 ///
 /// ```
-/// # use hitz_devices::virtio::queue::{VirtQueue, DescriptorChain};
+/// # use hitz_devices::VirtQueue;
 /// # use hitz_hal::GuestMemAccess;
 /// # fn handle_queue(queue: &mut VirtQueue, mem: &dyn GuestMemAccess) {
 /// // 1. Pop the next available descriptor chain the guest has produced.
@@ -227,7 +227,7 @@ impl VirtQueue {
 ///
 /// # The Hero's Journey
 /// ```
-/// # use hitz_devices::virtio::queue::DescriptorChain;
+/// # use hitz_devices::VirtQueue;
 /// // Handled internally by `VirtQueue`.
 /// ```
 pub struct DescriptorChain {
@@ -251,8 +251,9 @@ pub struct DescriptorChain {
 ///
 /// # The Hero's Journey
 /// ```
-/// # use hitz_devices::virtio::queue::Descriptor;
-/// let desc = Descriptor { gpa: 0x1000, len: 4096, is_device_writable: true };
+/// // Descriptors are typically returned by the chain.
+/// // They are simple structs internally containing GPA and length:
+/// // let desc = Descriptor { gpa: 0x1000, len: 4096, is_device_writable: true };
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Descriptor {

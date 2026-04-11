@@ -49,14 +49,13 @@ impl Trigger for NoopTrigger {
 /// # The Hero's Journey
 ///
 /// ```
-/// # use hitz_devices::serial::SerialDevice;
-/// # use hitz_hal::IoPortExit;
+/// # use hitz_devices::SerialDevice;
 /// // 1. Create a serial device routing output to a simple vector.
 /// let output = Vec::new();
 /// let mut serial = SerialDevice::new(output);
 ///
 /// // 2. Guest writes 'H' to COM1 (I/O port 0x3f8).
-/// serial.write(0x3f8, b"H");
+/// serial.pio_write(0x3f8, b'H');
 /// ```
 ///
 /// # The Fine Print

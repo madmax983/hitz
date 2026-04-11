@@ -40,19 +40,23 @@ const TX_QUEUE: u16 = 1;
 /// # The Hero's Journey
 ///
 /// ```no_run
-/// # use hitz_devices::virtio::net::VirtioNetDevice;
+/// # use hitz_devices::VirtioNetDevice;
 /// # use crossbeam_channel::unbounded;
-/// # use hitz_devices::virtio::mmio_transport::VirtioMmioTransport;
-/// // 1. Create channels for host-device communication.
-/// let (host_tx, device_rx) = unbounded();
-/// let (device_tx, host_rx) = unbounded();
-///
-/// // 2. Create the virtio-net device.
+/// # use hitz_devices::VirtioMmioTransport;
+/// # use hitz_hal::GuestMemAccess;
+/// # use std::sync::Arc;
+/// # struct DummyMem;
+/// # impl GuestMemAccess for DummyMem {
+/// #     fn read_guest(&self, _gpa: u64, _buf: &mut [u8]) -> Result<(), hitz_hal::HalError> { Ok(()) }
+/// #     fn write_guest(&self, _gpa: u64, _data: &[u8]) -> Result<(), hitz_hal::HalError> { Ok(()) }
+/// # }
+/// // 1. Create the virtio-net device.
 /// let mac = [0x02, 0x00, 0x00, 0x00, 0x00, 0x01];
-/// let net_device = VirtioNetDevice::new(mac, device_tx, device_rx);
+/// let (net_device, host_rx, host_tx) = VirtioNetDevice::new(mac);
 ///
-/// // 3. Wrap it in a virtio-mmio transport and register it to the MmioBus.
-/// let transport = VirtioMmioTransport::new(net_device);
+/// // 2. Wrap it in a virtio-mmio transport and register it to the MmioBus.
+/// let mem = Arc::new(DummyMem);
+/// let transport = VirtioMmioTransport::new(net_device, mem, 5);
 /// ```
 ///
 /// # The Fine Print

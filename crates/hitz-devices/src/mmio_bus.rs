@@ -50,7 +50,7 @@ struct MmioSlot {
 /// # The Hero's Journey
 ///
 /// ```
-/// # use hitz_devices::mmio_bus::{MmioBus, MmioDevice};
+/// # use hitz_devices::{MmioBus, MmioDevice};
 /// # use hitz_hal::GuestMemAccess;
 /// #
 /// # struct DummyDevice;

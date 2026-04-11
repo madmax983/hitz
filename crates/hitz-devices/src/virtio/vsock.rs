@@ -182,6 +182,19 @@ pub struct VirtioVsockDevice {
 impl VirtioVsockDevice {
     /// Create a new vsock device for the given guest CID.
     ///
+    /// # Abstract
+    /// Create a new virtio-vsock device for the given guest CID.
+    /// It returns the device itself along with a receiver and sender channel pair
+    /// that allows the host runtime to exchange packets with the guest.
+    ///
+    /// # The Hero's Journey
+    /// ```rust
+    /// use hitz_devices::VirtioVsockDevice;
+    ///
+    /// // Create a vsock device for guest CID 3.
+    /// let (device, host_rx, host_tx) = VirtioVsockDevice::new(3);
+    /// ```
+    ///
     /// Returns:
     /// - The device (for the MMIO transport in the vCPU thread)
     /// - A `Receiver` for the host runtime to read TX packets from the guest

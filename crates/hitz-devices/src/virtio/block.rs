@@ -43,7 +43,21 @@ pub struct VirtioBlockDevice {
 impl VirtioBlockDevice {
     /// Create a block device backed by the given file.
     ///
+    /// # Abstract
+    /// Create a block device backed by the given file.
     /// The capacity is determined from the file's current length.
+    ///
+    /// # The Hero's Journey
+    /// ```rust
+    /// use hitz_devices::VirtioBlockDevice;
+    /// use tempfile::tempfile;
+    ///
+    /// // Create a temporary file to act as our block device.
+    /// let file = tempfile().expect("Failed to create temporary file");
+    ///
+    /// // Initialize the virtio block device.
+    /// let device = VirtioBlockDevice::new(file).expect("Failed to create block device");
+    /// ```
     pub fn new(disk: File) -> std::io::Result<Self> {
         let metadata = disk.metadata()?;
         let capacity = metadata.len() / SECTOR_SIZE;
