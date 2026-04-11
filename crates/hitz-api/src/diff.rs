@@ -10,7 +10,7 @@
 //!
 //! ```rust
 //! use hitz_api::{MetricsSnapshot, CpuMetrics, MemoryMetrics};
-//! use hitz_api::diff::{CalculateDiff, MetricsDiff};
+//! use hitz_api::{CalculateDiff, MetricsDiff};
 //!
 //! // We create an initial snapshot at time = 1000ms
 //! let snap1 = MetricsSnapshot {
@@ -98,7 +98,7 @@ pub struct NetRate {
 /// # The Hero's Journey
 ///
 /// ```rust
-/// use hitz_api::diff::CalculateDiff;
+/// use hitz_api::CalculateDiff;
 ///
 /// struct MyCounter { time: u64, count: u64 }
 /// struct MyRate { ops_per_sec: f64 }
@@ -251,6 +251,16 @@ mod tests {
             }],
             processes: vec![],
         }
+    }
+
+    #[test]
+    fn should_return_none_when_diffing_older_or_equal_snapshot() {
+        let t1 = dummy_snapshot(1000, 100, 50);
+        let t2 = dummy_snapshot(500, 50, 25);
+        let t3 = dummy_snapshot(1000, 100, 50);
+
+        assert!(t2.diff(&t1).is_none());
+        assert!(t3.diff(&t1).is_none());
     }
 
     #[test]

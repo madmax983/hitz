@@ -261,4 +261,57 @@ mod tests {
         assert!(health.reasons[0].contains("Critical memory"));
         assert!(health.reasons[1].contains("Critical swap"));
     }
+
+    #[test]
+    fn should_evaluate_network_errors_correctly() {
+        struct TestCase {
+            rx_errs: u64,
+            tx_errs: u64,
+            expected: HealthStatus,
+        }
+
+        let test_cases = vec![
+            TestCase {
+                rx_errs: 5,
+                tx_errs: 5,
+                expected: HealthStatus::Healthy,
+            },
+            TestCase {
+                rx_errs: 10,
+                tx_errs: 1,
+                expected: HealthStatus::Warning,
+            },
+            TestCase {
+                rx_errs: 50,
+                tx_errs: 50,
+                expected: HealthStatus::Warning,
+            },
+            TestCase {
+                rx_errs: 100,
+                tx_errs: 1,
+                expected: HealthStatus::Critical,
+            },
+            TestCase {
+                rx_errs: 50,
+                tx_errs: 60,
+                expected: HealthStatus::Critical,
+            },
+        ];
+
+        for case in test_cases {
+            let mut metrics = safe_metrics();
+            metrics.networks[0].rx_errors = case.rx_errs;
+            metrics.networks[0].tx_errors = case.tx_errs;
+            let health = metrics.assess_health();
+            assert_eq!(
+                health.status, case.expected,
+                "Failed for rx_errors={} tx_errors={}",
+                case.rx_errs, case.tx_errs
+            );
+            if case.expected != HealthStatus::Healthy {
+                assert!(!health.reasons.is_empty());
+                assert!(health.reasons.iter().any(|r| r.contains("network errors")));
+            }
+        }
+    }
 }
