@@ -1152,11 +1152,8 @@ async fn handle_vm_clone(args: &VmCloneArgs) -> Result<()> {
     Ok(())
 }
 
-async fn handle_vm_start(args: &VmIdArgs) -> Result<()> {
-    let body = serde_json::to_string(&ActionVmRequest {
-        action: VmAction::Start,
-    })
-    .context("serialize request")?;
+async fn handle_vm_action(args: &VmIdArgs, action: VmAction) -> Result<()> {
+    let body = serde_json::to_string(&ActionVmRequest { action }).context("serialize request")?;
     let (status, resp) = pipe_client::pipe_request(
         &args.pipe,
         args.tcp,
@@ -1165,57 +1162,32 @@ async fn handle_vm_start(args: &VmIdArgs) -> Result<()> {
         Some(&body),
     )
     .await?;
+
+    let (success_verb, error_verb) = match action {
+        VmAction::Start => ("started", "start"),
+        VmAction::Restart => ("restarted", "restart"),
+        VmAction::Stop => ("stopped", "stop"),
+    };
+
     print_action_result(
         status,
         &resp,
-        &format!("✓ Successfully started VM {}", args.id),
-        &format!("Failed to start VM {}", args.id),
+        &format!("✓ Successfully {} VM {}", success_verb, args.id),
+        &format!("Failed to {} VM {}", error_verb, args.id),
     );
     Ok(())
+}
+
+async fn handle_vm_start(args: &VmIdArgs) -> Result<()> {
+    handle_vm_action(args, VmAction::Start).await
 }
 
 async fn handle_vm_restart(args: &VmIdArgs) -> Result<()> {
-    let body = serde_json::to_string(&ActionVmRequest {
-        action: VmAction::Restart,
-    })
-    .context("serialize request")?;
-    let (status, resp) = pipe_client::pipe_request(
-        &args.pipe,
-        args.tcp,
-        Method::POST,
-        &format!("/vms/{}/action", args.id),
-        Some(&body),
-    )
-    .await?;
-    print_action_result(
-        status,
-        &resp,
-        &format!("✓ Successfully restarted VM {}", args.id),
-        &format!("Failed to restart VM {}", args.id),
-    );
-    Ok(())
+    handle_vm_action(args, VmAction::Restart).await
 }
 
 async fn handle_vm_stop(args: &VmIdArgs) -> Result<()> {
-    let body = serde_json::to_string(&ActionVmRequest {
-        action: VmAction::Stop,
-    })
-    .context("serialize request")?;
-    let (status, resp) = pipe_client::pipe_request(
-        &args.pipe,
-        args.tcp,
-        Method::POST,
-        &format!("/vms/{}/action", args.id),
-        Some(&body),
-    )
-    .await?;
-    print_action_result(
-        status,
-        &resp,
-        &format!("✓ Successfully stopped VM {}", args.id),
-        &format!("Failed to stop VM {}", args.id),
-    );
-    Ok(())
+    handle_vm_action(args, VmAction::Stop).await
 }
 
 #[allow(clippy::too_many_lines)]
