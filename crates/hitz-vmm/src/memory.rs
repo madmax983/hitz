@@ -476,6 +476,49 @@ mod tests {
     }
 
     #[test]
+    fn test_write_u32_read_u32() {
+        let mut mem = GuestMemory::new();
+        mem.add_region(Gpa::new(0), 4096)
+            .expect("add_region should succeed");
+
+        let val: u32 = 0xDEAD_BEEF;
+        mem.write_u32(Gpa::new(32), val)
+            .expect("write_u32 should succeed");
+
+        let read_back = mem.read_u32(Gpa::new(32)).expect("read_u32 should succeed");
+
+        assert_eq!(read_back, val);
+    }
+
+    #[test]
+    fn test_read_u32_out_of_bounds() {
+        let mut mem = GuestMemory::new();
+        mem.add_region(Gpa::new(0), 4096)
+            .expect("add_region should succeed");
+
+        let err = mem.read_u32(Gpa::new(4094));
+        assert!(err.is_err());
+        assert!(
+            matches!(err, Err(MemError::OutOfBounds { .. })),
+            "expected OutOfBounds, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn test_write_u32_out_of_bounds() {
+        let mut mem = GuestMemory::new();
+        mem.add_region(Gpa::new(0), 4096)
+            .expect("add_region should succeed");
+
+        let err = mem.write_u32(Gpa::new(4094), 0xCAFE_BABE);
+        assert!(err.is_err());
+        assert!(
+            matches!(err, Err(MemError::OutOfBounds { .. })),
+            "expected OutOfBounds, got {err:?}"
+        );
+    }
+
+    #[test]
     fn test_gpa_to_hva() {
         let mut mem = GuestMemory::new();
         mem.add_region(Gpa::new(0x10_0000), 0x10_0000)
