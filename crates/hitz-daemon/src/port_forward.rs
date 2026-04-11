@@ -27,8 +27,9 @@ impl PortForwardManager {
     /// prevent the VM from starting.
     pub async fn start(guest_ip: Ipv4Addr, rules: &[PortForward]) -> Self {
         let mut handles = Vec::with_capacity(rules.len());
+        // ⚡ Bolt Optimization: Pre-allocate `relay_handles` vector capacity to match rules.len(), eliminating a heap reallocation.
         let relay_handles: Arc<tokio::sync::Mutex<Vec<JoinHandle<()>>>> =
-            Arc::new(tokio::sync::Mutex::new(Vec::new()));
+            Arc::new(tokio::sync::Mutex::new(Vec::with_capacity(rules.len())));
 
         let meter = global::meter("hitz");
         let connections_total = meter
