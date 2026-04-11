@@ -1774,6 +1774,8 @@ async fn handle_vm_record(args: &VmRecordArgs) -> Result<()> {
 
 #[allow(clippy::too_many_lines)]
 fn handle_vm_timeline(args: &VmTimelineArgs) -> Result<()> {
+    use comfy_table::presets::UTF8_FULL_CONDENSED;
+    use comfy_table::{Cell, Color, Table};
     use crossterm::style::Stylize;
     use hitz_api::{HealthCheck, HealthStatus};
     use std::io::{BufRead, BufReader};
@@ -1798,6 +1800,15 @@ fn handle_vm_timeline(args: &VmTimelineArgs) -> Result<()> {
     let mut line_count = 0;
     let mut initial_timestamp = None;
 
+    let mut table = Table::new();
+    let _ = table.load_preset(UTF8_FULL_CONDENSED);
+    let _ = table.set_header([
+        Cell::new("Time").add_attribute(comfy_table::Attribute::Bold),
+        Cell::new("Status").add_attribute(comfy_table::Attribute::Bold),
+        Cell::new("Reasons Added").add_attribute(comfy_table::Attribute::Bold),
+        Cell::new("Reasons Removed").add_attribute(comfy_table::Attribute::Bold),
+    ]);
+
     for (line_num, line_result) in reader.lines().enumerate() {
         let line = line_result.context("Failed to read line from file")?;
         if line.trim().is_empty() {
@@ -1809,7 +1820,7 @@ fn handle_vm_timeline(args: &VmTimelineArgs) -> Result<()> {
             Err(e) => {
                 eprintln!(
                     "{}",
-                    format!("✗ Failed to parse metrics on line {}: {}", line_num + 1, e).red()
+                    format!("✗ Invalid or corrupted metrics data on line {}: {}", line_num + 1, e).red()
                 );
                 continue;
             }
@@ -1830,34 +1841,46 @@ fn handle_vm_timeline(args: &VmTimelineArgs) -> Result<()> {
                 .timestamp_ms
                 .saturating_sub(initial_timestamp.unwrap_or(snap.timestamp_ms));
             let elapsed_secs = elapsed_ms / 1000;
-            let time_str = format!("[T+{:02}:{:02}]", elapsed_secs / 60, elapsed_secs % 60);
+            let time_str = format!("T+{:02}:{:02}", elapsed_secs / 60, elapsed_secs % 60);
 
-            let status_msg = match health.status {
-                HealthStatus::Healthy => "Healthy".green(),
-                HealthStatus::Warning => "Warning".yellow(),
-                HealthStatus::Critical => "Critical".red(),
+            let status_cell = match health.status {
+                HealthStatus::Healthy => Cell::new("Healthy").fg(Color::Green),
+                HealthStatus::Warning => Cell::new("Warning").fg(Color::Yellow),
+                HealthStatus::Critical => Cell::new("Critical").fg(Color::Red),
             };
 
-            if status_changed {
-                println!("{time_str} Health transitioned to {status_msg}");
-            } else if reasons_changed {
-                println!("{time_str} Health updated: {status_msg}");
-            }
-
+            let mut added_reasons = Vec::new();
             for reason in &health.reasons {
                 if !current_reasons.contains(reason) {
-                    println!("           + {reason}");
+                    added_reasons.push(format!("+ {reason}"));
                 }
             }
+
+            let mut removed_reasons = Vec::new();
             for reason in &current_reasons {
                 if !health.reasons.contains(reason) {
-                    println!("           - {reason}");
+                    removed_reasons.push(format!("- {reason}"));
                 }
+            }
+
+            if status_changed || !added_reasons.is_empty() || !removed_reasons.is_empty() {
+                let _ = table.add_row([
+                    Cell::new(time_str),
+                    status_cell,
+                    Cell::new(added_reasons.join("\n")),
+                    Cell::new(removed_reasons.join("\n")),
+                ]);
             }
 
             current_status = Some(health.status);
             current_reasons = health.reasons;
         }
+    }
+
+    if table.row_iter().count() > 0 {
+        println!("{table}");
+    } else {
+        println!("{}", "No health transitions detected.".yellow());
     }
 
     println!();
