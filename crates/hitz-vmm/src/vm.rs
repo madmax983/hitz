@@ -210,6 +210,7 @@ pub struct VmRunResult {
 /// but does not parse them to verify they are valid ELF/bzImage kernels, valid cpio
 /// archives, or valid raw disk images.
 pub fn validate_config(config: &VmConfig) -> Result<(), VmError> {
+    #[allow(dead_code)]
     struct SafePath<'a>(&'a std::path::Path);
 
     impl<'a> SafePath<'a> {
@@ -764,7 +765,7 @@ mod tests {
         assert!(err.to_string().contains("path traversal detected"));
 
         // Legitimate filenames with two dots should pass
-        let mut config2 = config.clone();
+        let mut config2 = config;
         config2.kernel_path = std::path::PathBuf::from("vmlinux-5.15..1");
         // Since we didn't touch exists() we just want to ensure it doesn't fail with path traversal
         let err2 =

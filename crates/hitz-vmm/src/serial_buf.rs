@@ -219,9 +219,8 @@ impl SerialReader {
             let notified = self.notify.notified();
             {
                 #[cfg(not(loom))]
-                let inner = match self.inner.lock() {
-                    Ok(guard) => guard,
-                    Err(_) => return None,
+                let Ok(inner) = self.inner.lock() else {
+                    return None;
                 };
                 #[cfg(loom)]
                 let inner = self.inner.lock();
