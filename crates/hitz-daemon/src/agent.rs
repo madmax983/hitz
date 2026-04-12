@@ -17,7 +17,10 @@ const INIT_SCRIPT: &[u8] = b"#!/bin/sh\n/sbin/hitz-agent &\n";
 /// kernel processes concatenated cpio archives left-to-right.
 #[must_use]
 pub fn build_agent_overlay(agent_bytes: &[u8]) -> Vec<u8> {
-    CpioBuilder::new()
+    // ⚡ Bolt Optimization: Pre-allocate capacity for the CPIO archive.
+    // The size is roughly the size of the agent binary + init script + headers.
+    let capacity = agent_bytes.len() + INIT_SCRIPT.len() + 1024;
+    CpioBuilder::with_capacity(capacity)
         .add_file("sbin/hitz-agent", agent_bytes, 0o755)
         .add_file("etc/init.d/S99hitz-agent", INIT_SCRIPT, 0o755)
         .finish()
