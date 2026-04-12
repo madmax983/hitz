@@ -375,6 +375,7 @@ pub(crate) fn advance_rip_with_rax<V: Vcpu>(
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::default_trait_access)]
 mod tests {
     use super::*;
 
@@ -492,6 +493,106 @@ mod tests {
         advance_rip_with_rax(&mut vcpu, 5, 42).expect("advance_rip_with_rax should succeed");
         assert_eq!(vcpu.regs.rip, 105);
         assert_eq!(vcpu.regs.rax, 42);
+    }
+
+    #[test]
+    fn test_dispatch_exit_shutdown() {
+        let mut vcpu = DummyVcpu {
+            regs: Default::default(),
+            sregs: Default::default(),
+            exit: VcpuExit::Halt,
+        };
+        let devices = Mutex::new(SharedDevices {
+            serial: SerialDevice::new(std::io::sink()),
+            mmio_bus: MmioBus::new(),
+        });
+        let mem = DummyMem;
+        let mut pending_irq = None;
+        let exit_counter = opentelemetry::global::meter("hitz")
+            .u64_counter("hitz.vcpu.exits")
+            .build();
+
+        let result = dispatch_exit(
+            &mut vcpu,
+            &devices,
+            &mem,
+            VcpuExit::Shutdown,
+            &mut pending_irq,
+            &exit_counter,
+        )
+        .expect("dispatch_exit should succeed");
+
+        assert_eq!(result, Some(ExitReason::Shutdown));
+    }
+
+    #[test]
+    fn test_dispatch_exit_interrupt_window() {
+        let mut vcpu = DummyVcpu {
+            regs: Default::default(),
+            sregs: Default::default(),
+            exit: VcpuExit::Halt,
+        };
+        let devices = Mutex::new(SharedDevices {
+            serial: SerialDevice::new(std::io::sink()),
+            mmio_bus: MmioBus::new(),
+        });
+        let mem = DummyMem;
+        let mut pending_irq = Some(42);
+        let exit_counter = opentelemetry::global::meter("hitz")
+            .u64_counter("hitz.vcpu.exits")
+            .build();
+
+        let result = dispatch_exit(
+            &mut vcpu,
+            &devices,
+            &mem,
+            VcpuExit::InterruptWindow,
+            &mut pending_irq,
+            &exit_counter,
+        )
+        .expect("dispatch_exit should succeed");
+
+        assert_eq!(result, None);
+        assert_eq!(pending_irq, None); // Should have been taken and injected
+    }
+
+    #[test]
+    fn test_dispatch_exit_mmio() {
+        let mut vcpu = DummyVcpu {
+            regs: Default::default(),
+            sregs: Default::default(),
+            exit: VcpuExit::Halt,
+        };
+        let devices = Mutex::new(SharedDevices {
+            serial: SerialDevice::new(std::io::sink()),
+            mmio_bus: MmioBus::new(),
+        });
+        let mem = DummyMem;
+        let mut pending_irq = None;
+        let exit_counter = opentelemetry::global::meter("hitz")
+            .u64_counter("hitz.vcpu.exits")
+            .build();
+
+        let mmio = hitz_hal::MmioExit {
+            gpa: 0x1000,
+            data: [0; 8],
+            len: 4,
+            is_write: false,
+            instruction_len: 2,
+        };
+
+        let result = dispatch_exit(
+            &mut vcpu,
+            &devices,
+            &mem,
+            VcpuExit::Mmio(mmio),
+            &mut pending_irq,
+            &exit_counter,
+        )
+        .expect("dispatch_exit should succeed");
+
+        assert_eq!(result, None);
+        assert_eq!(vcpu.regs.rip, 2); // RIP should advance
     }
 
     #[test]

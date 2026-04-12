@@ -31,10 +31,8 @@ impl Vcpu for MaliciousVcpu {
         Ok(exit)
     }
 
-    fn cancel_handle(&self) -> Self::CancelHandle {
-        ()
-    }
-    fn cancel_via(_: &Self::CancelHandle) -> Result<(), HalError> {
+    fn cancel_handle(&self) -> Self::CancelHandle {}
+    fn cancel_via(_handle: &Self::CancelHandle) -> Result<(), HalError> {
         Ok(())
     }
     fn get_regs(&self) -> Result<StandardRegs, HalError> {
