@@ -383,40 +383,90 @@ pub fn boot_and_run<H: Hypervisor, W: Write + Send + 'static>(
     config: &VmConfig,
     serial_out: W,
     stop_flag: Arc<AtomicBool>,
-    extras: BootExtras,
+    mut extras: BootExtras,
 ) -> Result<VmRunResult, VmError> {
     // ── 1. Validate config ──
     validate_config(config)?;
 
-    // ── 2. Read kernel (+ optional initramfs) from disk ──
-    let kernel_bytes = fs::read(&config.kernel_path)?;
-    let initramfs_bytes = config.initramfs_path.as_ref().map(fs::read).transpose()?;
-
     let ram_bytes = u64::from(config.ram_mib) * 1024 * 1024;
     let gib_count = config.ram_mib.div_ceil(1024).max(1);
 
-    // ── 3. Allocate guest memory ──
+    // ── 2-7. Load Guest Memory ──
     let mut guest_mem = GuestMemory::new();
+    let pml4_gpa = setup_guest_memory(&mut guest_mem, config, ram_bytes, gib_count)?;
+
+    // ── 8. Write command line ──
+    build_kernel_cmdline(&mut guest_mem, config, &extras)?;
+
+    // ── 9. Write GDT ──
+    boot_regs::write_gdt(&guest_mem)?;
+
+    // ── 10. Create partition + map memory ──
+    let partition_cfg = PartitionConfig {
+        vcpu_count: config.cpus,
+        memory_size: MemSizeMiB::new(u64::from(config.ram_mib)),
+    };
+    let mut partition = hypervisor.create_partition(&partition_cfg)?;
+    guest_mem.map_to_partition(&mut partition, MemFlags::READ_WRITE_EXEC)?;
+
+    // ── 11. Create vCPUs ──
+    let entry_point = load_elf(&fs::read(&config.kernel_path)?, &guest_mem)?.entry_point;
+    let mut vcpus = Vec::with_capacity(config.cpus as usize);
+    for i in 0..config.cpus {
+        let mut vcpu = partition.create_vcpu(VcpuId::new(i))?;
+        if i == 0 {
+            boot_regs::configure_sregs(&mut vcpu, pml4_gpa)?;
+            boot_regs::configure_regs(&mut vcpu, entry_point, Gpa::new(BOOT_PARAMS_GPA))?;
+        }
+        vcpus.push(vcpu);
+    }
+
+    // ── 12-13. Set up devices ──
+    let serial = SerialDevice::new(serial_out);
+    let mut mmio_bus = MmioBus::new();
+    let guest_mem_arc: Arc<GuestMemory> = Arc::new(guest_mem);
+
+    let net_io_handle = setup_devices(&mut mmio_bus, config, &mut extras, &guest_mem_arc)?;
+    let devices = Arc::new(Mutex::new(SharedDevices { serial, mmio_bus }));
+
+    // ── 14. Run vCPU threads ──
+    let exit_reason = if vcpus.len() == 1 {
+        run_single_vcpu::<H>(vcpus.pop().unwrap(), devices, guest_mem_arc, stop_flag)?
+    } else {
+        run_multi_vcpu::<H>(vcpus, devices, guest_mem_arc, stop_flag)?
+    };
+
+    drop(net_io_handle);
+    Ok(VmRunResult { exit_reason })
+}
+
+// --- Helper Functions ---
+
+fn setup_guest_memory(
+    guest_mem: &mut GuestMemory,
+    config: &VmConfig,
+    ram_bytes: u64,
+    gib_count: u32,
+) -> Result<Gpa, VmError> {
     guest_mem.add_region(Gpa::new(0), ram_bytes as usize)?;
 
-    // ── 4. Build page tables ──
     let (pml4_gpa, page_table_writes) = build_page_tables(gib_count)?;
     for write in &page_table_writes {
         guest_mem.write_slice(write.gpa, &write.data)?;
     }
 
-    // ── 5. Load kernel ELF ──
-    let load_result = load_elf(&kernel_bytes, &guest_mem)?;
+    let kernel_bytes = fs::read(&config.kernel_path)?;
+    let load_result = load_elf(&kernel_bytes, guest_mem)?;
 
-    // ── 6. Optional initramfs ──
     let mut boot_params = build_boot_params(ram_bytes, Gpa::new(CMDLINE_GPA))?;
 
-    if let Some(ref initramfs_data) = initramfs_bytes {
+    if let Some(ref initramfs_path) = config.initramfs_path {
+        let initramfs_data = fs::read(initramfs_path)?;
         let initramfs_result = load_initramfs(
-            initramfs_data,
+            &initramfs_data,
             load_result.kernel_end,
             ram_bytes,
-            &guest_mem,
+            guest_mem,
         )?;
         set_initramfs_params(
             &mut boot_params,
@@ -425,10 +475,8 @@ pub fn boot_and_run<H: Hypervisor, W: Write + Send + 'static>(
         )?;
     }
 
-    // ── 7. Write boot_params to guest memory ──
     guest_mem.write_slice(Gpa::new(BOOT_PARAMS_GPA), boot_params.as_bytes())?;
 
-    // ── 7b. Write ACPI tables for SMP ──
     if config.cpus > 1 {
         let rsdp = build_rsdp();
         guest_mem.write_slice(Gpa::new(RSDP_GPA), &rsdp)?;
@@ -440,15 +488,19 @@ pub fn boot_and_run<H: Hypervisor, W: Write + Send + 'static>(
         guest_mem.write_slice(Gpa::new(hitz_boot::MADT_GPA), &madt)?;
 
         set_acpi_rsdp(&mut boot_params, RSDP_GPA);
-
-        // Re-write boot_params with the RSDP pointer set.
         guest_mem.write_slice(Gpa::new(BOOT_PARAMS_GPA), boot_params.as_bytes())?;
     }
 
-    // ── 8. Write command line ──
+    Ok(pml4_gpa)
+}
+
+fn build_kernel_cmdline(
+    guest_mem: &mut GuestMemory,
+    config: &VmConfig,
+    extras: &BootExtras,
+) -> Result<(), VmError> {
     let mut cmdline = config.effective_cmdline().to_string();
 
-    // Append virtio-net MMIO device descriptor to the kernel command line.
     if config.net.is_some() {
         let net_base = VIRTIO_MMIO_BASE + VIRTIO_MMIO_SIZE;
         let _ = write!(
@@ -457,7 +509,6 @@ pub fn boot_and_run<H: Hypervisor, W: Write + Send + 'static>(
         );
     }
 
-    // Append static IP configuration for the guest's network interface.
     if let Some(ref net_cfg) = config.net {
         let (guest_ip, _) = parse_cidr(&net_cfg.guest_ip).map_err(VmError::Config)?;
         let (gateway_ip, _) = parse_cidr(&net_cfg.host_ip).map_err(VmError::Config)?;
@@ -475,7 +526,6 @@ pub fn boot_and_run<H: Hypervisor, W: Write + Send + 'static>(
         );
     }
 
-    // Append virtio-vsock MMIO device descriptor when vsock channels are provided.
     if extras.vsock_channels.is_some() {
         let vsock_base = VIRTIO_MMIO_BASE + VIRTIO_MMIO_SIZE * 2;
         let _ = write!(
@@ -484,45 +534,17 @@ pub fn boot_and_run<H: Hypervisor, W: Write + Send + 'static>(
         );
     }
 
-    // Removed intermediate `.to_vec()` allocation.
     cmdline.push('\0');
     guest_mem.write_slice(Gpa::new(CMDLINE_GPA), cmdline.as_bytes())?;
+    Ok(())
+}
 
-    // ── 9. Write GDT ──
-    boot_regs::write_gdt(&guest_mem)?;
-
-    // ── 10. Create partition + map memory ──
-    let partition_cfg = PartitionConfig {
-        vcpu_count: config.cpus,
-        memory_size: MemSizeMiB::new(u64::from(config.ram_mib)),
-    };
-    let mut partition = hypervisor.create_partition(&partition_cfg)?;
-    guest_mem.map_to_partition(&mut partition, MemFlags::READ_WRITE_EXEC)?;
-
-    // ── 11. Create vCPUs ──
-    let mut vcpus = Vec::with_capacity(config.cpus as usize);
-    for i in 0..config.cpus {
-        let mut vcpu = partition.create_vcpu(VcpuId::new(i))?;
-        if i == 0 {
-            // BSP: configure for kernel entry.
-            boot_regs::configure_sregs(&mut vcpu, pml4_gpa)?;
-            boot_regs::configure_regs(
-                &mut vcpu,
-                load_result.entry_point,
-                Gpa::new(BOOT_PARAMS_GPA),
-            )?;
-        }
-        // APs (i > 0): WHP xAPIC emulation starts them in wait-for-SIPI state.
-        vcpus.push(vcpu);
-    }
-
-    // ── 12. Set up serial console ──
-    let serial = SerialDevice::new(serial_out);
-
-    // ── 13. Set up MMIO bus + optional virtio-blk ──
-    let mut mmio_bus = MmioBus::new();
-    let guest_mem_arc: Arc<GuestMemory> = Arc::new(guest_mem);
-
+fn setup_devices(
+    mmio_bus: &mut MmioBus,
+    config: &VmConfig,
+    extras: &mut BootExtras,
+    guest_mem_arc: &Arc<GuestMemory>,
+) -> Result<Option<hitz_net::NetIoHandle>, VmError> {
     if let Some(ref disk_path) = config.disk_path {
         let disk_file = fs::File::open(disk_path)?;
         let block_dev = VirtioBlockDevice::new(disk_file)?;
@@ -531,11 +553,7 @@ pub fn boot_and_run<H: Hypervisor, W: Write + Send + 'static>(
         mmio_bus.register(VIRTIO_MMIO_BASE, VIRTIO_MMIO_SIZE, Box::new(transport));
     }
 
-    // ── 13b. Optional virtio-net ──
-    //
-    // The `net_io_handle` must stay alive until after the run loop exits;
-    // its `Drop` impl signals the I/O thread to stop and joins it.
-    let net_io_handle: Option<hitz_net::NetIoHandle> = if let Some(ref net_cfg) = config.net {
+    let net_io_handle = if let Some(ref net_cfg) = config.net {
         let guest_mac = if let Some(ref mac_str) = net_cfg.mac {
             parse_mac(mac_str).map_err(VmError::Config)?
         } else {
@@ -552,9 +570,7 @@ pub fn boot_and_run<H: Hypervisor, W: Write + Send + 'static>(
         let net_base = VIRTIO_MMIO_BASE + VIRTIO_MMIO_SIZE;
         mmio_bus.register(net_base, VIRTIO_MMIO_SIZE, Box::new(net_transport));
 
-        // Removed unnecessary `.clone()` and `String` allocation for the default adapter name.
         let adapter_name = net_cfg.adapter_name.as_deref().unwrap_or("hitz-net");
-
         let handle = hitz_net::start_net_io(
             adapter_name,
             &net_cfg.host_ip,
@@ -571,16 +587,7 @@ pub fn boot_and_run<H: Hypervisor, W: Write + Send + 'static>(
         None
     };
 
-    // ── 13c. Optional virtio-vsock (guest metrics agent) ──────────────────────
-    //
-    // When the daemon provides pre-created channel ends via `BootExtras`, we
-    // construct the device from those channels so the host-side async task can
-    // communicate with the guest without crossing the `spawn_blocking` boundary.
-    // The device is registered at MMIO slot 2 (0xD000_2000, IRQ 7).
-    //
-    // If `vsock_channels` is `None` (CLI, tests, or agent disabled), no vsock
-    // device is created and the cmdline entry was also skipped above.
-    if let Some((rx_receiver, tx_sender)) = extras.vsock_channels {
+    if let Some((rx_receiver, tx_sender)) = extras.vsock_channels.take() {
         let vsock_dev = VirtioVsockDevice::with_channels(config.guest_cid, rx_receiver, tx_sender);
         let vsock_base = VIRTIO_MMIO_BASE + VIRTIO_MMIO_SIZE * 2;
         let vsock_mem: Arc<dyn GuestMemAccess> = guest_mem_arc.clone();
@@ -588,39 +595,44 @@ pub fn boot_and_run<H: Hypervisor, W: Write + Send + 'static>(
         mmio_bus.register(vsock_base, VIRTIO_MMIO_SIZE, Box::new(vsock_transport));
     }
 
-    // ── 14. Run vCPU threads ──
-    let devices = Arc::new(Mutex::new(SharedDevices { serial, mmio_bus }));
+    Ok(net_io_handle)
+}
 
-    if vcpus.len() == 1 {
-        // Watchdog cancels the vCPU if stop_flag fires while guest is halted.
-        let cancel_handle = vcpus[0].cancel_handle();
-        let stop_clone = Arc::clone(&stop_flag);
-        let watchdog = std::thread::Builder::new()
-            .name("cancel-watchdog".into())
-            .spawn(move || {
-                while !stop_clone.load(Ordering::Relaxed) {
-                    std::thread::sleep(Duration::from_millis(10));
-                }
-                let _ = <<H::Partition as Partition>::Vcpu as Vcpu>::cancel_via(&cancel_handle);
-            })
-            .expect("spawn watchdog thread");
+fn run_single_vcpu<H: Hypervisor>(
+    mut vcpu: <H::Partition as Partition>::Vcpu,
+    devices: Arc<Mutex<SharedDevices<impl Write + Send + 'static>>>,
+    guest_mem_arc: Arc<GuestMemory>,
+    stop_flag: Arc<AtomicBool>,
+) -> Result<ExitReason, VmError> {
+    let cancel_handle = vcpu.cancel_handle();
+    let stop_clone = Arc::clone(&stop_flag);
+    let watchdog = std::thread::Builder::new()
+        .name("cancel-watchdog".into())
+        .spawn(move || {
+            while !stop_clone.load(Ordering::Relaxed) {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            let _ = <<H::Partition as Partition>::Vcpu as Vcpu>::cancel_via(&cancel_handle);
+        })
+        .expect("spawn watchdog thread");
 
-        let exit_reason =
-            run_loop::run_vcpu_loop(&mut vcpus[0], &devices, &*guest_mem_arc, &stop_flag)?;
+    let exit_reason = run_loop::run_vcpu_loop(&mut vcpu, &devices, &*guest_mem_arc, &stop_flag)?;
 
-        // Ensure watchdog exits (set flag so it doesn't spin forever on normal exit).
-        stop_flag.store(true, Ordering::Relaxed);
-        let _ = watchdog.join();
-        drop(net_io_handle);
-        return Ok(VmRunResult { exit_reason });
-    }
+    stop_flag.store(true, Ordering::Relaxed);
+    let _ = watchdog.join();
+    Ok(exit_reason)
+}
 
-    // Multi-vCPU: spawn a thread per vCPU.
+fn run_multi_vcpu<H: Hypervisor>(
+    vcpus: Vec<<H::Partition as Partition>::Vcpu>,
+    devices: Arc<Mutex<SharedDevices<impl Write + Send + 'static>>>,
+    guest_mem_arc: Arc<GuestMemory>,
+    stop_flag: Arc<AtomicBool>,
+) -> Result<ExitReason, VmError> {
     let shared_handles: Arc<[_]> = vcpus.iter().map(Vcpu::cancel_handle).collect();
     let (exit_tx, exit_rx) = mpsc::channel::<Result<ExitReason, hitz_hal::HalError>>();
     let num_vcpus = vcpus.len();
 
-    // Watchdog: ensures cancel fires even if ALL vCPUs are blocked in run().
     let watchdog = {
         let stop_clone = Arc::clone(&stop_flag);
         let handles_clone = Arc::clone(&shared_handles);
@@ -652,7 +664,6 @@ pub fn boot_and_run<H: Hypervisor, W: Write + Send + 'static>(
                         run_loop::run_vcpu_loop(&mut vcpu, &devs, &*mem, &stop)
                     }));
 
-                    // On terminal exit or panic, stop and cancel all sibling vCPUs.
                     match &result {
                         Ok(
                             Ok(ExitReason::Halt | ExitReason::Shutdown | ExitReason::Unexpected(_))
@@ -662,12 +673,9 @@ pub fn boot_and_run<H: Hypervisor, W: Write + Send + 'static>(
                             stop.store(true, Ordering::Relaxed);
                             cancel_all_vcpus::<<H::Partition as Partition>::Vcpu>(&cancel_handles);
                         }
-                        Ok(Ok(ExitReason::Canceled)) => {
-                            // Another vCPU already triggered stop; nothing to do.
-                        }
+                        Ok(Ok(ExitReason::Canceled)) => {}
                     }
 
-                    // Convert panic payload into an ExitReason.
                     let exit = match result {
                         Ok(r) => r,
                         Err(payload) => {
@@ -691,10 +699,8 @@ pub fn boot_and_run<H: Hypervisor, W: Write + Send + 'static>(
         })
         .collect();
 
-    // Drop sender so the receiver knows when all threads are done.
     drop(exit_tx);
 
-    // Collect results with a 3-second timeout per vCPU.
     let deadline = Instant::now() + Duration::from_secs(3);
     let mut final_reason = ExitReason::Canceled;
 
@@ -718,19 +724,14 @@ pub fn boot_and_run<H: Hypervisor, W: Write + Send + 'static>(
         }
     }
 
-    // Signal watchdog to stop (in case it's still polling).
     stop_flag.store(true, Ordering::Relaxed);
     let _ = watchdog.join();
 
-    // Join vCPU threads — should be near-instant since they sent results already.
     for handle in handles {
         let _ = handle.join();
     }
 
-    drop(net_io_handle);
-    Ok(VmRunResult {
-        exit_reason: final_reason,
-    })
+    Ok(final_reason)
 }
 
 #[cfg(test)]
