@@ -1061,15 +1061,18 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
 
 // ── hitz vm * ──
 
+fn format_error_response(status: hyper::StatusCode, resp: &str, error_prefix: &str) -> String {
+    if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(resp) {
+        format!("✗ {error_prefix}: {}", err.message)
+    } else {
+        format!("✗ {error_prefix} ({status}): {resp}")
+    }
+}
+
 fn print_error_response(status: hyper::StatusCode, resp: &str, error_prefix: &str) {
     use crossterm::style::Stylize;
-    if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(resp) {
-        let msg = format!("✗ {error_prefix}: {}", err.message);
-        println!("{}", msg.red());
-    } else {
-        let msg = format!("✗ {error_prefix} ({status}): {resp}");
-        println!("{}", msg.red());
-    }
+    let msg = format_error_response(status, resp, error_prefix);
+    println!("{}", msg.red());
 }
 
 fn print_action_result(
@@ -1640,10 +1643,8 @@ async fn handle_vm_top(args: &VmIdArgs) -> Result<()> {
                             last_err = Some(format!("Parse error: {e}"));
                         }
                     }
-                } else if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(&resp) {
-                    last_err = Some(format!("✗ API Error: {}", err.message));
                 } else {
-                    last_err = Some(format!("✗ Error ({status}): {resp}"));
+                    last_err = Some(format_error_response(status, &resp, "Error"));
                 }
             }
         }
@@ -1754,11 +1755,9 @@ async fn handle_vm_record(args: &VmRecordArgs) -> Result<()> {
             samples += 1;
             print!("\r{}", format!("⏺ Recorded {samples} samples...").green());
             let _ = stdout().flush();
-        } else if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(&resp) {
-            eprintln!("\n{}", format!("✗ API Error: {}", err.message).red());
-            break;
         } else {
-            eprintln!("\n{}", format!("✗ Error ({status}): {resp}").red());
+            let msg = format_error_response(status, &resp, "Error");
+            eprintln!("\n{}", msg.red());
             break;
         }
     }
@@ -2122,10 +2121,8 @@ async fn handle_vm_dashboard(args: &VmListArgs) -> Result<()> {
                         } else {
                             err_msg = Some("Failed to parse JSON".to_string());
                         }
-                    } else if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(&resp) {
-                        err_msg = Some(err.message);
                     } else {
-                        err_msg = Some(format!("{status}: {resp}"));
+                        err_msg = Some(format_error_response(status, &resp, "Error"));
                     }
                 }
                 Err(e) => {
