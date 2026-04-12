@@ -24,6 +24,15 @@ impl CpioBuilder {
         }
     }
 
+    /// Create a builder with pre-allocated capacity.
+    #[must_use]
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            data: Vec::with_capacity(capacity),
+            inode: 1,
+        }
+    }
+
     /// Add a regular file entry.
     ///
     /// * `path` — file path inside the archive (no leading `/`)

@@ -24,7 +24,9 @@ pub struct ResourceInsight {
 }
 
 pub fn analyze_vm(info: &VmInfo, metrics: &MetricsSnapshot) -> Vec<ResourceInsight> {
-    let mut insights = Vec::new();
+    // ⚡ Bolt Optimization: Pre-allocate capacity for up to 4 potential insights
+    // (CPU, Memory, Swap, Network) to avoid dynamic heap reallocations.
+    let mut insights = Vec::with_capacity(4);
 
     // Analyze CPU usage
     if metrics.cpu.total_pct > 90.0 {
