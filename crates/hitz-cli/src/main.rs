@@ -2173,13 +2173,15 @@ async fn handle_vm_dashboard(args: &VmListArgs) -> Result<()> {
                     hitz_api::VmState::Failed => Color::Red,
                     hitz_api::VmState::Created => Color::Cyan,
                 };
-                // ⚡ Bolt Optimization:
-                // Removed `.clone()` and `.unwrap_or_else(|| "-".to_string())` which allocate Strings unnecessarily.
-                // Using `.as_deref().unwrap_or("-")` and directly mapping `&str` avoids heap allocations.
                 let exit_reason = vm.exit_reason.as_deref().unwrap_or("-");
 
+                // ⚡ Bolt Optimization:
+                // Replaced `vm.id.clone()` with `vm.id.as_str()` when creating `Cell`s.
+                // This removes an unnecessary String heap allocation per VM in the hot TUI
+                // rendering loop, which runs several times per second. `Cell::from` correctly
+                // accepts `&str`.
                 Row::new([
-                    Cell::from(vm.id.clone()),
+                    Cell::from(vm.id.as_str()),
                     Cell::from(state_str).style(Style::default().fg(state_color)),
                     Cell::from(vm.config.ram_mib.to_string()),
                     Cell::from(vm.config.cpus.to_string()),
