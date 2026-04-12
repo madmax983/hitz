@@ -405,12 +405,18 @@ mod tests {
             Ok(())
         }
         fn run(&mut self) -> Result<VcpuExit, HalError> {
-            match &self.exit {
+            let res = match &self.exit {
                 VcpuExit::Halt => Ok(VcpuExit::Halt),
                 VcpuExit::Canceled => Ok(VcpuExit::Canceled),
                 VcpuExit::Unknown(c) => Ok(VcpuExit::Unknown(*c)),
+                VcpuExit::Shutdown => Ok(VcpuExit::Shutdown),
+                VcpuExit::InterruptWindow => Ok(VcpuExit::InterruptWindow),
                 _ => unimplemented!(),
+            };
+            if let VcpuExit::InterruptWindow = self.exit {
+                self.exit = VcpuExit::Halt;
             }
+            res
         }
         fn get_regs(&self) -> Result<hitz_hal::StandardRegs, HalError> {
             Ok(self.regs.clone())
@@ -522,6 +528,43 @@ mod tests {
         let result = run_vcpu_loop(&mut vcpu, &devices, &mem, &stop_flag)
             .expect("run_vcpu_loop should succeed");
         assert_eq!(result, ExitReason::Canceled);
+    }
+
+    #[test]
+    fn test_run_vcpu_loop_shutdown() {
+        let mut vcpu = DummyVcpu {
+            regs: Default::default(),
+            sregs: Default::default(),
+            exit: VcpuExit::Shutdown,
+        };
+        let devices = Mutex::new(SharedDevices {
+            serial: SerialDevice::new(std::io::sink()),
+            mmio_bus: MmioBus::new(),
+        });
+        let mem = DummyMem;
+        let stop_flag = AtomicBool::new(false);
+        let result = run_vcpu_loop(&mut vcpu, &devices, &mem, &stop_flag)
+            .expect("run_vcpu_loop should succeed");
+        assert_eq!(result, ExitReason::Shutdown);
+    }
+
+    #[test]
+    fn test_run_vcpu_loop_interrupt_window() {
+        let mut vcpu = DummyVcpu {
+            regs: Default::default(),
+            sregs: Default::default(),
+            exit: VcpuExit::InterruptWindow,
+        };
+        let devices = Mutex::new(SharedDevices {
+            serial: SerialDevice::new(std::io::sink()),
+            mmio_bus: MmioBus::new(),
+        });
+        let mem = DummyMem;
+        let stop_flag = AtomicBool::new(false);
+        let result = run_vcpu_loop(&mut vcpu, &devices, &mem, &stop_flag)
+            .expect("run_vcpu_loop should succeed");
+        // It returns Halt on the second iteration
+        assert_eq!(result, ExitReason::Halt);
     }
 
     #[test]
