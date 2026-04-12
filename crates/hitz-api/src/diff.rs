@@ -212,6 +212,7 @@ impl CalculateDiff for MetricsSnapshot {
 
 #[cfg(test)]
 #[allow(clippy::float_cmp, clippy::unreadable_literal, clippy::expect_used)]
+#[allow(clippy::expect_used)]
 mod tests {
     use super::*;
     use crate::{CpuMetrics, DiskMetrics, MemoryMetrics, NetMetrics};

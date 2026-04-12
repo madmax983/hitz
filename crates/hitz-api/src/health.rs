@@ -197,6 +197,7 @@ impl HealthCheck for MetricsSnapshot {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used)]
 mod tests {
     use super::*;
     use crate::{CpuMetrics, MemoryMetrics, NetMetrics};
