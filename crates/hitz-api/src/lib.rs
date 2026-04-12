@@ -36,6 +36,12 @@ mod diff;
 #[cfg(feature = "diff")]
 pub use diff::*;
 
+#[cfg(feature = "prometheus")]
+/// Prometheus module for converting metrics to Prometheus text format.
+pub mod prometheus;
+#[cfg(feature = "prometheus")]
+pub use prometheus::*;
+
 use serde::{Deserialize, Serialize};
 
 /// Default kernel command line for Linux direct boot.
