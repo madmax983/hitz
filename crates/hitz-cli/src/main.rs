@@ -1064,6 +1064,12 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
 fn format_error_response(status: hyper::StatusCode, resp: &str, error_prefix: &str) -> String {
     if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(resp) {
         format!("✗ {error_prefix}: {}", err.message)
+    } else if let Ok(v) = serde_json::from_str::<serde_json::Value>(resp) {
+        if let Some(msg) = v.get("message").and_then(|m| m.as_str()) {
+            format!("✗ {error_prefix}: {}", msg)
+        } else {
+            format!("✗ {error_prefix} ({status}): {resp}")
+        }
     } else {
         format!("✗ {error_prefix} ({status}): {resp}")
     }
@@ -1426,7 +1432,7 @@ async fn handle_vm_top(args: &VmIdArgs) -> Result<()> {
         backend::CrosstermBackend,
         layout::{Constraint, Direction, Layout},
         style::{Color, Modifier, Style},
-        widgets::{Block, Borders, Gauge, Paragraph, Row, Table},
+        widgets::{Block, Borders, Cell, Gauge, Paragraph, Row, Table},
     };
     use std::time::{Duration, Instant};
 
