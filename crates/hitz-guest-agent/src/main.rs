@@ -274,4 +274,54 @@ mod tests {
         let content = "(a)";
         assert!(parse_proc_pid_stat(1, content).is_none());
     }
+
+    #[test]
+    #[allow(clippy::float_cmp)]
+    fn test_parse_load_avg() {
+        assert_eq!(parse_load_avg("1.23 4.56 7.89"), [1.23, 4.56, 7.89]);
+        assert_eq!(parse_load_avg("1.23 4.56"), [1.23, 4.56, 0.0]);
+        assert_eq!(parse_load_avg("1.23"), [1.23, 0.0, 0.0]);
+        assert_eq!(parse_load_avg(""), [0.0, 0.0, 0.0]);
+        assert_eq!(parse_load_avg("invalid"), [0.0, 0.0, 0.0]);
+        assert_eq!(parse_load_avg("1.23 invalid 7.89"), [1.23, 0.0, 7.89]);
+    }
+
+    #[test]
+    fn test_parse_proc_pid_stat() {
+        // A well-formed /proc/[pid]/stat line.
+        // We only care about:
+        // (1) pid
+        // (2) comm
+        // (3) state -> index 2 after split
+        // (14) utime -> index 13
+        // (15) stime -> index 14
+        // (24) rss -> index 23
+        // Note: iter starts AFTER comm, so:
+        // state = iter[0]
+        // utime = iter[11]  (10 fields skipped)
+        // stime = iter[12]
+        // rss = iter[21] (8 fields skipped)
+
+        let content = "123 (my_process) S 1 1 1 1 1 1 1 1 1 1 100 200 1 1 1 1 1 1 1 1 50";
+        // utime = 100, stime = 200
+        // rss = 50 pages -> 50 * 4096 = 204800 bytes
+
+        // Since cpu_pct calculation involves uptime, we can't easily assert the exact
+        // value without mocking uptime. But we can assert the other fields.
+        let metrics = parse_proc_pid_stat(123, content).unwrap();
+
+        assert_eq!(metrics.pid, 123);
+        assert_eq!(metrics.name, "my_process");
+        assert_eq!(metrics.state, 'S');
+        assert_eq!(metrics.rss_bytes, 50 * 4096);
+
+        // Test parsing with an empty name
+        let content_empty_name = "123 () S 1 1 1 1 1 1 1 1 1 1 100 200 1 1 1 1 1 1 1 1 50";
+        let metrics_empty_name = parse_proc_pid_stat(123, content_empty_name).unwrap();
+        assert_eq!(metrics_empty_name.name, "");
+
+        // Test parsing failure due to missing fields
+        let content_short = "123 (short) S 1";
+        assert!(parse_proc_pid_stat(123, content_short).is_none());
+    }
 }
