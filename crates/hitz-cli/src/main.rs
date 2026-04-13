@@ -1463,7 +1463,7 @@ async fn handle_vm_top(args: &VmIdArgs) -> Result<()> {
                 f.render_widget(header, main_chunks[0]);
 
                 if let Some(ref err) = last_err {
-                    let err_p = Paragraph::new(err.clone())
+                    let err_p = Paragraph::new(err.as_str())
                         .style(Style::default().fg(Color::Red))
                         .block(Block::default().borders(Borders::ALL).title("Error"));
                     f.render_widget(err_p, main_chunks[1]);
@@ -1524,9 +1524,9 @@ async fn handle_vm_top(args: &VmIdArgs) -> Result<()> {
                     let disk_table = Table::new(
                         snap.disks.iter().map(|d| {
                             Row::new([
-                                d.name.clone(),
-                                format!("{}", d.read_bytes / 1024),
-                                format!("{}", d.write_bytes / 1024),
+                                Cell::from(d.name.as_str()),
+                                Cell::from(format!("{}", d.read_bytes / 1024)),
+                                Cell::from(format!("{}", d.write_bytes / 1024)),
                             ])
                         }),
                         [
@@ -1547,9 +1547,9 @@ async fn handle_vm_top(args: &VmIdArgs) -> Result<()> {
                     let net_table = Table::new(
                         snap.networks.iter().map(|n| {
                             Row::new([
-                                n.interface.clone(),
-                                format!("{}", n.rx_bytes / 1024),
-                                format!("{}", n.tx_bytes / 1024),
+                                Cell::from(n.interface.as_str()),
+                                Cell::from(format!("{}", n.rx_bytes / 1024)),
+                                Cell::from(format!("{}", n.tx_bytes / 1024)),
                             ])
                         }),
                         [
@@ -1570,10 +1570,10 @@ async fn handle_vm_top(args: &VmIdArgs) -> Result<()> {
                     let proc_table = Table::new(
                         snap.processes.iter().map(|p| {
                             Row::new([
-                                p.pid.to_string(),
-                                p.name.clone(),
-                                format!("{:.1}%", p.cpu_pct),
-                                format!("{} MB", p.rss_bytes / (1024 * 1024)),
+                                Cell::from(p.pid.to_string()),
+                                Cell::from(p.name.as_str()),
+                                Cell::from(format!("{:.1}%", p.cpu_pct)),
+                                Cell::from(format!("{} MB", p.rss_bytes / (1024 * 1024))),
                             ])
                         }),
                         [
@@ -2156,7 +2156,7 @@ async fn handle_vm_dashboard(args: &VmListArgs) -> Result<()> {
                 let exit_reason = vm.exit_reason.as_deref().unwrap_or("-");
 
                 Row::new([
-                    Cell::from(vm.id.clone()),
+                    Cell::from(vm.id.as_str()),
                     Cell::from(state_str).style(Style::default().fg(state_color)),
                     Cell::from(vm.config.ram_mib.to_string()),
                     Cell::from(vm.config.cpus.to_string()),
