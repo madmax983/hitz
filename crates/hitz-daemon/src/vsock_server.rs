@@ -71,12 +71,12 @@ fn handle_packet(
             let _ = rx_tx.try_send((resp, vec![]));
         }
         Some(VsockOp::Rw) if hdr.dst_port == VSOCK_METRICS_PORT => {
-            if payload.len() >= 4 {
-                let len = u32::from_le_bytes(payload[0..4].try_into().unwrap_or([0; 4])) as usize;
-                if payload.len() >= 4 + len
-                    && let Ok(snap) = rmp_serde::from_slice::<MetricsSnapshot>(&payload[4..4 + len])
-                {
-                    publish_to_otel(vm_id, &snap);
+            if let Some(len_bytes) = payload.get(0..4) {
+                let len = u32::from_le_bytes(len_bytes.try_into().unwrap_or([0; 4])) as usize;
+                if let Some(snap_bytes) = payload.get(4..4 + len) {
+                    if let Ok(snap) = rmp_serde::from_slice::<MetricsSnapshot>(snap_bytes) {
+                        publish_to_otel(vm_id, &snap);
+                    }
                 }
             }
             *fwd_cnt = fwd_cnt.saturating_add(hdr.len);

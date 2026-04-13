@@ -112,25 +112,34 @@ fn collect_top_procs(n: usize) -> Vec<hitz_api::ProcMetrics> {
     let mut stat_buf = String::with_capacity(1024);
 
     if let Ok(entries) = std::fs::read_dir("/proc") {
+        use std::fmt::Write;
+        use std::io::Read;
         for entry in entries.filter_map(std::result::Result::ok) {
             let file_name = entry.file_name();
-            if let Some(pid_str) = file_name.to_str()
-                && let Ok(pid) = pid_str.parse::<u32>()
-            {
-                use std::fmt::Write;
-                use std::io::Read;
 
-                path_buf.clear();
-                let _ = write!(path_buf, "/proc/{pid}/stat");
+            let Some(pid_str) = file_name.to_str() else {
+                continue;
+            };
+            let Ok(pid) = pid_str.parse::<u32>() else {
+                continue;
+            };
 
-                stat_buf.clear();
-                if let Ok(mut f) = std::fs::File::open(&path_buf)
-                    && f.read_to_string(&mut stat_buf).is_ok()
-                    && let Some(p) = parse_proc_pid_stat(pid, &stat_buf)
-                {
-                    procs.push(p);
-                }
+            path_buf.clear();
+            let _ = write!(path_buf, "/proc/{pid}/stat");
+
+            stat_buf.clear();
+
+            let Ok(mut f) = std::fs::File::open(&path_buf) else {
+                continue;
+            };
+            if f.read_to_string(&mut stat_buf).is_err() {
+                continue;
             }
+            let Some(p) = parse_proc_pid_stat(pid, &stat_buf) else {
+                continue;
+            };
+
+            procs.push(p);
         }
     }
     procs.sort_by(|a, b| {
