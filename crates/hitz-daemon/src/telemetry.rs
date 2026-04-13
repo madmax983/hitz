@@ -115,15 +115,15 @@ impl TelemetryGuard {
 
 impl Drop for TelemetryGuard {
     fn drop(&mut self) {
-        if let Some(ref mp) = self.meter_provider
-            && let Err(e) = mp.shutdown()
-        {
-            tracing::warn!("OpenTelemetry meter provider shutdown error: {e}");
+        if let Some(ref mp) = self.meter_provider {
+            if let Err(e) = mp.shutdown() {
+                tracing::warn!("OpenTelemetry meter provider shutdown error: {e}");
+            }
         }
-        if let Some(ref tp) = self.tracer_provider
-            && let Err(e) = tp.shutdown()
-        {
-            tracing::warn!("OpenTelemetry tracer provider shutdown error: {e}");
+        if let Some(ref tp) = self.tracer_provider {
+            if let Err(e) = tp.shutdown() {
+                tracing::warn!("OpenTelemetry tracer provider shutdown error: {e}");
+            }
         }
     }
 }

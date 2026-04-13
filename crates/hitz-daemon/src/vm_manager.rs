@@ -452,38 +452,38 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
             vm_count_clone.add(-1, &[KeyValue::new("state", "running")]);
 
             // Update state based on result.
-            if let Ok(mut vms) = vms.lock()
-                && let Some(entry) = vms.get_mut(&vm_id)
-            {
-                match result {
-                    Ok(Ok(run_result)) => match run_result.exit_reason {
-                        ExitReason::Halt | ExitReason::Shutdown | ExitReason::Canceled => {
-                            entry.state = VmState::Stopped;
-                            entry.exit_reason = Some(format!("{:?}", run_result.exit_reason));
-                        }
-                        ExitReason::Unexpected(ref reason) => {
+            if let Ok(mut vms) = vms.lock() {
+                if let Some(entry) = vms.get_mut(&vm_id) {
+                    match result {
+                        Ok(Ok(run_result)) => match run_result.exit_reason {
+                            ExitReason::Halt | ExitReason::Shutdown | ExitReason::Canceled => {
+                                entry.state = VmState::Stopped;
+                                entry.exit_reason = Some(format!("{:?}", run_result.exit_reason));
+                            }
+                            ExitReason::Unexpected(ref reason) => {
+                                entry.state = VmState::Failed;
+                                entry.exit_reason = Some(reason.clone());
+                            }
+                        },
+                        Ok(Err(e)) => {
                             entry.state = VmState::Failed;
-                            entry.exit_reason = Some(reason.clone());
+                            entry.exit_reason = Some(e.to_string());
                         }
-                    },
-                    Ok(Err(e)) => {
-                        entry.state = VmState::Failed;
-                        entry.exit_reason = Some(e.to_string());
+                        Err(e) => {
+                            entry.state = VmState::Failed;
+                            entry.exit_reason = Some(format!("task panicked: {e}"));
+                        }
                     }
-                    Err(e) => {
-                        entry.state = VmState::Failed;
-                        entry.exit_reason = Some(format!("task panicked: {e}"));
+                    entry.stop_flag = None;
+                    entry.vsock_handle = None;
+                    if let Some(ref buf) = entry.serial_buf {
+                        buf.close();
                     }
-                }
-                entry.stop_flag = None;
-                entry.vsock_handle = None;
-                if let Some(ref buf) = entry.serial_buf {
-                    buf.close();
-                }
-                let final_state = entry.state;
-                drop(vms); // explicit drop — persist state outside the lock
-                if let Err(e) = store_exit.save_state(&vm_id, final_state) {
-                    tracing::warn!(vm_id = %vm_id, error = %e, "failed to persist VM exit state");
+                    let final_state = entry.state;
+                    drop(vms); // explicit drop — persist state outside the lock
+                    if let Err(e) = store_exit.save_state(&vm_id, final_state) {
+                        tracing::warn!(vm_id = %vm_id, error = %e, "failed to persist VM exit state");
+                    }
                 }
             }
 
@@ -729,10 +729,10 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
     pub fn stop_all(&self) {
         if let Ok(vms) = self.vms.lock() {
             for entry in vms.values() {
-                if entry.state == VmState::Running
-                    && let Some(ref flag) = entry.stop_flag
-                {
-                    flag.store(true, Ordering::Relaxed);
+                if entry.state == VmState::Running {
+                    if let Some(ref flag) = entry.stop_flag {
+                        flag.store(true, Ordering::Relaxed);
+                    }
                 }
             }
         }

@@ -1819,7 +1819,12 @@ fn handle_vm_timeline(args: &VmTimelineArgs) -> Result<()> {
             Err(e) => {
                 eprintln!(
                     "{}",
-                    format!("✗ Invalid or corrupted metrics data on line {}: {}", line_num + 1, e).red()
+                    format!(
+                        "✗ Invalid or corrupted metrics data on line {}: {}",
+                        line_num + 1,
+                        e
+                    )
+                    .red()
                 );
                 continue;
             }
@@ -2216,11 +2221,12 @@ async fn handle_vm_dashboard(args: &VmListArgs) -> Result<()> {
             .checked_sub(last_tick.elapsed())
             .unwrap_or_else(|| Duration::from_secs(0));
 
-        if crossterm::event::poll(timeout).unwrap_or(false)
-            && let Event::Key(key) = event::read().unwrap_or(Event::FocusGained)
-            && (key.code == KeyCode::Char('q') || key.code == KeyCode::Esc)
-        {
-            should_quit = true;
+        if crossterm::event::poll(timeout).unwrap_or(false) {
+            if let Event::Key(key) = event::read().unwrap_or(Event::FocusGained) {
+                if key.code == KeyCode::Char('q') || key.code == KeyCode::Esc {
+                    should_quit = true;
+                }
+            }
         }
         if last_tick.elapsed() >= tick_rate {
             last_tick = Instant::now();
