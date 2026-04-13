@@ -1819,7 +1819,12 @@ fn handle_vm_timeline(args: &VmTimelineArgs) -> Result<()> {
             Err(e) => {
                 eprintln!(
                     "{}",
-                    format!("✗ Invalid or corrupted metrics data on line {}: {}", line_num + 1, e).red()
+                    format!(
+                        "✗ Invalid or corrupted metrics data on line {}: {}",
+                        line_num + 1,
+                        e
+                    )
+                    .red()
                 );
                 continue;
             }
