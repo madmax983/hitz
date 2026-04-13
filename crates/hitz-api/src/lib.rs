@@ -162,6 +162,15 @@ pub enum GuestAgentMode {
 // ── Metrics wire protocol ────────────────────────────────────────────────────
 
 /// On-demand metrics request sent from host to guest over vsock.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::MetricsRequest;
+///
+/// let req = MetricsRequest::Snapshot;
+/// assert_eq!(req, MetricsRequest::Snapshot);
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MetricsRequest {
     /// Request a full resource snapshot.

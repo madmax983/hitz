@@ -33,6 +33,32 @@
 use crate::MetricsSnapshot;
 
 /// Trait to convert metrics into Prometheus text exposition format.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::{MetricsSnapshot, CpuMetrics, MemoryMetrics, ToPrometheus};
+///
+/// let snap = MetricsSnapshot {
+///     timestamp_ms: 1_700_000_000_000,
+///     cpu: CpuMetrics { total_pct: 12.5, per_core: vec![10.0, 15.0], load_avg: [0.5, 0.4, 0.3] },
+///     memory: MemoryMetrics {
+///         total_bytes: 256 * 1024 * 1024,
+///         used_bytes: 100 * 1024 * 1024,
+///         free_bytes: 156 * 1024 * 1024,
+///         buffers_bytes: 0,
+///         cached_bytes: 0,
+///         swap_total: 0,
+///         swap_used: 0,
+///     },
+///     disks: vec![],
+///     networks: vec![],
+///     processes: vec![],
+/// };
+///
+/// let prom_text = snap.to_prometheus("my_vm");
+/// assert!(prom_text.contains("hitz_cpu_total_pct{vm_id=\"my_vm\"} 12.5 1700000000000"));
+/// ```
 pub trait ToPrometheus {
     /// Convert the metrics snapshot to a Prometheus text string, tagging with the given `vm_id`.
     fn to_prometheus(&self, vm_id: &str) -> String;
@@ -268,20 +294,20 @@ mod tests {
                 load_avg: [0.5, 0.4, 0.3],
             },
             memory: MemoryMetrics {
-                total_bytes: 268435456,
-                used_bytes: 104857600,
-                free_bytes: 163577856,
-                buffers_bytes: 1048576,
-                cached_bytes: 2097152,
-                swap_total: 10240,
-                swap_used: 5120,
+                total_bytes: 268_435_456,
+                used_bytes: 104_857_600,
+                free_bytes: 163_577_856,
+                buffers_bytes: 1_048_576,
+                cached_bytes: 2_097_152,
+                swap_total: 10_240,
+                swap_used: 5_120,
             },
             disks: vec![DiskMetrics {
                 name: "vda".to_string(),
                 reads_total: 100,
                 writes_total: 50,
-                read_bytes: 409600,
-                write_bytes: 204800,
+                read_bytes: 409_600,
+                write_bytes: 204_800,
             }],
             networks: vec![NetMetrics {
                 interface: "eth0".to_string(),
@@ -296,7 +322,7 @@ mod tests {
                 pid: 1,
                 name: "systemd".to_string(),
                 cpu_pct: 0.1,
-                rss_bytes: 8388608,
+                rss_bytes: 8_388_608,
                 state: 'S',
             }],
         };

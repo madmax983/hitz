@@ -223,7 +223,10 @@ impl GuestMemory {
         // This VMM targets x86-64 only; 32-bit truncation is not a concern.
         #[allow(clippy::cast_possible_truncation)]
         let offset = (addr - region.gpa_start.as_u64()) as usize;
-        let remaining = region.size.checked_sub(offset).ok_or(MemError::OutOfBounds { gpa: addr, len })?;
+        let remaining = region
+            .size
+            .checked_sub(offset)
+            .ok_or(MemError::OutOfBounds { gpa: addr, len })?;
 
         if len > remaining {
             return Err(MemError::OutOfBounds { gpa: addr, len });

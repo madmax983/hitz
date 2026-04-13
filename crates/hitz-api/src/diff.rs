@@ -48,6 +48,20 @@ use serde::{Deserialize, Serialize};
 /// This struct holds the unified record of calculated rates. It takes the absolute
 /// counter values from a `MetricsSnapshot` (like total bytes read) and normalizes
 /// them into a "per second" rate.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::MetricsDiff;
+///
+/// let diff = MetricsDiff {
+///     elapsed_secs: 1.5,
+///     disks: vec![],
+///     networks: vec![],
+/// };
+///
+/// assert_eq!(diff.elapsed_secs, 1.5);
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MetricsDiff {
     /// Time elapsed between the two snapshots in seconds.
@@ -59,6 +73,22 @@ pub struct MetricsDiff {
 }
 
 /// Per-disk I/O rates (per second).
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::DiskRate;
+///
+/// let rate = DiskRate {
+///     name: "vda".to_string(),
+///     reads_per_sec: 100.0,
+///     writes_per_sec: 50.0,
+///     read_bytes_per_sec: 102400.0,
+///     write_bytes_per_sec: 51200.0,
+/// };
+///
+/// assert_eq!(rate.name, "vda");
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DiskRate {
     /// Device name.
@@ -74,6 +104,22 @@ pub struct DiskRate {
 }
 
 /// Per-network-interface I/O rates (per second).
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::NetRate;
+///
+/// let rate = NetRate {
+///     interface: "eth0".to_string(),
+///     rx_bytes_per_sec: 1024.0,
+///     tx_bytes_per_sec: 512.0,
+///     rx_packets_per_sec: 10.0,
+///     tx_packets_per_sec: 5.0,
+/// };
+///
+/// assert_eq!(rate.interface, "eth0");
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct NetRate {
     /// Interface name.
