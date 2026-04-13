@@ -36,6 +36,12 @@ mod diff;
 #[cfg(feature = "diff")]
 pub use diff::*;
 
+#[cfg(feature = "prometheus")]
+/// Prometheus exposition format exporter for Hitz metrics.
+mod prometheus;
+#[cfg(feature = "prometheus")]
+pub use prometheus::*;
+
 use serde::{Deserialize, Serialize};
 
 /// Default kernel command line for Linux direct boot.
