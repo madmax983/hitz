@@ -2604,3 +2604,20 @@ mod top_tests {
         assert!(true);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_port_forward() {
+        let pf = parse_port_forward("8080:80").unwrap();
+        assert_eq!(pf.host_port, 8080);
+        assert_eq!(pf.guest_port, 80);
+
+        assert!(parse_port_forward("8080").is_err());
+        assert!(parse_port_forward("8080:abc").is_err());
+        assert!(parse_port_forward("abc:80").is_err());
+        assert!(parse_port_forward("70000:80").is_err()); // > 65535
+    }
+}

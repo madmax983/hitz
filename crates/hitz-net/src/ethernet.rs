@@ -467,3 +467,130 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_eth_header_too_short() {
+        assert!(parse_eth_header(&[0; 13]).is_none());
+    }
+
+    #[test]
+    fn test_parse_eth_header_valid() {
+        let mut frame = [0u8; 14];
+        frame[0..6].copy_from_slice(&[0x01, 0x02, 0x03, 0x04, 0x05, 0x06]);
+        frame[6..12].copy_from_slice(&[0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F]);
+        frame[12..14].copy_from_slice(&0x0800u16.to_be_bytes());
+
+        let header = parse_eth_header(&frame).unwrap();
+        assert_eq!(header.dst_mac, [0x01, 0x02, 0x03, 0x04, 0x05, 0x06]);
+        assert_eq!(header.src_mac, [0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F]);
+        assert_eq!(header.ethertype, 0x0800);
+    }
+
+    #[test]
+    fn test_random_mac() {
+        let mac = random_mac();
+        // bit 0 = 0 (unicast)
+        assert_eq!(mac[0] & 1, 0);
+        // bit 1 = 1 (locally administered)
+        assert_eq!((mac[0] >> 1) & 1, 1);
+    }
+
+    #[test]
+    fn test_parse_mac_valid() {
+        assert_eq!(
+            parse_mac("01:23:45:67:89:ab").unwrap(),
+            [0x01, 0x23, 0x45, 0x67, 0x89, 0xab]
+        );
+    }
+
+    #[test]
+    fn test_parse_mac_invalid_format() {
+        assert!(parse_mac("01:23:45:67:89").is_err());
+        assert!(parse_mac("01:23:45:67:89:ab:cd").is_err());
+        assert!(parse_mac("zz:23:45:67:89:ab").is_err());
+        assert!(parse_mac("0123456789ab").is_err());
+    }
+
+    #[test]
+    fn test_parse_cidr_valid() {
+        assert_eq!(
+            parse_cidr("192.168.1.1/24").unwrap(),
+            ([192, 168, 1, 1], 24)
+        );
+    }
+
+    #[test]
+    fn test_parse_cidr_invalid_format() {
+        assert!(parse_cidr("192.168.1.1").is_err()); // Missing prefix
+        assert!(parse_cidr("192.168.1.1/").is_err()); // Missing prefix value
+        assert!(parse_cidr("192.168.1/24").is_err()); // Too few octets
+        assert!(parse_cidr("192.168.1.1.1/24").is_err()); // Too many octets
+        assert!(parse_cidr("192.168.256.1/24").is_err()); // Out of range octet
+        assert!(parse_cidr("192.168.1.1/33").is_err()); // Invalid prefix
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_mac_valid() {
+        assert_eq!(
+            parse_mac("01:23:45:67:89:ab").unwrap(),
+            [0x01, 0x23, 0x45, 0x67, 0x89, 0xab]
+        );
+    }
+
+    #[test]
+    fn test_parse_mac_invalid_format() {
+        assert!(parse_mac("01:23:45:67:89").is_err());
+        assert!(parse_mac("01:23:45:67:89:ab:cd").is_err());
+        assert!(parse_mac("zz:23:45:67:89:ab").is_err());
+        assert!(parse_mac("0123456789ab").is_err());
+    }
+
+    #[test]
+    fn test_parse_cidr_valid() {
+        assert_eq!(
+            parse_cidr("192.168.1.1/24").unwrap(),
+            ([192, 168, 1, 1], 24)
+        );
+    }
+
+    #[test]
+    fn test_parse_cidr_invalid_format() {
+        assert!(parse_cidr("192.168.1.1").is_err()); // Missing prefix
+        assert!(parse_cidr("192.168.1.1/").is_err()); // Missing prefix value
+        assert!(parse_cidr("192.168.1/24").is_err()); // Too few octets
+        assert!(parse_cidr("192.168.1.1.1/24").is_err()); // Too many octets
+        assert!(parse_cidr("192.168.256.1/24").is_err()); // Out of range octet
+        assert!(parse_cidr("192.168.1.1/33").is_err()); // Invalid prefix
+    }
+
+    #[test]
+    fn test_random_mac() {
+        let mac = random_mac();
+        assert_eq!(mac[0] & 1, 0); // unicast
+        assert_eq!((mac[0] >> 1) & 1, 1); // locally administered
+    }
+
+    #[test]
+    fn test_parse_eth_header() {
+        assert!(parse_eth_header(&[0; 13]).is_none());
+
+        let mut frame = [0u8; 14];
+        frame[0..6].copy_from_slice(&[0x01, 0x02, 0x03, 0x04, 0x05, 0x06]);
+        frame[6..12].copy_from_slice(&[0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F]);
+        frame[12..14].copy_from_slice(&0x0800u16.to_be_bytes());
+
+        let header = parse_eth_header(&frame).unwrap();
+        assert_eq!(header.dst_mac, [0x01, 0x02, 0x03, 0x04, 0x05, 0x06]);
+        assert_eq!(header.src_mac, [0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F]);
+        assert_eq!(header.ethertype, 0x0800);
+    }
+}
