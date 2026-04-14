@@ -44,7 +44,7 @@ use serde::{Deserialize, Serialize};
 /// let my_status = HealthStatus::Healthy;
 /// assert_eq!(my_status, HealthStatus::Healthy);
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum HealthStatus {
     /// System is operating within normal parameters.
     Healthy,
@@ -125,19 +125,17 @@ impl HealthCheck for MetricsSnapshot {
     /// - **Memory**: > 90% is Critical, > 75% is Warning
     /// - **Swap**: > 50% is Critical, > 20% is Warning
     /// - **Network Errors**: > 100 is Critical, > 10 is Warning
-    #[allow(clippy::cast_precision_loss, clippy::similar_names)]
+    #[allow(clippy::cast_precision_loss)]
     fn assess_health(&self) -> SystemHealth {
         let mut status = HealthStatus::Healthy;
         let mut reasons = Vec::new();
 
         // CPU evaluation
         if self.cpu.total_pct > 90.0 {
-            status = HealthStatus::Critical;
+            status = status.max(HealthStatus::Critical);
             reasons.push(format!("Critical CPU usage: {:.1}%", self.cpu.total_pct));
         } else if self.cpu.total_pct > 75.0 {
-            if status == HealthStatus::Healthy {
-                status = HealthStatus::Warning;
-            }
+            status = status.max(HealthStatus::Warning);
             reasons.push(format!("High CPU usage: {:.1}%", self.cpu.total_pct));
         }
 
@@ -146,12 +144,10 @@ impl HealthCheck for MetricsSnapshot {
             let memory_pct =
                 (self.memory.used_bytes as f64 / self.memory.total_bytes as f64) * 100.0;
             if memory_pct > 90.0 {
-                status = HealthStatus::Critical;
+                status = status.max(HealthStatus::Critical);
                 reasons.push(format!("Critical memory usage: {memory_pct:.1}%"));
             } else if memory_pct > 75.0 {
-                if status == HealthStatus::Healthy {
-                    status = HealthStatus::Warning;
-                }
+                status = status.max(HealthStatus::Warning);
                 reasons.push(format!("High memory usage: {memory_pct:.1}%"));
             }
         }
@@ -161,34 +157,26 @@ impl HealthCheck for MetricsSnapshot {
             #[allow(clippy::cast_precision_loss)]
             let swap_pct = (self.memory.swap_used as f64 / self.memory.swap_total as f64) * 100.0;
             if swap_pct > 50.0 {
-                status = HealthStatus::Critical;
+                status = status.max(HealthStatus::Critical);
                 reasons.push(format!("Critical swap usage: {swap_pct:.1}%"));
             } else if swap_pct > 20.0 {
-                if status == HealthStatus::Healthy {
-                    status = HealthStatus::Warning;
-                }
+                status = status.max(HealthStatus::Warning);
                 reasons.push(format!("High swap usage: {swap_pct:.1}%"));
             }
         }
 
         // Network errors evaluation
-        #[allow(clippy::similar_names)]
-        let mut total_rx_errors = 0;
-        #[allow(clippy::similar_names)]
-        let mut total_tx_errors = 0;
-        for net in &self.networks {
-            total_rx_errors += net.rx_errors;
-            total_tx_errors += net.tx_errors;
-        }
-        let total_net_errors = total_rx_errors + total_tx_errors;
+        let total_net_errors: u64 = self
+            .networks
+            .iter()
+            .map(|net| net.rx_errors + net.tx_errors)
+            .sum();
 
         if total_net_errors > 100 {
-            status = HealthStatus::Critical;
+            status = status.max(HealthStatus::Critical);
             reasons.push(format!("Critical network errors: {total_net_errors}"));
         } else if total_net_errors > 10 {
-            if status == HealthStatus::Healthy {
-                status = HealthStatus::Warning;
-            }
+            status = status.max(HealthStatus::Warning);
             reasons.push(format!("Elevated network errors: {total_net_errors}"));
         }
 
