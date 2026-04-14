@@ -932,7 +932,7 @@ fn run_daemon(args: &DaemonStartArgs) -> Result<()> {
 #[allow(clippy::too_many_lines)]
 fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
     use comfy_table::presets::UTF8_FULL_CONDENSED;
-    use comfy_table::{Attribute, Cell, Table};
+    use comfy_table::{Attribute, Cell, Color, Table};
     use std::fmt::Write as _;
 
     let mut out = String::new();
@@ -964,15 +964,23 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
     let mem_str = format!("{used_mib} MiB / {total_mib} MiB");
 
     let _ = sys_table.add_row([
-        Cell::new("CPU Total").add_attribute(Attribute::Bold),
+        Cell::new("CPU Total")
+            .add_attribute(Attribute::Bold)
+            .fg(Color::Cyan),
         Cell::new(format!("{:.1}%", snap.cpu.total_pct)),
-        Cell::new("Cores").add_attribute(Attribute::Bold),
+        Cell::new("Cores")
+            .add_attribute(Attribute::Bold)
+            .fg(Color::Cyan),
         Cell::new(cores_str),
     ]);
     let _ = sys_table.add_row([
-        Cell::new("CPU Load").add_attribute(Attribute::Bold),
+        Cell::new("CPU Load")
+            .add_attribute(Attribute::Bold)
+            .fg(Color::Cyan),
         Cell::new(cpu_load),
-        Cell::new("Memory").add_attribute(Attribute::Bold),
+        Cell::new("Memory")
+            .add_attribute(Attribute::Bold)
+            .fg(Color::Cyan),
         Cell::new(mem_str),
     ]);
 
@@ -984,11 +992,21 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
         let mut disk_table = Table::new();
         let _ = disk_table.load_preset(UTF8_FULL_CONDENSED);
         let _ = disk_table.set_header([
-            Cell::new("Disk").add_attribute(Attribute::Bold),
-            Cell::new("Reads").add_attribute(Attribute::Bold),
-            Cell::new("Writes").add_attribute(Attribute::Bold),
-            Cell::new("Read KB").add_attribute(Attribute::Bold),
-            Cell::new("Write KB").add_attribute(Attribute::Bold),
+            Cell::new("Disk")
+                .add_attribute(Attribute::Bold)
+                .fg(Color::Cyan),
+            Cell::new("Reads")
+                .add_attribute(Attribute::Bold)
+                .fg(Color::Cyan),
+            Cell::new("Writes")
+                .add_attribute(Attribute::Bold)
+                .fg(Color::Cyan),
+            Cell::new("Read KB")
+                .add_attribute(Attribute::Bold)
+                .fg(Color::Cyan),
+            Cell::new("Write KB")
+                .add_attribute(Attribute::Bold)
+                .fg(Color::Cyan),
         ]);
 
         for disk in &snap.disks {
@@ -1011,11 +1029,21 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
         let mut net_table = Table::new();
         let _ = net_table.load_preset(UTF8_FULL_CONDENSED);
         let _ = net_table.set_header([
-            Cell::new("Interface").add_attribute(Attribute::Bold),
-            Cell::new("RX KB").add_attribute(Attribute::Bold),
-            Cell::new("TX KB").add_attribute(Attribute::Bold),
-            Cell::new("RX Pkts").add_attribute(Attribute::Bold),
-            Cell::new("TX Pkts").add_attribute(Attribute::Bold),
+            Cell::new("Interface")
+                .add_attribute(Attribute::Bold)
+                .fg(Color::Cyan),
+            Cell::new("RX KB")
+                .add_attribute(Attribute::Bold)
+                .fg(Color::Cyan),
+            Cell::new("TX KB")
+                .add_attribute(Attribute::Bold)
+                .fg(Color::Cyan),
+            Cell::new("RX Pkts")
+                .add_attribute(Attribute::Bold)
+                .fg(Color::Cyan),
+            Cell::new("TX Pkts")
+                .add_attribute(Attribute::Bold)
+                .fg(Color::Cyan),
         ]);
 
         for net in &snap.networks {
@@ -1038,10 +1066,18 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
         let mut proc_table = Table::new();
         let _ = proc_table.load_preset(UTF8_FULL_CONDENSED);
         let _ = proc_table.set_header([
-            Cell::new("PID").add_attribute(Attribute::Bold),
-            Cell::new("Name").add_attribute(Attribute::Bold),
-            Cell::new("CPU %").add_attribute(Attribute::Bold),
-            Cell::new("RSS MB").add_attribute(Attribute::Bold),
+            Cell::new("PID")
+                .add_attribute(Attribute::Bold)
+                .fg(Color::Cyan),
+            Cell::new("Name")
+                .add_attribute(Attribute::Bold)
+                .fg(Color::Cyan),
+            Cell::new("CPU %")
+                .add_attribute(Attribute::Bold)
+                .fg(Color::Cyan),
+            Cell::new("RSS MB")
+                .add_attribute(Attribute::Bold)
+                .fg(Color::Cyan),
         ]);
 
         for proc in &snap.processes {
