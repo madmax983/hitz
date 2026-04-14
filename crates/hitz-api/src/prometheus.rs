@@ -33,8 +33,36 @@
 use crate::MetricsSnapshot;
 
 /// Trait to convert metrics into Prometheus text exposition format.
+///
+/// # Abstract
+/// Any struct that implements this trait can be scraped by a Prometheus server.
+/// It provides a standardized method to output time-series data.
 pub trait ToPrometheus {
     /// Convert the metrics snapshot to a Prometheus text string, tagging with the given `vm_id`.
+    ///
+    /// # Details
+    /// The resulting string is formatted according to the Prometheus Text-Based
+    /// Exposition Format. Each metric will include `# HELP` and `# TYPE` headers.
+    /// The `vm_id` is automatically injected into the labels for every metric
+    /// to distinguish identical workloads running across different micro-VMs.
+    ///
+    /// ## Examples
+    ///
+    /// ```rust
+    /// use hitz_api::{MetricsSnapshot, CpuMetrics, MemoryMetrics, ToPrometheus};
+    ///
+    /// let snap = MetricsSnapshot {
+    ///     timestamp_ms: 1_700_000_000_000,
+    ///     cpu: CpuMetrics { total_pct: 50.0, per_core: vec![50.0], load_avg: [0.5, 0.5, 0.5] },
+    ///     memory: MemoryMetrics { total_bytes: 1024, used_bytes: 512, free_bytes: 512, buffers_bytes: 0, cached_bytes: 0, swap_total: 0, swap_used: 0 },
+    ///     disks: vec![],
+    ///     networks: vec![],
+    ///     processes: vec![],
+    /// };
+    ///
+    /// let text = snap.to_prometheus("my_worker_node");
+    /// assert!(text.contains("hitz_cpu_total_pct{vm_id=\"my_worker_node\"} 50 1700000000000"));
+    /// ```
     fn to_prometheus(&self, vm_id: &str) -> String;
 }
 

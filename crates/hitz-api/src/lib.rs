@@ -168,6 +168,19 @@ pub enum GuestAgentMode {
 // ── Metrics wire protocol ────────────────────────────────────────────────────
 
 /// On-demand metrics request sent from host to guest over vsock.
+///
+/// # Abstract
+/// Represents the commands the host can send to the guest agent to trigger
+/// immediate telemetry collection.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::MetricsRequest;
+///
+/// let req = MetricsRequest::Snapshot;
+/// assert_eq!(req, MetricsRequest::Snapshot);
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MetricsRequest {
     /// Request a full resource snapshot.
@@ -711,6 +724,12 @@ pub struct VmInfo {
 /// When an API call fails (like trying to start a VM that doesn't exist), the
 /// daemon returns this structured error detailing what went wrong. It's the
 /// first line of defense for debugging CLI interactions.
+///
+/// # Details
+/// Clients should examine the `message` field to determine the nature of the
+/// failure. Display this error directly to users, or log it if the operation
+/// was backgrounded. This error is typically not recoverable without user
+/// intervention (e.g., correcting a typo in a VM ID).
 ///
 /// # The Hero's Journey
 /// ```rust

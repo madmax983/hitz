@@ -8,19 +8,45 @@
 //! # The Hero's Journey
 //!
 //! ```rust
-//! use hitz_api::{WorkloadClass, WorkloadClassifier, MetricsSnapshot, MetricsDiff};
+//! use hitz_api::{WorkloadClass, WorkloadClassifier, MetricsSnapshot, MetricsDiff, CpuMetrics, MemoryMetrics};
 //!
 //! // Assume we have a snapshot showing 95% CPU usage and a diff showing low I/O
-//! // let snap: MetricsSnapshot = ...;
-//! // let diff: MetricsDiff = ...;
-//! // let class = snap.classify_workload(&diff);
-//! // assert_eq!(class, WorkloadClass::ComputeBound);
+//! let snap = MetricsSnapshot {
+//!     timestamp_ms: 1000,
+//!     cpu: CpuMetrics { total_pct: 95.0, per_core: vec![95.0], load_avg: [1.0, 1.0, 1.0] },
+//!     memory: MemoryMetrics { total_bytes: 1024, used_bytes: 512, free_bytes: 512, buffers_bytes: 0, cached_bytes: 0, swap_total: 0, swap_used: 0 },
+//!     disks: vec![],
+//!     networks: vec![],
+//!     processes: vec![],
+//! };
+//! let diff = MetricsDiff { elapsed_secs: 1.0, disks: vec![], networks: vec![] };
+//! let class = snap.classify_workload(&diff);
+//! assert_eq!(class, WorkloadClass::ComputeBound);
 //! ```
 
 use crate::{MetricsDiff, MetricsSnapshot};
 use serde::{Deserialize, Serialize};
 
 /// The categorized type of workload running on the VM.
+///
+/// # Abstract
+/// Represents the dominant resource constraint of a running micro-VM.
+/// This classification allows orchestration layers to make intelligent decisions,
+/// such as scaling CPU-bound workloads or migrating memory-bound ones.
+///
+/// # Details
+/// The workload class is derived by combining absolute system state
+/// (e.g., total memory usage) with the rate of change over time (e.g., bytes
+/// read from disk per second).
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::WorkloadClass;
+///
+/// let class = WorkloadClass::ComputeBound;
+/// assert_eq!(class, WorkloadClass::ComputeBound);
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum WorkloadClass {
     /// The VM is heavily utilizing the CPU.
@@ -34,8 +60,35 @@ pub enum WorkloadClass {
 }
 
 /// Trait for objects that can classify their workload.
+///
+/// # Abstract
+/// Any type that can analyze its current state along with a historical
+/// rate of change to determine its workload class should implement this trait.
 pub trait WorkloadClassifier {
     /// Classifies the workload based on the current state and a rate-of-change diff.
+    ///
+    /// # Details
+    /// Implementations analyze the `self` instance for absolute thresholds
+    /// (like CPU percentage > 80%) and the provided `diff` for velocity-based
+    /// thresholds (like network packets per second > 10,000).
+    ///
+    /// ## Examples
+    ///
+    /// ```rust
+    /// use hitz_api::{WorkloadClass, WorkloadClassifier, MetricsSnapshot, MetricsDiff, CpuMetrics, MemoryMetrics};
+    ///
+    /// let snap = MetricsSnapshot {
+    ///     timestamp_ms: 1000,
+    ///     cpu: CpuMetrics { total_pct: 10.0, per_core: vec![10.0], load_avg: [0.1, 0.1, 0.1] },
+    ///     memory: MemoryMetrics { total_bytes: 1024, used_bytes: 100, free_bytes: 924, buffers_bytes: 0, cached_bytes: 0, swap_total: 0, swap_used: 0 },
+    ///     disks: vec![],
+    ///     networks: vec![],
+    ///     processes: vec![],
+    /// };
+    /// let diff = MetricsDiff { elapsed_secs: 1.0, disks: vec![], networks: vec![] };
+    ///
+    /// assert_eq!(snap.classify_workload(&diff), WorkloadClass::Idle);
+    /// ```
     fn classify_workload(&self, diff: &MetricsDiff) -> WorkloadClass;
 }
 
