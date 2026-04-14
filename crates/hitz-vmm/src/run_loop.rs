@@ -253,13 +253,15 @@ fn handle_mmio<V: Vcpu, W: Write>(
     pending_irq: &mut Option<u8>,
 ) -> Result<(), HalError> {
     let decoded = mmio_decode::decode_mmio_instruction(
-        &mmio.instruction_bytes[..usize::from(mmio.instruction_byte_count)],
+        mmio.instruction_bytes
+            .get(..usize::from(mmio.instruction_byte_count))
+            .unwrap_or(&[]),
     );
 
     let Some(decoded) = decoded else {
         tracing::warn!(
             gpa = %mmio.gpa,
-            bytes = ?&mmio.instruction_bytes[..usize::from(mmio.instruction_byte_count)],
+            bytes = ?mmio.instruction_bytes.get(..usize::from(mmio.instruction_byte_count)).unwrap_or(&[]),
             "undecodable MMIO instruction, skipping"
         );
         // Last resort: use WHP's instruction_len (may be 0).
@@ -574,11 +576,13 @@ mod tests {
             .build();
 
         let mmio = hitz_hal::MmioExit {
-            gpa: 0x1000,
+            gpa: hitz_hal::Gpa::new(0x1000),
             data: [0; 8],
             len: 4,
             is_write: false,
             instruction_len: 2,
+            instruction_bytes: [0; 16],
+            instruction_byte_count: 2,
         };
 
         let result = dispatch_exit(
