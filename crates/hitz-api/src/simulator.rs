@@ -146,6 +146,41 @@ mod tests {
         );
     }
 
+    #[test]
+    #[allow(clippy::expect_used)]
+    fn test_memory_leak_profile() {
+        let mut sim = VmSimulator::new(WorkloadProfile::MemoryLeak);
+        let metrics_0 = sim.next().expect("next should return Some");
+        let metrics_1 = sim.next().expect("next should return Some");
+        let metrics_2 = sim.next().expect("next should return Some");
+
+        assert!(
+            metrics_1.memory.used_bytes > metrics_0.memory.used_bytes,
+            "Memory used should increase between iteration 0 and 1"
+        );
+        assert!(
+            metrics_2.memory.used_bytes > metrics_1.memory.used_bytes,
+            "Memory used should increase between iteration 1 and 2"
+        );
+    }
+
+    #[test]
+    #[allow(clippy::expect_used, clippy::float_cmp)]
+    fn test_idle_profile() {
+        let mut sim = VmSimulator::new(WorkloadProfile::Idle);
+        let metrics_0 = sim.next().expect("next should return Some");
+        let metrics_1 = sim.next().expect("next should return Some");
+
+        assert_eq!(
+            metrics_0.cpu.total_pct, metrics_1.cpu.total_pct,
+            "CPU percentage should be stable for Idle profile"
+        );
+        assert_eq!(
+            metrics_0.memory.used_bytes, metrics_1.memory.used_bytes,
+            "Memory usage should be stable for Idle profile"
+        );
+    }
+
     #[cfg(feature = "health_check")]
     #[test]
     #[allow(clippy::unwrap_used)]
