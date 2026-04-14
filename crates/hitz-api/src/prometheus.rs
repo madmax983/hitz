@@ -254,6 +254,7 @@ impl ToPrometheus for MetricsSnapshot {
 
 #[cfg(test)]
 #[allow(clippy::float_cmp, clippy::expect_used)]
+#[allow(clippy::unreadable_literal)]
 mod tests {
     use super::*;
     use crate::{CpuMetrics, DiskMetrics, MemoryMetrics, NetMetrics, ProcMetrics};

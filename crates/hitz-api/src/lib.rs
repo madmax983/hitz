@@ -36,6 +36,12 @@ mod diff;
 #[cfg(feature = "diff")]
 pub use diff::*;
 
+#[cfg(feature = "classifier")]
+/// Classifier module for determining workload type.
+pub mod classifier;
+#[cfg(feature = "classifier")]
+pub use classifier::*;
+
 #[cfg(feature = "prometheus")]
 /// Prometheus module for converting metrics to Prometheus text format.
 pub mod prometheus;
