@@ -17,11 +17,11 @@
 //!   wire protocol over vsock for extracting real-time telemetry from the guest.
 
 /// API structures for interacting with the background daemon.
-pub mod api;
+mod api;
 /// Configuration structures representing the VM specification.
-pub mod config;
+mod config;
 /// Telemetry structures representing the VM's runtime resources.
-pub mod metrics;
+mod metrics;
 
 pub use api::*;
 pub use config::*;
@@ -47,13 +47,13 @@ pub use diff::*;
 
 #[cfg(feature = "classifier")]
 /// Classifier module for determining workload type.
-pub mod classifier;
+mod classifier;
 #[cfg(feature = "classifier")]
 pub use classifier::*;
 
 #[cfg(feature = "prometheus")]
 /// Prometheus module for converting metrics to Prometheus text format.
-pub mod prometheus;
+mod prometheus;
 #[cfg(feature = "prometheus")]
 pub use prometheus::*;
 

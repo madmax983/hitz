@@ -12,6 +12,7 @@
 #![allow(unsafe_code)]
 
 mod convert;
+mod inner;
 mod partition;
 #[cfg(test)]
 mod tests;
