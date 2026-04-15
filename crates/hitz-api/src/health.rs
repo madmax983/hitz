@@ -128,7 +128,11 @@ impl HealthCheck for MetricsSnapshot {
     #[allow(clippy::cast_precision_loss)]
     fn assess_health(&self) -> SystemHealth {
         let mut status = HealthStatus::Healthy;
-        let mut reasons = Vec::new();
+        // ⚡ Bolt Optimization:
+        // Pre-allocate the `reasons` vector to its maximum possible size (4)
+        // to avoid any heap reallocations during health assessment, as there
+        // are exactly 4 evaluation checks (CPU, Memory, Swap, Network).
+        let mut reasons = Vec::with_capacity(4);
 
         // CPU evaluation
         if self.cpu.total_pct > 90.0 {
