@@ -239,15 +239,110 @@ mod tests {
     }
 
     #[test]
-    fn should_return_critical_when_memory_and_swap_exhausted() {
+    fn should_return_critical_when_cpu_exhausted() {
         let mut metrics = safe_metrics();
-        metrics.memory.used_bytes = 950;
-        metrics.memory.swap_used = 600;
+        metrics.cpu.total_pct = 95.0; // > 90.0 triggers Critical
         let health = metrics.assess_health();
         assert_eq!(health.status, HealthStatus::Critical);
-        assert_eq!(health.reasons.len(), 2);
-        assert!(health.reasons[0].contains("Critical memory"));
-        assert!(health.reasons[1].contains("Critical swap"));
+        assert_eq!(health.reasons.len(), 1);
+        assert!(health.reasons[0].contains("Critical CPU"));
+    }
+
+    #[test]
+    fn should_evaluate_memory_and_swap_thresholds_correctly() {
+        struct TestCase {
+            mem_total: u64,
+            mem_used: u64,
+            swap_total: u64,
+            swap_used: u64,
+            expected: HealthStatus,
+            has_mem_reason: bool,
+            has_swap_reason: bool,
+        }
+
+        let test_cases = vec![
+            TestCase {
+                mem_total: 1000,
+                mem_used: 100,
+                swap_total: 1000,
+                swap_used: 100,
+                expected: HealthStatus::Healthy,
+                has_mem_reason: false,
+                has_swap_reason: false,
+            },
+            TestCase {
+                // Warning memory (>75%)
+                mem_total: 1000,
+                mem_used: 800,
+                swap_total: 1000,
+                swap_used: 100,
+                expected: HealthStatus::Warning,
+                has_mem_reason: true,
+                has_swap_reason: false,
+            },
+            TestCase {
+                // Critical memory (>90%)
+                mem_total: 1000,
+                mem_used: 950,
+                swap_total: 1000,
+                swap_used: 100,
+                expected: HealthStatus::Critical,
+                has_mem_reason: true,
+                has_swap_reason: false,
+            },
+            TestCase {
+                // Warning swap (>20%)
+                mem_total: 1000,
+                mem_used: 100,
+                swap_total: 1000,
+                swap_used: 300,
+                expected: HealthStatus::Warning,
+                has_mem_reason: false,
+                has_swap_reason: true,
+            },
+            TestCase {
+                // Critical swap (>50%)
+                mem_total: 1000,
+                mem_used: 100,
+                swap_total: 1000,
+                swap_used: 600,
+                expected: HealthStatus::Critical,
+                has_mem_reason: false,
+                has_swap_reason: true,
+            },
+            TestCase {
+                // 0 byte total avoids division by zero panic and keeps Healthy
+                mem_total: 0,
+                mem_used: 0,
+                swap_total: 0,
+                swap_used: 0,
+                expected: HealthStatus::Healthy,
+                has_mem_reason: false,
+                has_swap_reason: false,
+            },
+        ];
+
+        for case in test_cases {
+            let mut metrics = safe_metrics();
+            metrics.memory.total_bytes = case.mem_total;
+            metrics.memory.used_bytes = case.mem_used;
+            metrics.memory.swap_total = case.swap_total;
+            metrics.memory.swap_used = case.swap_used;
+
+            let health = metrics.assess_health();
+            assert_eq!(
+                health.status, case.expected,
+                "Failed for mem_used={} swap_used={}",
+                case.mem_used, case.swap_used
+            );
+
+            if case.has_mem_reason {
+                assert!(health.reasons.iter().any(|r| r.contains("memory")));
+            }
+            if case.has_swap_reason {
+                assert!(health.reasons.iter().any(|r| r.contains("swap")));
+            }
+        }
     }
 
     #[test]
