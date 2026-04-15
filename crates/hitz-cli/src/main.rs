@@ -1363,6 +1363,12 @@ async fn handle_vm_list(args: &VmListArgs) -> Result<()> {
         pipe_client::pipe_request(&args.pipe, args.tcp, Method::GET, "/vms", None).await?;
     if status.is_success() {
         if let Ok(vms) = serde_json::from_str::<Vec<hitz_api::VmInfo>>(&resp) {
+            if vms.is_empty() {
+                use crossterm::style::Stylize;
+                println!("{}", "ℹ️  No VMs found.".blue());
+                return Ok(());
+            }
+
             use comfy_table::presets::UTF8_FULL_CONDENSED;
             use comfy_table::{Cell, Color, Table};
             let mut table = Table::new();
@@ -2204,59 +2210,70 @@ async fn handle_vm_dashboard(args: &VmListArgs) -> Result<()> {
             );
             f.render_widget(header, chunks[0]);
 
-            let rows = vms.iter().map(|vm| {
-                let state_str = match vm.state {
-                    hitz_api::VmState::Running => "Running",
-                    hitz_api::VmState::Stopped => "Stopped",
-                    hitz_api::VmState::Failed => "Failed",
-                    hitz_api::VmState::Created => "Created",
-                };
-                let state_color = match vm.state {
-                    hitz_api::VmState::Running => Color::Green,
-                    hitz_api::VmState::Stopped => Color::Yellow,
-                    hitz_api::VmState::Failed => Color::Red,
-                    hitz_api::VmState::Created => Color::Cyan,
-                };
-                let exit_reason = vm.exit_reason.as_deref().unwrap_or("-");
+            if vms.is_empty() {
+                let no_vms_msg = Paragraph::new("ℹ️  No VMs running.")
+                    .style(Style::default().fg(Color::Blue))
+                    .block(
+                        Block::default()
+                            .borders(Borders::ALL)
+                            .title(" Virtual Machines "),
+                    );
+                f.render_widget(no_vms_msg, chunks[1]);
+            } else {
+                let rows = vms.iter().map(|vm| {
+                    let state_str = match vm.state {
+                        hitz_api::VmState::Running => "Running",
+                        hitz_api::VmState::Stopped => "Stopped",
+                        hitz_api::VmState::Failed => "Failed",
+                        hitz_api::VmState::Created => "Created",
+                    };
+                    let state_color = match vm.state {
+                        hitz_api::VmState::Running => Color::Green,
+                        hitz_api::VmState::Stopped => Color::Yellow,
+                        hitz_api::VmState::Failed => Color::Red,
+                        hitz_api::VmState::Created => Color::Cyan,
+                    };
+                    let exit_reason = vm.exit_reason.as_deref().unwrap_or("-");
 
-                // ⚡ Bolt Optimization:
-                // Replaced `vm.id.clone()` with `vm.id.as_str()` when creating `Cell`s.
-                // This removes an unnecessary String heap allocation per VM in the hot TUI
-                // rendering loop, which runs several times per second. `Cell::from` correctly
-                // accepts `&str`.
-                Row::new([
-                    Cell::from(vm.id.as_str()),
-                    Cell::from(state_str).style(Style::default().fg(state_color)),
-                    Cell::from(vm.config.ram_mib.to_string()),
-                    Cell::from(vm.config.cpus.to_string()),
-                    Cell::from(exit_reason),
-                ])
-            });
+                    // ⚡ Bolt Optimization:
+                    // Replaced `vm.id.clone()` with `vm.id.as_str()` when creating `Cell`s.
+                    // This removes an unnecessary String heap allocation per VM in the hot TUI
+                    // rendering loop, which runs several times per second. `Cell::from` correctly
+                    // accepts `&str`.
+                    Row::new([
+                        Cell::from(vm.id.as_str()),
+                        Cell::from(state_str).style(Style::default().fg(state_color)),
+                        Cell::from(vm.config.ram_mib.to_string()),
+                        Cell::from(vm.config.cpus.to_string()),
+                        Cell::from(exit_reason),
+                    ])
+                });
 
-            let table = Table::new(
-                rows,
-                [
-                    Constraint::Length(20),
-                    Constraint::Length(10),
-                    Constraint::Length(10),
-                    Constraint::Length(6),
-                    Constraint::Min(20),
-                ],
-            )
-            .header(
-                Row::new(["ID", "State", "RAM (MiB)", "CPUs", "Exit Reason"]).style(
-                    Style::default()
-                        .fg(Color::Yellow)
-                        .add_modifier(Modifier::BOLD),
-                ),
-            )
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .title(" Virtual Machines "),
-            );
+                let table = Table::new(
+                    rows,
+                    [
+                        Constraint::Length(20),
+                        Constraint::Length(10),
+                        Constraint::Length(10),
+                        Constraint::Length(6),
+                        Constraint::Min(20),
+                    ],
+                )
+                .header(
+                    Row::new(["ID", "State", "RAM (MiB)", "CPUs", "Exit Reason"]).style(
+                        Style::default()
+                            .fg(Color::Yellow)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                )
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .title(" Virtual Machines "),
+                );
 
-            f.render_widget(table, chunks[1]);
+                f.render_widget(table, chunks[1]);
+            }
         });
 
         let timeout = tick_rate
