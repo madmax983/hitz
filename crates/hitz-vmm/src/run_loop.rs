@@ -17,10 +17,6 @@ use opentelemetry::metrics::Counter;
 
 use crate::mmio_decode;
 
-/// Safety net: maximum iterations before the run loop bails out.
-/// Prevents infinite loops in the VMM from hanging the host.
-const MAX_RUN_ITERATIONS: u64 = 100_000_000;
-
 /// Legacy 8259 PIC ports. Linux probes these during early boot even when
 /// no PIC is present. Absorb writes and return 0x00 for reads (no IRQs
 /// pending) to prevent the kernel from entering spurious-IRQ error paths.
@@ -134,7 +130,6 @@ pub fn run_vcpu_loop<V: Vcpu, W: Write>(
     stop_flag: &AtomicBool,
 ) -> Result<ExitReason, HalError> {
     let mut pending_irq: Option<u8> = None;
-    let mut iterations: u64 = 0;
 
     // Create once; all calls are no-ops when no SDK is registered.
     let exit_counter = opentelemetry::global::meter("hitz")
@@ -143,14 +138,6 @@ pub fn run_vcpu_loop<V: Vcpu, W: Write>(
         .build();
 
     loop {
-        iterations += 1;
-        if iterations > MAX_RUN_ITERATIONS {
-            record_exit(&exit_counter, "Unexpected");
-            return Ok(ExitReason::Unexpected(
-                "iteration limit reached".to_string(),
-            ));
-        }
-
         if stop_flag.load(Ordering::Relaxed) {
             record_exit(&exit_counter, "Canceled");
             return Ok(ExitReason::Canceled);
@@ -689,27 +676,6 @@ mod tests {
             result,
             ExitReason::Unexpected("unknown vCPU exit reason: 0x1337".to_string())
         );
-    }
-
-    #[test]
-    fn test_run_vcpu_loop_max_iterations() {
-        let mut vcpu = DummyVcpu {
-            regs: Default::default(),
-            sregs: Default::default(),
-            exit: VcpuExit::Canceled, // Using Canceled to avoid returning immediately from run loop so we can test limits
-        };
-        let devices = Mutex::new(SharedDevices {
-            serial: SerialDevice::new(std::io::sink()),
-            mmio_bus: MmioBus::new(),
-        });
-        let mem = DummyMem;
-        let stop_flag = AtomicBool::new(false);
-        let result = run_vcpu_loop(&mut vcpu, &devices, &mem, &stop_flag)
-            .expect("run_vcpu_loop should succeed");
-        assert!(matches!(result, ExitReason::Unexpected(_)));
-        if let ExitReason::Unexpected(msg) = result {
-            assert!(msg.contains("iteration limit reached"));
-        }
     }
 
     #[test]
