@@ -291,4 +291,30 @@ mod tests {
         assert_eq!(diff.networks[0].rx_bytes_per_sec, 40960.0);
         assert_eq!(diff.networks[0].tx_bytes_per_sec, 40960.0);
     }
+
+    #[test]
+    fn should_handle_missing_devices_in_diff() {
+        // Older snapshot has no disks and no networks
+        let mut t1 = dummy_snapshot(1000, 0, 0);
+        t1.disks.clear();
+        t1.networks.clear();
+
+        // Newer snapshot has disks and networks
+        let mut t2 = dummy_snapshot(2000, 100, 50);
+        t2.disks[0].name = "vda".to_string();
+        t2.networks[0].interface = "eth0".to_string();
+
+        let diff = t2.diff(&t1).expect("Diff should be Some");
+        assert_eq!(diff.elapsed_secs, 1.0);
+
+        // Since t1 didn't have them, diff should not include them
+        assert!(
+            diff.disks.is_empty(),
+            "Disks should be empty when missing in previous snapshot"
+        );
+        assert!(
+            diff.networks.is_empty(),
+            "Networks should be empty when missing in previous snapshot"
+        );
+    }
 }
