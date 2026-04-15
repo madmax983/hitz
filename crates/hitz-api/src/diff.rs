@@ -317,4 +317,25 @@ mod tests {
             "Networks should be empty when missing in previous snapshot"
         );
     }
+
+    #[test]
+    fn should_prevent_panic_on_counter_reset() {
+        // Older snapshot has higher counter values (e.g., guest rebooted or agent restarted)
+        let mut t1 = dummy_snapshot(1000, 500, 500);
+        t1.disks[0].reads_total = 500;
+        t1.networks[0].rx_bytes = 500 * 1024;
+
+        // Newer snapshot has lower counter values
+        let mut t2 = dummy_snapshot(2000, 100, 100);
+        t2.disks[0].reads_total = 100;
+        t2.networks[0].rx_bytes = 100 * 1024;
+
+        // Ensure diff() doesn't panic on underflow
+        let diff = t2.diff(&t1).expect("Diff should be Some");
+        assert_eq!(diff.elapsed_secs, 1.0);
+
+        // Subtraction should saturate to 0
+        assert_eq!(diff.disks[0].reads_per_sec, 0.0);
+        assert_eq!(diff.networks[0].rx_bytes_per_sec, 0.0);
+    }
 }

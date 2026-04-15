@@ -182,4 +182,15 @@ mod tests {
 
         assert_eq!(snap.classify_workload(&diff), WorkloadClass::Idle);
     }
+
+    #[test]
+    fn should_handle_zero_memory_total_gracefully() {
+        let mut snap = base_snapshot();
+        snap.memory.total_bytes = 0; // Avoid division by zero
+        snap.memory.used_bytes = 100;
+
+        let diff = base_diff();
+
+        assert_eq!(snap.classify_workload(&diff), WorkloadClass::Idle);
+    }
 }
