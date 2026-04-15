@@ -48,6 +48,12 @@ pub mod prometheus;
 #[cfg(feature = "prometheus")]
 pub use prometheus::*;
 
+#[cfg(feature = "recommender")]
+/// Recommender module for generating scaling actions based on health and workload.
+pub mod recommender;
+#[cfg(feature = "recommender")]
+pub use recommender::*;
+
 use serde::{Deserialize, Serialize};
 
 /// Default kernel command line for Linux direct boot.
