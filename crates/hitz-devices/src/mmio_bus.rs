@@ -104,18 +104,33 @@ impl MmioBus {
             size,
             device,
         });
+
+        // ⚡ Bolt Optimization: Keep slots sorted by base address to enable O(log N) binary search
+        // during high-frequency MMIO reads/writes on the VM exit path.
+        self.slots.sort_by_key(|s| s.base);
+    }
+
+    fn find_slot(&mut self, gpa: u64) -> Option<&mut MmioSlot> {
+        // ⚡ Bolt Optimization: Replace O(N) linear scan with O(log N) binary search.
+        // This significantly reduces VM exit latency when many MMIO devices (like virtio) are registered.
+        let idx = self.slots.partition_point(|s| s.base <= gpa);
+        if idx > 0 {
+            let slot = &mut self.slots[idx - 1];
+            if gpa < slot.base + slot.size {
+                return Some(slot);
+            }
+        }
+        None
     }
 
     /// Dispatch a guest read to the device owning `gpa`.
     ///
     /// If no device is registered at `gpa`, `data` is filled with `0xFF`.
     pub fn read(&mut self, gpa: u64, data: &mut [u8]) {
-        for slot in &mut self.slots {
-            if gpa >= slot.base && gpa < slot.base + slot.size {
-                let offset = gpa - slot.base;
-                slot.device.mmio_read(offset, data);
-                return;
-            }
+        if let Some(slot) = self.find_slot(gpa) {
+            let offset = gpa - slot.base;
+            slot.device.mmio_read(offset, data);
+            return;
         }
         // No device — return all-ones (standard "nothing here" response).
         data.fill(0xFF);
@@ -125,11 +140,9 @@ impl MmioBus {
     ///
     /// Returns `Some(vector)` if the device wants to raise an interrupt.
     pub fn write(&mut self, gpa: u64, data: &[u8], mem: &dyn GuestMemAccess) -> Option<u8> {
-        for slot in &mut self.slots {
-            if gpa >= slot.base && gpa < slot.base + slot.size {
-                let offset = gpa - slot.base;
-                return slot.device.mmio_write(offset, data, mem);
-            }
+        if let Some(slot) = self.find_slot(gpa) {
+            let offset = gpa - slot.base;
+            return slot.device.mmio_write(offset, data, mem);
         }
         None
     }
