@@ -432,7 +432,7 @@ pub fn boot_and_run<H: Hypervisor, W: Write + Send + 'static>(
     // ── 14. Run vCPU threads ──
     let exit_reason = if vcpus.len() == 1 {
         let single_vcpu = vcpus.pop().ok_or_else(|| {
-            VmmError::Internal(
+            VmError::Config(
                 "vcpus array is unexpectedly empty when it should have 1 element".to_string(),
             )
         })?;

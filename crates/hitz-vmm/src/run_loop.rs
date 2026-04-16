@@ -484,6 +484,143 @@ mod tests {
         assert_eq!(vcpu.regs.rax, 42);
     }
 
+
+    #[test]
+    fn test_dispatch_exit_ioport() {
+        let mut vcpu = DummyVcpu {
+            regs: hitz_hal::StandardRegs {
+                rip: 100,
+                ..Default::default()
+            },
+            sregs: Default::default(),
+            exit: VcpuExit::Halt,
+        };
+        let devices = Mutex::new(SharedDevices {
+            serial: SerialDevice::new(Vec::new()),
+            mmio_bus: MmioBus::new(),
+        });
+        let mem = DummyMem;
+        let mut pending_irq = None;
+        let exit_counter = opentelemetry::global::meter("hitz")
+            .u64_counter("hitz.vcpu.exits")
+            .build();
+
+        let io = hitz_hal::IoPortExit {
+            port: 0x3F8,
+            data: [b'X', 0, 0, 0],
+            len: 1,
+            is_write: true,
+            instruction_len: 2, instruction_bytes: [0; 15], instruction_byte_count: 2,
+        };
+
+        let result = dispatch_exit(
+            &mut vcpu,
+            &devices,
+            &mem,
+            VcpuExit::IoPort(io),
+            &mut pending_irq,
+            &exit_counter,
+        )
+        .expect("dispatch_exit should succeed");
+
+        assert_eq!(result, None);
+        assert_eq!(vcpu.regs.rip, 102); // Advanced by instruction length
+    }
+
+    #[test]
+    fn test_dispatch_exit_halt() {
+        let mut vcpu = DummyVcpu {
+            regs: Default::default(),
+            sregs: Default::default(),
+            exit: VcpuExit::Halt,
+        };
+        let devices = Mutex::new(SharedDevices {
+            serial: SerialDevice::new(std::io::sink()),
+            mmio_bus: MmioBus::new(),
+        });
+        let mem = DummyMem;
+        let mut pending_irq = None;
+        let exit_counter = opentelemetry::global::meter("hitz")
+            .u64_counter("hitz.vcpu.exits")
+            .build();
+
+        let result = dispatch_exit(
+            &mut vcpu,
+            &devices,
+            &mem,
+            VcpuExit::Halt,
+            &mut pending_irq,
+            &exit_counter,
+        )
+        .expect("dispatch_exit should succeed");
+
+        assert_eq!(result, Some(ExitReason::Halt));
+    }
+
+    #[test]
+    fn test_dispatch_exit_canceled() {
+        let mut vcpu = DummyVcpu {
+            regs: Default::default(),
+            sregs: Default::default(),
+            exit: VcpuExit::Halt,
+        };
+        let devices = Mutex::new(SharedDevices {
+            serial: SerialDevice::new(std::io::sink()),
+            mmio_bus: MmioBus::new(),
+        });
+        let mem = DummyMem;
+        let mut pending_irq = Some(5);
+        let exit_counter = opentelemetry::global::meter("hitz")
+            .u64_counter("hitz.vcpu.exits")
+            .build();
+
+        let result = dispatch_exit(
+            &mut vcpu,
+            &devices,
+            &mem,
+            VcpuExit::Canceled,
+            &mut pending_irq,
+            &exit_counter,
+        )
+        .expect("dispatch_exit should succeed");
+
+        assert_eq!(result, None);
+        // interrupt window request mocked out, but coverage hit
+    }
+
+    #[test]
+    fn test_dispatch_exit_unknown() {
+        let mut vcpu = DummyVcpu {
+            regs: Default::default(),
+            sregs: Default::default(),
+            exit: VcpuExit::Halt,
+        };
+        let devices = Mutex::new(SharedDevices {
+            serial: SerialDevice::new(std::io::sink()),
+            mmio_bus: MmioBus::new(),
+        });
+        let mem = DummyMem;
+        let mut pending_irq = None;
+        let exit_counter = opentelemetry::global::meter("hitz")
+            .u64_counter("hitz.vcpu.exits")
+            .build();
+
+        let result = dispatch_exit(
+            &mut vcpu,
+            &devices,
+            &mem,
+            VcpuExit::Unknown(0x99),
+            &mut pending_irq,
+            &exit_counter,
+        )
+        .expect("dispatch_exit should succeed");
+
+        assert_eq!(
+            result,
+            Some(ExitReason::Unexpected("unknown vCPU exit reason: 0x99".to_string()))
+        );
+    }
+
     #[test]
     fn test_dispatch_exit_shutdown() {
         let mut vcpu = DummyVcpu {
@@ -563,11 +700,11 @@ mod tests {
             .build();
 
         let mmio = hitz_hal::MmioExit {
-            gpa: 0x1000,
+            gpa: hitz_hal::Gpa::new(0x1000),
             data: [0; 8],
             len: 4,
             is_write: false,
-            instruction_len: 2,
+            instruction_len: 2, instruction_bytes: [0; 15], instruction_byte_count: 2,
         };
 
         let result = dispatch_exit(
@@ -694,7 +831,7 @@ mod tests {
             data: [b'A', 0, 0, 0],
             len: 1,
             is_write: true,
-            instruction_len: 2,
+            instruction_len: 2, instruction_bytes: [0; 15], instruction_byte_count: 2,
         };
         handle_io_port(&mut vcpu, &mut serial, &io).expect("handle_io_port should succeed");
         assert_eq!(vcpu.regs.rip, 102);
@@ -718,7 +855,7 @@ mod tests {
             data: [0, 0, 0, 0],
             len: 1,
             is_write: false,
-            instruction_len: 2,
+            instruction_len: 2, instruction_bytes: [0; 15], instruction_byte_count: 2,
         };
         handle_io_port(&mut vcpu, &mut serial, &io).expect("handle_io_port should succeed");
         assert_eq!(vcpu.regs.rip, 102);
@@ -742,7 +879,7 @@ mod tests {
             data: [0, 0, 0, 0],
             len: 1,
             is_write: false,
-            instruction_len: 2,
+            instruction_len: 2, instruction_bytes: [0; 15], instruction_byte_count: 2,
         };
         handle_io_port(&mut vcpu, &mut serial, &io).expect("handle_io_port should succeed");
         assert_eq!(vcpu.regs.rip, 102);
@@ -766,7 +903,7 @@ mod tests {
             data: [0, 0, 0, 0],
             len: 1,
             is_write: true,
-            instruction_len: 2,
+            instruction_len: 2, instruction_bytes: [0; 15], instruction_byte_count: 2,
         };
         handle_io_port(&mut vcpu, &mut serial, &io).expect("handle_io_port should succeed");
         assert_eq!(vcpu.regs.rip, 102);
