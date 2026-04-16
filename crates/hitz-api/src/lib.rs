@@ -59,7 +59,7 @@ pub use prometheus::*;
 
 #[cfg(feature = "carbon")]
 /// Carbon footprint estimation module.
-pub mod carbon;
+mod carbon;
 #[cfg(feature = "carbon")]
 pub use carbon::*;
 
