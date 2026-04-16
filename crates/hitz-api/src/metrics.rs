@@ -3,6 +3,19 @@ use serde::{Deserialize, Serialize};
 // ── Metrics wire protocol ────────────────────────────────────────────────────
 
 /// On-demand metrics request sent from host to guest over vsock.
+///
+/// # Abstract
+/// Defines the specific command sent by the hypervisor to the `hitz-guest-agent`
+/// to pull a fresh batch of performance data.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::MetricsRequest;
+///
+/// let req = MetricsRequest::Snapshot;
+/// assert_eq!(req, MetricsRequest::Snapshot);
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MetricsRequest {
     /// Request a full resource snapshot.
