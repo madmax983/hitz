@@ -23,6 +23,24 @@ use crate::MetricsSnapshot;
 use serde::{Deserialize, Serialize};
 
 /// Configurable emission factors for the data center region.
+///
+/// # Abstract
+/// This struct holds the assumptions needed to translate power consumption
+/// in Watts into carbon emissions in grams of CO2 equivalent (gCO2eq).
+///
+/// # Details
+/// It includes region-specific grid intensity alongside assumed hardware
+/// efficiency constants like CPU max/idle power and data center PUE.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::EmissionFactors;
+///
+/// // Create a profile for a relatively dirty grid (400 g/kWh)
+/// let profile = EmissionFactors::new(400.0);
+/// assert_eq!(profile.pue, 1.5);
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EmissionFactors {
     /// Grid carbon intensity in grams of CO2 equivalent per kilowatt-hour (gCO2eq/kWh).
@@ -40,6 +58,21 @@ pub struct EmissionFactors {
 impl EmissionFactors {
     /// Creates a new `EmissionFactors` profile with reasonable defaults for
     /// a given grid intensity.
+    ///
+    /// # Abstract
+    /// A quick factory method to instantiate emission factors without manually
+    /// defining power constants for RAM, CPU idle, or PUE.
+    ///
+    /// ## Examples
+    ///
+    /// ```rust
+    /// use hitz_api::EmissionFactors;
+    ///
+    /// // Standard global defaults with a specific grid intensity
+    /// let factors = EmissionFactors::new(350.0);
+    /// assert_eq!(factors.cpu_power_watts_max, 10.0);
+    /// assert_eq!(factors.ram_power_watts_per_gb, 0.5);
+    /// ```
     #[must_use]
     pub const fn new(grid_intensity_g_per_kwh: f64) -> Self {
         Self {
@@ -56,12 +89,52 @@ impl EmissionFactors {
 }
 
 /// Trait for objects that can estimate their carbon footprint.
+///
+/// # Abstract
+/// This trait defines the capability to estimate the real-time CO2 emissions
+/// of a micro-VM based on its current resource utilization.
 pub trait CarbonEstimator {
     /// Estimates the current rate of carbon emissions in milligrams of CO2 per second (mg CO2/sec).
     ///
+    /// # Abstract
+    /// Applies a power consumption model to a utilization snapshot to estimate
+    /// the instantaneous carbon emission rate.
+    ///
+    /// # Details
     /// Requires the number of allocated virtual CPUs (`vcpus`) because `MetricsSnapshot`
     /// stores CPU percentage but does not intrinsically know the total core count if some
-    /// cores were 0%.
+    /// cores were completely idle (0%).
+    ///
+    /// ## Examples
+    ///
+    /// ```rust
+    /// use hitz_api::{CarbonEstimator, EmissionFactors, MetricsSnapshot, CpuMetrics, MemoryMetrics};
+    ///
+    /// let snap = MetricsSnapshot {
+    ///     timestamp_ms: 1000,
+    ///     cpu: CpuMetrics {
+    ///         total_pct: 100.0,
+    ///         per_core: vec![100.0, 100.0],
+    ///         load_avg: [1.0, 1.0, 1.0],
+    ///     },
+    ///     memory: MemoryMetrics {
+    ///         total_bytes: 1024 * 1024 * 1024, // 1 GB
+    ///         used_bytes: 512 * 1024 * 1024,
+    ///         free_bytes: 512 * 1024 * 1024,
+    ///         buffers_bytes: 0,
+    ///         cached_bytes: 0,
+    ///         swap_total: 0,
+    ///         swap_used: 0,
+    ///     },
+    ///     disks: vec![],
+    ///     networks: vec![],
+    ///     processes: vec![],
+    /// };
+    ///
+    /// let factors = EmissionFactors::new(200.0);
+    /// let emissions = snap.estimate_carbon(&factors, 2);
+    /// assert!(emissions > 0.0);
+    /// ```
     fn estimate_carbon(&self, factors: &EmissionFactors, vcpus: u32) -> f64;
 }
 
