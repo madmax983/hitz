@@ -484,6 +484,144 @@ mod tests {
         assert_eq!(vcpu.regs.rax, 42);
     }
 
+
+    #[test]
+    fn test_dispatch_exit_ioport() {
+        let mut vcpu = DummyVcpu {
+            regs: hitz_hal::StandardRegs {
+                rip: 100,
+                ..Default::default()
+            },
+            sregs: Default::default(),
+            exit: VcpuExit::Halt,
+        };
+        let devices = Mutex::new(SharedDevices {
+            serial: SerialDevice::new(std::io::sink()),
+            mmio_bus: MmioBus::new(),
+        });
+        let mem = DummyMem;
+        let mut pending_irq = None;
+        let exit_counter = opentelemetry::global::meter("hitz")
+            .u64_counter("hitz.vcpu.exits")
+            .build();
+
+        let io = hitz_hal::IoPortExit {
+            port: 0x3F8,
+            data: [b'A', 0, 0, 0],
+            len: 1,
+            is_write: true,
+            instruction_len: 2,
+        };
+
+        let result = dispatch_exit(
+            &mut vcpu,
+            &devices,
+            &mem,
+            VcpuExit::IoPort(io),
+            &mut pending_irq,
+            &exit_counter,
+        )
+        .expect("dispatch_exit should succeed");
+
+        assert_eq!(result, None);
+        assert_eq!(vcpu.regs.rip, 102);
+    }
+
+    #[test]
+    fn test_dispatch_exit_halt() {
+        let mut vcpu = DummyVcpu {
+            regs: Default::default(),
+            sregs: Default::default(),
+            exit: VcpuExit::Halt,
+        };
+        let devices = Mutex::new(SharedDevices {
+            serial: SerialDevice::new(std::io::sink()),
+            mmio_bus: MmioBus::new(),
+        });
+        let mem = DummyMem;
+        let mut pending_irq = None;
+        let exit_counter = opentelemetry::global::meter("hitz")
+            .u64_counter("hitz.vcpu.exits")
+            .build();
+
+        let result = dispatch_exit(
+            &mut vcpu,
+            &devices,
+            &mem,
+            VcpuExit::Halt,
+            &mut pending_irq,
+            &exit_counter,
+        )
+        .expect("dispatch_exit should succeed");
+
+        assert_eq!(result, Some(ExitReason::Halt));
+    }
+
+    #[test]
+    fn test_dispatch_exit_canceled() {
+        let mut vcpu = DummyVcpu {
+            regs: Default::default(),
+            sregs: Default::default(),
+            exit: VcpuExit::Halt,
+        };
+        let devices = Mutex::new(SharedDevices {
+            serial: SerialDevice::new(std::io::sink()),
+            mmio_bus: MmioBus::new(),
+        });
+        let mem = DummyMem;
+        let mut pending_irq = Some(42);
+        let exit_counter = opentelemetry::global::meter("hitz")
+            .u64_counter("hitz.vcpu.exits")
+            .build();
+
+        let result = dispatch_exit(
+            &mut vcpu,
+            &devices,
+            &mem,
+            VcpuExit::Canceled,
+            &mut pending_irq,
+            &exit_counter,
+        )
+        .expect("dispatch_exit should succeed");
+
+        assert_eq!(result, None);
+        // We requested interrupt window, so pending_irq should still be Some
+        assert_eq!(pending_irq, Some(42));
+    }
+
+    #[test]
+    fn test_dispatch_exit_unknown() {
+        let mut vcpu = DummyVcpu {
+            regs: Default::default(),
+            sregs: Default::default(),
+            exit: VcpuExit::Halt,
+        };
+        let devices = Mutex::new(SharedDevices {
+            serial: SerialDevice::new(std::io::sink()),
+            mmio_bus: MmioBus::new(),
+        });
+        let mem = DummyMem;
+        let mut pending_irq = None;
+        let exit_counter = opentelemetry::global::meter("hitz")
+            .u64_counter("hitz.vcpu.exits")
+            .build();
+
+        let result = dispatch_exit(
+            &mut vcpu,
+            &devices,
+            &mem,
+            VcpuExit::Unknown(0x1337),
+            &mut pending_irq,
+            &exit_counter,
+        )
+        .expect("dispatch_exit should succeed");
+
+        assert_eq!(
+            result,
+            Some(ExitReason::Unexpected("unknown vCPU exit reason: 0x1337".to_string()))
+        );
+    }
+
     #[test]
     fn test_dispatch_exit_shutdown() {
         let mut vcpu = DummyVcpu {
