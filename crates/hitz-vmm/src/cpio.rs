@@ -97,7 +97,7 @@ impl CpioBuilder {
 
         // File content, padded to 4-byte boundary.
         self.data.extend_from_slice(content);
-        let data_pad = (4 - filesize % 4) % 4;
+        let data_pad = (4 - (filesize % 4)) % 4;
         self.data.extend(std::iter::repeat_n(0u8, data_pad));
     }
 }
