@@ -208,7 +208,7 @@ impl GuestMemory {
             .regions
             .binary_search_by(|r| {
                 let start = r.gpa_start.as_u64();
-                let end = start + r.size as u64;
+                let end = start.saturating_add(r.size as u64);
                 if addr < start {
                     std::cmp::Ordering::Greater
                 } else if addr >= end {
@@ -361,7 +361,7 @@ impl hitz_boot::GuestMemWriter for GuestMemory {
             let chunk = len.min(CHUNK_SIZE);
             self.write_slice(gpa, &zeroes[..chunk])
                 .map_err(|e| hitz_boot::BootError::WriteFailed(e.to_string()))?;
-            gpa = Gpa::new(gpa.as_u64() + chunk as u64);
+            gpa = Gpa::new(gpa.as_u64().saturating_add(chunk as u64));
             len -= chunk;
         }
         Ok(())
@@ -676,5 +676,33 @@ mod tests {
         let mut mem = GuestMemory::new();
         let result = mem.add_region(Gpa::new(0), usize::MAX);
         assert!(matches!(result, Err(MemError::InvalidSize { .. })));
+    }
+
+    #[test]
+    fn test_find_region_integer_overflow_protection() {
+        let mut mem = GuestMemory::new();
+        // Create a region near the end of the address space
+        let start_gpa = Gpa::new(u64::MAX - 4000);
+        mem.add_region(start_gpa, 4096).unwrap();
+
+        let target_gpa = Gpa::new(u64::MAX - 4000 + 10);
+        // Without saturating_add, this caused a panic in `let end = start + r.size as u64;` because
+        // start (u64::MAX - 4000) + 4096 overflows.
+        // With saturating_add, this succeeds safely since we're within bounds.
+        let res = mem.read_slice(target_gpa, &mut [0; 10]);
+        assert!(res.is_ok());
+    }
+
+    #[test]
+    fn test_write_zeroes_integer_overflow_protection() {
+        let mut mem = GuestMemory::new();
+        let start_gpa = Gpa::new(u64::MAX - 8000);
+        mem.add_region(start_gpa, 8192).unwrap();
+
+        // This invokes `write_zeroes` logic and shouldn't panic when calculating the next GPA to zero out.
+        use hitz_boot::GuestMemWriter;
+        let target_gpa = Gpa::new(u64::MAX - 4000);
+        let res = mem.write_zeroes(target_gpa, 2048);
+        assert!(res.is_ok());
     }
 }
