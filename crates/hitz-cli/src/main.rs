@@ -2007,7 +2007,9 @@ fn run_vm_command(cmd: VmCommand) -> Result<()> {
 async fn handle_vm_analyze(args: &VmIdArgs) -> Result<()> {
     use crossterm::style::Stylize;
 
-    println!("{}", format!("Analyzing VM '{}'...", args.id).cyan());
+    print!("{}", format!("⏳ Analyzing VM '{}'...", args.id).cyan());
+    use std::io::Write;
+    let _ = std::io::stdout().flush();
 
     // Fetch VM Info
     let (status_info, resp_info) = pipe_client::pipe_request(
@@ -2077,6 +2079,8 @@ async fn handle_vm_analyze(args: &VmIdArgs) -> Result<()> {
 
     let insights = analyzer::analyze_vm(&info, &metrics);
 
+    println!("\r\x1b[2K{} {}", "✅".green(), format!("Analyzed VM '{}'", args.id).cyan());
+
     println!(
         "\n{}",
         format!(" 🔍 Analysis Report for VM '{}' ", args.id)
@@ -2102,25 +2106,28 @@ async fn handle_vm_analyze(args: &VmIdArgs) -> Result<()> {
         for insight in insights {
             let (level_cell, msg_cell) = match insight.level {
                 analyzer::WarningLevel::Critical => (
-                    Cell::new("🚨 CRITICAL")
-                        .fg(Color::Red)
+                    Cell::new(" 🚨 CRIT ")
+                        .fg(Color::White)
+                        .bg(Color::DarkRed)
                         .add_attribute(comfy_table::Attribute::Bold),
                     Cell::new(insight.message).fg(Color::Red),
                 ),
                 analyzer::WarningLevel::Warning => (
-                    Cell::new("⚠️ WARNING")
-                        .fg(Color::Yellow)
+                    Cell::new(" ⚠️ WARN ")
+                        .fg(Color::Black)
+                        .bg(Color::Yellow)
                         .add_attribute(comfy_table::Attribute::Bold),
                     Cell::new(insight.message).fg(Color::Yellow),
                 ),
                 analyzer::WarningLevel::Info => (
-                    Cell::new("ℹ️ INFO")
-                        .fg(Color::Blue)
+                    Cell::new(" ℹ️ INFO ")
+                        .fg(Color::White)
+                        .bg(Color::Blue)
                         .add_attribute(comfy_table::Attribute::Bold),
                     Cell::new(insight.message),
                 ),
             };
-            let _ = table.add_row(vec![level_cell, msg_cell]);
+            let _ = table.add_row([level_cell, msg_cell]);
         }
         println!("{table}");
     }
