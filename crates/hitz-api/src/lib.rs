@@ -57,6 +57,12 @@ mod prometheus;
 #[cfg(feature = "prometheus")]
 pub use prometheus::*;
 
+#[cfg(feature = "carbon")]
+/// Carbon footprint estimation module.
+pub mod carbon;
+#[cfg(feature = "carbon")]
+pub use carbon::*;
+
 #[cfg(test)]
 #[allow(clippy::expect_used)]
 mod tests {
