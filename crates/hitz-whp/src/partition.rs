@@ -13,7 +13,6 @@ use windows::Win32::System::Hypervisor::{
 use crate::inner::PartitionInner;
 use crate::vcpu::WhpVcpu;
 
-
 /// WHP partition implementing [`hitz_hal::Partition`].
 pub struct WhpPartition {
     pub(crate) inner: Arc<PartitionInner>,
