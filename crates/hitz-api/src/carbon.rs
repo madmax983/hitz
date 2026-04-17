@@ -146,8 +146,7 @@ mod tests {
         let emissions = snap.estimate_carbon(&factors, 4);
         assert!(
             (emissions - 1.5).abs() < f64::EPSILON,
-            "Expected 1.5 mg/s, got {}",
-            emissions
+            "Expected 1.5 mg/s, got {emissions}",
         );
     }
 
@@ -166,8 +165,7 @@ mod tests {
         let emissions = snap.estimate_carbon(&factors, 4);
         assert!(
             (emissions - 6.833333333333333).abs() < 1e-10,
-            "Got {}",
-            emissions
+            "Got {emissions}",
         );
     }
 }

@@ -173,7 +173,7 @@ impl HealthCheck for MetricsSnapshot {
         let total_net_errors: u64 = self
             .networks
             .iter()
-            .map(|net| net.rx_errors + net.tx_errors)
+            .map(|net| net.rx_errors.saturating_add(net.tx_errors))
             .sum();
 
         if total_net_errors > 100 {
@@ -400,5 +400,46 @@ mod tests {
                 assert!(health.reasons.iter().any(|r| r.contains("network errors")));
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod warden_tests {
+    use super::*;
+    use crate::{CpuMetrics, MemoryMetrics, MetricsSnapshot, NetMetrics};
+
+    #[test]
+    fn test_warden_exploit_network_errors_overflow() {
+        let net = NetMetrics {
+            interface: "eth0".to_string(),
+            rx_bytes: 0,
+            tx_bytes: 0,
+            rx_packets: 0,
+            tx_packets: 0,
+            rx_errors: u64::MAX,
+            tx_errors: 1,
+        };
+        let snap = MetricsSnapshot {
+            timestamp_ms: 0,
+            cpu: CpuMetrics {
+                total_pct: 0.0,
+                per_core: vec![],
+                load_avg: [0.0; 3],
+            },
+            memory: MemoryMetrics {
+                total_bytes: 0,
+                used_bytes: 0,
+                free_bytes: 0,
+                buffers_bytes: 0,
+                cached_bytes: 0,
+                swap_total: 0,
+                swap_used: 0,
+            },
+            disks: vec![],
+            networks: vec![net],
+            processes: vec![],
+        };
+        // This will panic if run without saturating_add.
+        let _health = snap.assess_health();
     }
 }
