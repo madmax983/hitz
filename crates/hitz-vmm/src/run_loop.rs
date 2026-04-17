@@ -189,18 +189,20 @@ fn dispatch_exit<V: Vcpu, W: Write>(
             record_exit(exit_counter, "IoPort");
             let mut devs = devices.lock().expect("device lock poisoned");
             handle_io_port(vcpu, &mut devs.serial, &io)?;
+            Ok(None)
         }
         VcpuExit::Halt => {
             record_exit(exit_counter, "Halt");
-            return Ok(Some(ExitReason::Halt));
+            Ok(Some(ExitReason::Halt))
         }
         VcpuExit::Shutdown => {
             record_exit(exit_counter, "Shutdown");
-            return Ok(Some(ExitReason::Shutdown));
+            Ok(Some(ExitReason::Shutdown))
         }
         VcpuExit::Mmio(mmio) => {
             record_exit(exit_counter, "Mmio");
             handle_mmio(vcpu, devices, mem, &mmio, pending_irq)?;
+            Ok(None)
         }
         VcpuExit::InterruptWindow => {
             record_exit(exit_counter, "InterruptWindow");
@@ -210,6 +212,7 @@ fn dispatch_exit<V: Vcpu, W: Write>(
                 vcpu.inject_interrupt(vector)?;
                 tracing::debug!(vector, "deferred interrupt injected via interrupt window");
             }
+            Ok(None)
         }
         VcpuExit::Canceled => {
             record_exit(exit_counter, "Canceled");
@@ -219,15 +222,15 @@ fn dispatch_exit<V: Vcpu, W: Write>(
             if pending_irq.is_some() {
                 vcpu.request_interrupt_window()?;
             }
+            Ok(None)
         }
         VcpuExit::Unknown(code) => {
             record_exit(exit_counter, "Unexpected");
-            return Ok(Some(ExitReason::Unexpected(format!(
+            Ok(Some(ExitReason::Unexpected(format!(
                 "unknown vCPU exit reason: {code:#x}"
-            ))));
+            ))))
         }
     }
-    Ok(None)
 }
 
 /// Dispatch an MMIO exit to the appropriate device handler.
