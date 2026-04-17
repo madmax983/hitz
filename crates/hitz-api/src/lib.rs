@@ -306,3 +306,6 @@ mod tests {
         );
     }
 }
+#[cfg(test)]
+#[allow(missing_docs)]
+pub mod metrics_test;
