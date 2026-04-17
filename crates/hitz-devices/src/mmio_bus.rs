@@ -104,14 +104,20 @@ impl MmioBus {
             size,
             device,
         });
+        self.slots.sort_by_key(|slot| slot.base);
     }
 
     /// Dispatch a guest read to the device owning `gpa`.
     ///
     /// If no device is registered at `gpa`, `data` is filled with `0xFF`.
     pub fn read(&mut self, gpa: u64, data: &mut [u8]) {
-        for slot in &mut self.slots {
-            if gpa >= slot.base && gpa < slot.base + slot.size {
+        // ⚡ Bolt Optimization:
+        // Use `partition_point` (binary search) over the sorted `slots` array to provide O(log N) lookup
+        // instead of O(N) linear scan. This significantly reduces execution latency on the VM exit hot path.
+        let idx = self.slots.partition_point(|slot| slot.base <= gpa);
+        if idx > 0 {
+            let slot = &mut self.slots[idx - 1];
+            if gpa < slot.base + slot.size {
                 let offset = gpa - slot.base;
                 slot.device.mmio_read(offset, data);
                 return;
@@ -125,8 +131,13 @@ impl MmioBus {
     ///
     /// Returns `Some(vector)` if the device wants to raise an interrupt.
     pub fn write(&mut self, gpa: u64, data: &[u8], mem: &dyn GuestMemAccess) -> Option<u8> {
-        for slot in &mut self.slots {
-            if gpa >= slot.base && gpa < slot.base + slot.size {
+        // ⚡ Bolt Optimization:
+        // Use `partition_point` (binary search) over the sorted `slots` array to provide O(log N) lookup
+        // instead of O(N) linear scan. This significantly reduces execution latency on the VM exit hot path.
+        let idx = self.slots.partition_point(|slot| slot.base <= gpa);
+        if idx > 0 {
+            let slot = &mut self.slots[idx - 1];
+            if gpa < slot.base + slot.size {
                 let offset = gpa - slot.base;
                 return slot.device.mmio_write(offset, data, mem);
             }
