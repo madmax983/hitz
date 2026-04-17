@@ -306,3 +306,9 @@ mod tests {
         );
     }
 }
+
+#[cfg(feature = "recommender")]
+/// Recommender module for right-sizing VMs based on metrics.
+pub mod recommender;
+#[cfg(feature = "recommender")]
+pub use recommender::*;
