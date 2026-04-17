@@ -299,19 +299,21 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
                 vsock_handle: None,
             };
             let info = entry.to_info(&id);
-            let _ = vms.insert(id.clone(), entry);
+            // ⚡ Bolt Optimization: Eliminated `id.clone()` heap allocation on the VM creation hot path.
+            // We pass the owned `id` directly into the map, and borrow from `info.id` for subsequent filesystem calls.
+            let _ = vms.insert(id, entry);
             info
             // Mutex released here — filesystem I/O must not hold it.
         };
 
         if let Err(e) = self
             .store
-            .save_config(&id, config)
-            .and_then(|()| self.store.save_state(&id, VmState::Created))
+            .save_config(&info.id, config)
+            .and_then(|()| self.store.save_state(&info.id, VmState::Created))
         {
             // Rollback the in-memory insert so a retry doesn't hit AlreadyExists.
             if let Ok(mut vms) = self.vms.lock() {
-                let _ = vms.remove(&id);
+                let _ = vms.remove(&info.id);
             }
             return Err(e);
         }
