@@ -1098,7 +1098,7 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
 // ── hitz vm * ──
 
 fn format_error_response(status: hyper::StatusCode, resp: &str, error_prefix: &str) -> String {
-    if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(resp) {
+    let msg = if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(resp) {
         format!("✗ {error_prefix}: {}", err.message)
     } else if let Ok(v) = serde_json::from_str::<serde_json::Value>(resp) {
         if let Some(msg) = v.get("message").and_then(|m| m.as_str()) {
@@ -1108,7 +1108,8 @@ fn format_error_response(status: hyper::StatusCode, resp: &str, error_prefix: &s
         }
     } else {
         format!("✗ {error_prefix} ({status}): {resp}")
-    }
+    };
+    format!("\r\x1b[2K{}", msg)
 }
 
 fn print_error_response(status: hyper::StatusCode, resp: &str, error_prefix: &str) {
@@ -1125,13 +1126,17 @@ fn print_action_result(
 ) {
     use crossterm::style::Stylize;
     if status.is_success() {
-        println!("{}", success_msg.green());
+        println!("\r\x1b[2K{}", success_msg.green());
     } else {
         print_error_response(status, resp, error_prefix);
     }
 }
 
 async fn handle_vm_create(args: &VmCreateArgs) -> Result<()> {
+    use crossterm::style::Stylize;
+    use std::io::Write;
+    print!("{}", format!("⏳ Creating VM '{}'...", args.id).cyan());
+    let _ = std::io::stdout().flush();
     let net = if args.net {
         Some(hitz_api::NetConfig {
             mac: args.mac.clone(),
@@ -1173,6 +1178,10 @@ async fn handle_vm_create(args: &VmCreateArgs) -> Result<()> {
 }
 
 async fn handle_vm_clone(args: &VmCloneArgs) -> Result<()> {
+    use crossterm::style::Stylize;
+    use std::io::Write;
+    print!("{}", format!("⏳ Cloning VM '{}' to '{}'...", args.src_id, args.dest_id).cyan());
+    let _ = std::io::stdout().flush();
     let body = serde_json::to_string(&CloneVmRequest {
         dest_id: args.dest_id.clone(),
     })
@@ -1198,6 +1207,15 @@ async fn handle_vm_clone(args: &VmCloneArgs) -> Result<()> {
 }
 
 async fn handle_vm_action(args: &VmIdArgs, action: VmAction) -> Result<()> {
+    use crossterm::style::Stylize;
+    use std::io::Write;
+    let action_str = match action {
+        VmAction::Start => "Starting",
+        VmAction::Restart => "Restarting",
+        VmAction::Stop => "Stopping",
+    };
+    print!("{}", format!("⏳ {} VM '{}'...", action_str, args.id).cyan());
+    let _ = std::io::stdout().flush();
     let body = serde_json::to_string(&ActionVmRequest { action }).context("serialize request")?;
     let (status, resp) = pipe_client::pipe_request(
         &args.pipe,
@@ -1237,6 +1255,10 @@ async fn handle_vm_stop(args: &VmIdArgs) -> Result<()> {
 
 #[allow(clippy::too_many_lines)]
 async fn handle_vm_status(args: &VmIdArgs) -> Result<()> {
+    use crossterm::style::Stylize;
+    use std::io::Write;
+    print!("{}", format!("⏳ Fetching status for VM '{}'...", args.id).cyan());
+    let _ = std::io::stdout().flush();
     let (status, resp) = pipe_client::pipe_request(
         &args.pipe,
         args.tcp,
@@ -1246,6 +1268,7 @@ async fn handle_vm_status(args: &VmIdArgs) -> Result<()> {
     )
     .await?;
     if status.is_success() {
+        print!("\r\x1b[2K");
         if let Ok(info) = serde_json::from_str::<hitz_api::VmInfo>(&resp) {
             use comfy_table::presets::UTF8_FULL_CONDENSED;
             use comfy_table::{Cell, Color, Table};
@@ -1349,6 +1372,7 @@ async fn handle_vm_status(args: &VmIdArgs) -> Result<()> {
             println!("{}", msg.red());
         }
     } else {
+        print!("\r\x1b[2K");
         print_error_response(
             status,
             &resp,
@@ -1359,9 +1383,14 @@ async fn handle_vm_status(args: &VmIdArgs) -> Result<()> {
 }
 
 async fn handle_vm_list(args: &VmListArgs) -> Result<()> {
+    use crossterm::style::Stylize;
+    use std::io::Write;
+    print!("{}", "⏳ Fetching VM list...".cyan());
+    let _ = std::io::stdout().flush();
     let (status, resp) =
         pipe_client::pipe_request(&args.pipe, args.tcp, Method::GET, "/vms", None).await?;
     if status.is_success() {
+        print!("\r\x1b[2K");
         if let Ok(vms) = serde_json::from_str::<Vec<hitz_api::VmInfo>>(&resp) {
             if vms.is_empty() {
                 use crossterm::style::Stylize;
@@ -1400,12 +1429,17 @@ async fn handle_vm_list(args: &VmListArgs) -> Result<()> {
             println!("{}", msg.red());
         }
     } else {
+        print!("\r\x1b[2K");
         print_error_response(status, &resp, "Failed to list VMs");
     }
     Ok(())
 }
 
 async fn handle_vm_delete(args: &VmIdArgs) -> Result<()> {
+    use crossterm::style::Stylize;
+    use std::io::Write;
+    print!("{}", format!("⏳ Deleting VM '{}'...", args.id).cyan());
+    let _ = std::io::stdout().flush();
     let (status, resp) = pipe_client::pipe_request(
         &args.pipe,
         args.tcp,
@@ -1424,6 +1458,10 @@ async fn handle_vm_delete(args: &VmIdArgs) -> Result<()> {
 }
 
 async fn handle_vm_serial(args: &VmIdArgs) -> Result<()> {
+    use crossterm::style::Stylize;
+    use std::io::Write;
+    print!("{}", format!("⏳ Connecting to serial console for VM '{}'...", args.id).cyan());
+    let _ = std::io::stdout().flush();
     use http_body_util::BodyExt as _;
 
     let resp =
@@ -1439,6 +1477,7 @@ async fn handle_vm_serial(args: &VmIdArgs) -> Result<()> {
         anyhow::bail!("serial stream failed ({status}): {text}");
     }
 
+    print!("\r\x1b[2K");
     let mut out = stdout();
     while let Some(frame_result) = body.frame().await {
         match frame_result {
@@ -1709,6 +1748,10 @@ async fn handle_vm_top(args: &VmIdArgs) -> Result<()> {
     res
 }
 async fn handle_vm_metrics(args: &VmIdArgs) -> Result<()> {
+    use crossterm::style::Stylize;
+    use std::io::Write;
+    print!("{}", format!("⏳ Fetching metrics for VM '{}'...", args.id).cyan());
+    let _ = std::io::stdout().flush();
     let (status, resp) = pipe_client::pipe_request(
         &args.pipe,
         args.tcp,
@@ -1718,10 +1761,12 @@ async fn handle_vm_metrics(args: &VmIdArgs) -> Result<()> {
     )
     .await?;
     if status.is_success() {
+        print!("\r\x1b[2K");
         let snap: hitz_api::MetricsSnapshot =
             serde_json::from_str(&resp).context("failed to parse metrics response")?;
         print!("{}", format_metrics_snapshot(&snap));
     } else {
+        print!("\r\x1b[2K");
         print_error_response(
             status,
             &resp,
@@ -1945,6 +1990,10 @@ fn handle_vm_timeline(args: &VmTimelineArgs) -> Result<()> {
 }
 
 async fn handle_vm_export_metrics(args: &VmExportArgs) -> Result<()> {
+    use crossterm::style::Stylize;
+    use std::io::Write;
+    print!("{}", format!("⏳ Exporting metrics for VM '{}'...", args.id).cyan());
+    let _ = std::io::stdout().flush();
     let (status, resp) = pipe_client::pipe_request(
         &args.pipe,
         args.tcp,
