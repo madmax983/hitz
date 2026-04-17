@@ -4,8 +4,6 @@ use super::*;
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
-    use rmp_serde;
-    use serde_json;
 
     #[test]
     fn should_serialize_and_deserialize_metrics_request() {
