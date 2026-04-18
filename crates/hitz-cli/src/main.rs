@@ -1180,7 +1180,10 @@ async fn handle_vm_create(args: &VmCreateArgs) -> Result<()> {
 async fn handle_vm_clone(args: &VmCloneArgs) -> Result<()> {
     use crossterm::style::Stylize;
     use std::io::Write;
-    print!("{}", format!("⏳ Cloning VM '{}' to '{}'...", args.src_id, args.dest_id).cyan());
+    print!(
+        "{}",
+        format!("⏳ Cloning VM '{}' to '{}'...", args.src_id, args.dest_id).cyan()
+    );
     let _ = std::io::stdout().flush();
     let body = serde_json::to_string(&CloneVmRequest {
         dest_id: args.dest_id.clone(),
@@ -1214,7 +1217,10 @@ async fn handle_vm_action(args: &VmIdArgs, action: VmAction) -> Result<()> {
         VmAction::Restart => "Restarting",
         VmAction::Stop => "Stopping",
     };
-    print!("{}", format!("⏳ {} VM '{}'...", action_str, args.id).cyan());
+    print!(
+        "{}",
+        format!("⏳ {} VM '{}'...", action_str, args.id).cyan()
+    );
     let _ = std::io::stdout().flush();
     let body = serde_json::to_string(&ActionVmRequest { action }).context("serialize request")?;
     let (status, resp) = pipe_client::pipe_request(
@@ -1257,7 +1263,10 @@ async fn handle_vm_stop(args: &VmIdArgs) -> Result<()> {
 async fn handle_vm_status(args: &VmIdArgs) -> Result<()> {
     use crossterm::style::Stylize;
     use std::io::Write;
-    print!("{}", format!("⏳ Fetching status for VM '{}'...", args.id).cyan());
+    print!(
+        "{}",
+        format!("⏳ Fetching status for VM '{}'...", args.id).cyan()
+    );
     let _ = std::io::stdout().flush();
     let (status, resp) = pipe_client::pipe_request(
         &args.pipe,
@@ -1460,7 +1469,10 @@ async fn handle_vm_delete(args: &VmIdArgs) -> Result<()> {
 async fn handle_vm_serial(args: &VmIdArgs) -> Result<()> {
     use crossterm::style::Stylize;
     use std::io::Write;
-    print!("{}", format!("⏳ Connecting to serial console for VM '{}'...", args.id).cyan());
+    print!(
+        "{}",
+        format!("⏳ Connecting to serial console for VM '{}'...", args.id).cyan()
+    );
     let _ = std::io::stdout().flush();
     use http_body_util::BodyExt as _;
 
@@ -1750,7 +1762,10 @@ async fn handle_vm_top(args: &VmIdArgs) -> Result<()> {
 async fn handle_vm_metrics(args: &VmIdArgs) -> Result<()> {
     use crossterm::style::Stylize;
     use std::io::Write;
-    print!("{}", format!("⏳ Fetching metrics for VM '{}'...", args.id).cyan());
+    print!(
+        "{}",
+        format!("⏳ Fetching metrics for VM '{}'...", args.id).cyan()
+    );
     let _ = std::io::stdout().flush();
     let (status, resp) = pipe_client::pipe_request(
         &args.pipe,
@@ -1992,7 +2007,10 @@ fn handle_vm_timeline(args: &VmTimelineArgs) -> Result<()> {
 async fn handle_vm_export_metrics(args: &VmExportArgs) -> Result<()> {
     use crossterm::style::Stylize;
     use std::io::Write;
-    print!("{}", format!("⏳ Exporting metrics for VM '{}'...", args.id).cyan());
+    print!(
+        "{}",
+        format!("⏳ Exporting metrics for VM '{}'...", args.id).cyan()
+    );
     let _ = std::io::stdout().flush();
     let (status, resp) = pipe_client::pipe_request(
         &args.pipe,
