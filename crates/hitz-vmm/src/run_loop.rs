@@ -244,7 +244,10 @@ fn handle_mmio<V: Vcpu, W: Write>(
 ) -> Result<(), HalError> {
     let bytes_slice = mmio
         .instruction_bytes
-        .get(..usize::from(mmio.instruction_byte_count))
+        .get(..std::cmp::min(
+            usize::from(mmio.instruction_byte_count),
+            mmio.instruction_bytes.len(),
+        ))
         .unwrap_or(&[]);
     let decoded = mmio_decode::decode_mmio_instruction(bytes_slice);
 
@@ -764,11 +767,13 @@ mod tests {
             .build();
 
         let mmio = hitz_hal::MmioExit {
-            gpa: 0x1000,
+            gpa: hitz_hal::Gpa::new(0x1000),
             data: [0; 8],
             len: 4,
             is_write: false,
             instruction_len: 2,
+            instruction_bytes: [0; 16],
+            instruction_byte_count: 0,
         };
 
         let result = dispatch_exit(
