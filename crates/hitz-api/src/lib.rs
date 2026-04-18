@@ -63,6 +63,12 @@ mod carbon;
 #[cfg(feature = "carbon")]
 pub use carbon::*;
 
+#[cfg(feature = "sentinel")]
+/// Sentinel module for defining rules based on metrics.
+mod sentinel;
+#[cfg(feature = "sentinel")]
+pub use sentinel::*;
+
 #[cfg(test)]
 #[allow(clippy::expect_used)]
 mod tests {
