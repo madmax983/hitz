@@ -750,6 +750,47 @@ mod tests {
     }
 
     #[test]
+    fn test_dispatch_exit_mmio_write() {
+        let mut vcpu = DummyVcpu {
+            regs: Default::default(),
+            sregs: Default::default(),
+            exit: VcpuExit::Halt,
+        };
+        let devices = Mutex::new(SharedDevices {
+            serial: SerialDevice::new(std::io::sink()),
+            mmio_bus: MmioBus::new(),
+        });
+        let mem = DummyMem;
+        let mut pending_irq = None;
+        let exit_counter = opentelemetry::global::meter("hitz")
+            .u64_counter("hitz.vcpu.exits")
+            .build();
+
+        let mmio = hitz_hal::MmioExit {
+            gpa: 0x1000,
+            data: [0; 8],
+            len: 4,
+            is_write: true,
+            instruction_len: 2,
+            instruction_bytes: [0; 16],
+            instruction_byte_count: 0,
+        };
+
+        let result = dispatch_exit(
+            &mut vcpu,
+            &devices,
+            &mem,
+            VcpuExit::Mmio(mmio),
+            &mut pending_irq,
+            &exit_counter,
+        )
+        .expect("dispatch_exit should succeed");
+
+        assert_eq!(result, None);
+        assert_eq!(vcpu.regs.rip, 2); // RIP should advance
+    }
+
+    #[test]
     fn test_dispatch_exit_mmio() {
         let mut vcpu = DummyVcpu {
             regs: Default::default(),
