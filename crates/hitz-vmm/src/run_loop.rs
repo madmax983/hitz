@@ -484,7 +484,6 @@ mod tests {
         assert_eq!(vcpu.regs.rax, 42);
     }
 
-
     #[test]
     fn test_dispatch_exit_ioport() {
         let mut vcpu = DummyVcpu {
@@ -618,7 +617,9 @@ mod tests {
 
         assert_eq!(
             result,
-            Some(ExitReason::Unexpected("unknown vCPU exit reason: 0x1337".to_string()))
+            Some(ExitReason::Unexpected(
+                "unknown vCPU exit reason: 0x1337".to_string()
+            ))
         );
     }
 
