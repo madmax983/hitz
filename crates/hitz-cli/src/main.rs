@@ -2079,7 +2079,11 @@ async fn handle_vm_analyze(args: &VmIdArgs) -> Result<()> {
 
     let insights = analyzer::analyze_vm(&info, &metrics);
 
-    println!("\r\x1b[2K{} {}", "✅".green(), format!("Analyzed VM '{}'", args.id).cyan());
+    println!(
+        "\r\x1b[2K{} {}",
+        "✅".green(),
+        format!("Analyzed VM '{}'", args.id).cyan()
+    );
 
     println!(
         "\n{}",
