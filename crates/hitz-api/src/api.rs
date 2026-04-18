@@ -1,3 +1,38 @@
+//! REST API Request and Response Definitions.
+//!
+//! # Abstract
+//! This module defines the serializable data structures used to communicate
+//! between the Hitz CLI and the background daemon via the REST API.
+//! It includes types for creating VMs, controlling their lifecycle, and
+//! interrogating their state.
+//!
+//! # The Hero's Journey
+//!
+//! ```rust
+//! use hitz_api::{CreateVmRequest, VmConfig, GuestAgentMode};
+//! use std::path::PathBuf;
+//!
+//! // 1. Construct a request to create a new VM.
+//! let req = CreateVmRequest {
+//!     config: VmConfig {
+//!         kernel_path: PathBuf::from("/vmlinux"),
+//!         initramfs_path: None,
+//!         disk_path: None,
+//!         ram_mib: 512,
+//!         cpus: 2,
+//!         cmdline: None,
+//!         net: None,
+//!         ports: vec![],
+//!         guest_cid: 3,
+//!         guest_agent: GuestAgentMode::Auto,
+//!     },
+//! };
+//!
+//! // 2. Serialize to JSON to send to the daemon over HTTP.
+//! let json = serde_json::to_string(&req).unwrap();
+//! println!("Sending payload: {}", json);
+//! ```
+
 use crate::config::VmConfig;
 use serde::{Deserialize, Serialize};
 

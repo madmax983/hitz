@@ -1,3 +1,51 @@
+//! Sentinel Rules Engine Definitions.
+//!
+//! # Abstract
+//! This module defines the building blocks for the Sentinel Rules Engine, allowing
+//! users to define configurable, threshold-based alerts (watchdogs) that evaluate
+//! incoming telemetry (`MetricsSnapshot`) in real-time.
+//!
+//! # The Hero's Journey
+//!
+//! ```rust
+//! use hitz_api::{SentinelRule, SentinelCondition, MetricTarget, ConditionOperator, MetricsSnapshot, CpuMetrics, MemoryMetrics};
+//!
+//! // 1. Define a rule that triggers if CPU exceeds 90%
+//! let rule = SentinelRule {
+//!     name: "CPU Spike Detected".to_string(),
+//!     condition: SentinelCondition {
+//!         target: MetricTarget::CpuTotalPct,
+//!         operator: ConditionOperator::GreaterThan,
+//!         threshold: 90.0,
+//!     },
+//! };
+//!
+//! // 2. Receive a snapshot from a struggling VM
+//! let snap = MetricsSnapshot {
+//!     timestamp_ms: 0,
+//!     cpu: CpuMetrics {
+//!         total_pct: 95.0,
+//!         per_core: vec![],
+//!         load_avg: [0.0, 0.0, 0.0],
+//!     },
+//!     memory: MemoryMetrics {
+//!         total_bytes: 0,
+//!         used_bytes: 0,
+//!         free_bytes: 0,
+//!         buffers_bytes: 0,
+//!         cached_bytes: 0,
+//!         swap_total: 0,
+//!         swap_used: 0,
+//!     },
+//!     disks: vec![],
+//!     networks: vec![],
+//!     processes: vec![],
+//! };
+//!
+//! // 3. The engine evaluates the snapshot and fires the alert!
+//! assert!(rule.evaluate(&snap));
+//! ```
+
 use crate::MetricsSnapshot;
 use serde::{Deserialize, Serialize};
 

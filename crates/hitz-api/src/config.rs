@@ -1,3 +1,39 @@
+//! VM Configuration Types.
+//!
+//! # Abstract
+//! This module defines the blueprint structures for configuring a micro-VM.
+//! It includes the core [`VmConfig`] which specifies hardware resources
+//! (CPU, RAM), boot assets (kernel, initramfs), and host integration settings
+//! (networking, port forwarding, and guest agent injection).
+//!
+//! # The Hero's Journey
+//!
+//! ```rust
+//! use hitz_api::{VmConfig, NetConfig, GuestAgentMode};
+//! use std::path::PathBuf;
+//!
+//! // Define the full hardware and software blueprint for a micro-VM
+//! let config = VmConfig {
+//!     kernel_path: PathBuf::from("/boot/vmlinux"),
+//!     initramfs_path: Some(PathBuf::from("/boot/init.cpio")),
+//!     disk_path: None,
+//!     ram_mib: 1024,
+//!     cpus: 4,
+//!     cmdline: Some("console=ttyS0 quiet".to_string()),
+//!     net: Some(NetConfig {
+//!         mac: None,
+//!         host_ip: "192.168.100.1/24".to_string(),
+//!         guest_ip: "192.168.100.2/24".to_string(),
+//!         adapter_name: None,
+//!     }),
+//!     ports: vec![],
+//!     guest_cid: 4,
+//!     guest_agent: GuestAgentMode::Auto,
+//! };
+//!
+//! assert_eq!(config.cpus, 4);
+//! ```
+
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
