@@ -1,3 +1,42 @@
+//! Telemetry and Metrics Structures.
+//!
+//! # Abstract
+//! This module defines the wire-protocol structures used to convey real-time
+//! telemetry data from the `hitz-guest-agent` to the host daemon over virtio-vsock.
+//! The primary payload is the [`MetricsSnapshot`], which provides an absolute
+//! point-in-time view of CPU, memory, disk, network, and process utilization.
+//!
+//! # The Hero's Journey
+//!
+//! ```rust
+//! use hitz_api::{MetricsSnapshot, CpuMetrics, MemoryMetrics};
+//!
+//! // The daemon receives a fresh snapshot from the guest agent
+//! let snap = MetricsSnapshot {
+//!     timestamp_ms: 1_700_000_000_000,
+//!     cpu: CpuMetrics {
+//!         total_pct: 42.5,
+//!         per_core: vec![40.0, 45.0],
+//!         load_avg: [1.2, 0.8, 0.5],
+//!     },
+//!     memory: MemoryMetrics {
+//!         total_bytes: 1024 * 1024 * 1024,
+//!         used_bytes: 512 * 1024 * 1024,
+//!         free_bytes: 512 * 1024 * 1024,
+//!         buffers_bytes: 0,
+//!         cached_bytes: 0,
+//!         swap_total: 0,
+//!         swap_used: 0,
+//!     },
+//!     disks: vec![],
+//!     networks: vec![],
+//!     processes: vec![],
+//! };
+//!
+//! // Analyze the data!
+//! assert!(snap.cpu.total_pct > 0.0);
+//! ```
+
 use serde::{Deserialize, Serialize};
 
 // ── Metrics wire protocol ────────────────────────────────────────────────────
