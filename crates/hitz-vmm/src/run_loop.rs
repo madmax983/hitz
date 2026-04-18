@@ -244,10 +244,12 @@ fn handle_mmio<V: Vcpu, W: Write>(
 ) -> Result<(), HalError> {
     let bytes_slice = mmio
         .instruction_bytes
-        .get(..std::cmp::min(
-            usize::from(mmio.instruction_byte_count),
-            mmio.instruction_bytes.len(),
-        ))
+        .get(
+            ..std::cmp::min(
+                usize::from(mmio.instruction_byte_count),
+                mmio.instruction_bytes.len(),
+            ),
+        )
         .unwrap_or(&[]);
     let decoded = mmio_decode::decode_mmio_instruction(bytes_slice);
 

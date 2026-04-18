@@ -148,59 +148,56 @@ impl CalculateDiff for MetricsSnapshot {
 
         // Pre-allocate to avoid dynamic heap reallocations during iteration
         let mut disks = Vec::with_capacity(self.disks.len());
-        for current_disk in &self.disks {
-            if let Some(prev_disk) = previous.disks.iter().find(|d| d.name == current_disk.name) {
-                disks.push(DiskRate {
-                    name: current_disk.name.clone(),
-                    reads_per_sec: (current_disk
-                        .reads_total
-                        .saturating_sub(prev_disk.reads_total))
-                        as f64
-                        / elapsed_secs,
-                    writes_per_sec: (current_disk
-                        .writes_total
-                        .saturating_sub(prev_disk.writes_total))
-                        as f64
-                        / elapsed_secs,
-                    read_bytes_per_sec: (current_disk
-                        .read_bytes
-                        .saturating_sub(prev_disk.read_bytes))
-                        as f64
-                        / elapsed_secs,
-                    write_bytes_per_sec: (current_disk
-                        .write_bytes
-                        .saturating_sub(prev_disk.write_bytes))
-                        as f64
-                        / elapsed_secs,
-                });
-            }
-        }
+        disks.extend(self.disks.iter().filter_map(|current_disk| {
+            let prev_disk = previous.disks.iter().find(|d| d.name == current_disk.name)?;
+            Some(DiskRate {
+                name: current_disk.name.clone(),
+                reads_per_sec: (current_disk
+                    .reads_total
+                    .saturating_sub(prev_disk.reads_total))
+                    as f64
+                    / elapsed_secs,
+                writes_per_sec: (current_disk
+                    .writes_total
+                    .saturating_sub(prev_disk.writes_total))
+                    as f64
+                    / elapsed_secs,
+                read_bytes_per_sec: (current_disk
+                    .read_bytes
+                    .saturating_sub(prev_disk.read_bytes))
+                    as f64
+                    / elapsed_secs,
+                write_bytes_per_sec: (current_disk
+                    .write_bytes
+                    .saturating_sub(prev_disk.write_bytes))
+                    as f64
+                    / elapsed_secs,
+            })
+        }));
 
         // Pre-allocate to avoid dynamic heap reallocations during iteration
         let mut networks = Vec::with_capacity(self.networks.len());
-        for current_net in &self.networks {
-            if let Some(prev_net) = previous
+        networks.extend(self.networks.iter().filter_map(|current_net| {
+            let prev_net = previous
                 .networks
                 .iter()
-                .find(|n| n.interface == current_net.interface)
-            {
-                networks.push(NetRate {
-                    interface: current_net.interface.clone(),
-                    rx_bytes_per_sec: (current_net.rx_bytes.saturating_sub(prev_net.rx_bytes))
-                        as f64
-                        / elapsed_secs,
-                    tx_bytes_per_sec: (current_net.tx_bytes.saturating_sub(prev_net.tx_bytes))
-                        as f64
-                        / elapsed_secs,
-                    rx_packets_per_sec: (current_net.rx_packets.saturating_sub(prev_net.rx_packets))
-                        as f64
-                        / elapsed_secs,
-                    tx_packets_per_sec: (current_net.tx_packets.saturating_sub(prev_net.tx_packets))
-                        as f64
-                        / elapsed_secs,
-                });
-            }
-        }
+                .find(|n| n.interface == current_net.interface)?;
+            Some(NetRate {
+                interface: current_net.interface.clone(),
+                rx_bytes_per_sec: (current_net.rx_bytes.saturating_sub(prev_net.rx_bytes))
+                    as f64
+                    / elapsed_secs,
+                tx_bytes_per_sec: (current_net.tx_bytes.saturating_sub(prev_net.tx_bytes))
+                    as f64
+                    / elapsed_secs,
+                rx_packets_per_sec: (current_net.rx_packets.saturating_sub(prev_net.rx_packets))
+                    as f64
+                    / elapsed_secs,
+                tx_packets_per_sec: (current_net.tx_packets.saturating_sub(prev_net.tx_packets))
+                    as f64
+                    / elapsed_secs,
+            })
+        }));
 
         Some(MetricsDiff {
             elapsed_secs,
