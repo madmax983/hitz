@@ -400,7 +400,6 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
         let vm_id = id.to_string();
         let completion_tx = self.completion_tx.clone();
         let vm_count_clone = Arc::clone(&self.vm_count);
-        let vm_id_span = vm_id.clone();
 
         // Create vsock channels if agent injection is enabled.
         // The host-facing ends are consumed by the async metrics task;
@@ -432,9 +431,11 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
         // Fire-and-forget: the spawned task updates VM state on completion
         // and signals the completion channel so `stop_all_and_wait` can drain.
         drop(tokio::task::spawn(async move {
+            // ⚡ Bolt Optimization: Borrow `vm_id` instead of cloning it into `vm_id_span`
+            // to avoid a string heap allocation before creating the tracing span.
             let boot_span = tracing::info_span!(
                 "vm.boot",
-                vm.id = %vm_id_span,
+                vm.id = %vm_id,
                 vm.ram_mib = boot_config.ram_mib,
                 vm.cpus = boot_config.cpus,
             );
