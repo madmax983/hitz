@@ -25,3 +25,4 @@ classifier = ["diff"]
 carbon = []
 
 sentinel = []
+efficiency = []
