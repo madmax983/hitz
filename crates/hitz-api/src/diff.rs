@@ -149,22 +149,21 @@ impl CalculateDiff for MetricsSnapshot {
         // Pre-allocate to avoid dynamic heap reallocations during iteration
         let mut disks = Vec::with_capacity(self.disks.len());
         disks.extend(self.disks.iter().filter_map(|current_disk| {
-            let prev_disk = previous.disks.iter().find(|d| d.name == current_disk.name)?;
+            let prev_disk = previous
+                .disks
+                .iter()
+                .find(|d| d.name == current_disk.name)?;
             Some(DiskRate {
                 name: current_disk.name.clone(),
                 reads_per_sec: (current_disk
                     .reads_total
-                    .saturating_sub(prev_disk.reads_total))
-                    as f64
+                    .saturating_sub(prev_disk.reads_total)) as f64
                     / elapsed_secs,
                 writes_per_sec: (current_disk
                     .writes_total
-                    .saturating_sub(prev_disk.writes_total))
-                    as f64
+                    .saturating_sub(prev_disk.writes_total)) as f64
                     / elapsed_secs,
-                read_bytes_per_sec: (current_disk
-                    .read_bytes
-                    .saturating_sub(prev_disk.read_bytes))
+                read_bytes_per_sec: (current_disk.read_bytes.saturating_sub(prev_disk.read_bytes))
                     as f64
                     / elapsed_secs,
                 write_bytes_per_sec: (current_disk
@@ -184,11 +183,9 @@ impl CalculateDiff for MetricsSnapshot {
                 .find(|n| n.interface == current_net.interface)?;
             Some(NetRate {
                 interface: current_net.interface.clone(),
-                rx_bytes_per_sec: (current_net.rx_bytes.saturating_sub(prev_net.rx_bytes))
-                    as f64
+                rx_bytes_per_sec: (current_net.rx_bytes.saturating_sub(prev_net.rx_bytes)) as f64
                     / elapsed_secs,
-                tx_bytes_per_sec: (current_net.tx_bytes.saturating_sub(prev_net.tx_bytes))
-                    as f64
+                tx_bytes_per_sec: (current_net.tx_bytes.saturating_sub(prev_net.tx_bytes)) as f64
                     / elapsed_secs,
                 rx_packets_per_sec: (current_net.rx_packets.saturating_sub(prev_net.rx_packets))
                     as f64

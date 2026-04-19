@@ -1,7 +1,6 @@
-🌟 Nova: Resource Efficiency Scorer
+🛡️ Sentry: [test coverage improvement]
 
-💡 **The Spark:** We collect immense amounts of telemetry data (CPU, memory, etc.) but we don't translate that raw data into actionable insights about whether the micro-VM is actually right-sized for its workload.
-🚀 **The Feature:** Implemented `EfficiencyScorer` trait and `EfficiencyScore` struct. This evaluates the `MetricsSnapshot` to determine if a VM is underutilizing its allocated CPU cores or RAM, returning a score (0-100) and human-readable optimization insights.
-🔮 **The Potential:** Could be used to build auto-scaling mechanisms, provide recommendations in a dashboard, or generate rightsizing reports across fleets of VMs.
-⚠️ **Risk:** Low. Additive only, isolated in `src/efficiency.rs` behind the new `efficiency` feature flag.
-
+🎯 Target: `hitz-api::sentinel::SentinelRule::evaluate`
+💣 Risk: The `match` arms evaluating conditional operators (`GreaterThan`, `LessThan`, `Equals`) against targets (`CpuTotalPct`, `MemoryUsedBytes`) lacked comprehensive testing to ensure accurate alerting behavior and edge-case resilience.
+🧪 Strategy: Introduced a table-driven unit test `should_evaluate_all_conditions_correctly` in the `tests` module to rigorously iterate through permutations of targets, operators, precision edge cases (epsilon tolerance), and boundary metrics.
+🔭 Verification: `cargo test --workspace --exclude hitz-whp --exclude hitz-cli --exclude hitz-daemon --exclude hitz-net --exclude hitz-devices --exclude hitz-vmm --exclude hitz-guest-agent --all-features`

@@ -229,4 +229,156 @@ mod tests {
         snap.cpu.total_pct = 70.0;
         assert!(!rule.evaluate(&snap));
     }
+
+    #[test]
+    fn should_evaluate_all_conditions_correctly() {
+        struct TestCase {
+            target: MetricTarget,
+            operator: ConditionOperator,
+            threshold: f32,
+            cpu_val: f32,
+            mem_val: u64,
+            expected: bool,
+        }
+
+        let cases = vec![
+            // GreaterThan tests
+            TestCase {
+                target: MetricTarget::CpuTotalPct,
+                operator: ConditionOperator::GreaterThan,
+                threshold: 50.0,
+                cpu_val: 51.0,
+                mem_val: 0,
+                expected: true,
+            },
+            TestCase {
+                target: MetricTarget::CpuTotalPct,
+                operator: ConditionOperator::GreaterThan,
+                threshold: 50.0,
+                cpu_val: 50.0,
+                mem_val: 0,
+                expected: false,
+            },
+            TestCase {
+                target: MetricTarget::MemoryUsedBytes,
+                operator: ConditionOperator::GreaterThan,
+                threshold: 1024.0,
+                cpu_val: 0.0,
+                mem_val: 1025,
+                expected: true,
+            },
+            TestCase {
+                target: MetricTarget::MemoryUsedBytes,
+                operator: ConditionOperator::GreaterThan,
+                threshold: 1024.0,
+                cpu_val: 0.0,
+                mem_val: 1024,
+                expected: false,
+            },
+            // LessThan tests
+            TestCase {
+                target: MetricTarget::CpuTotalPct,
+                operator: ConditionOperator::LessThan,
+                threshold: 50.0,
+                cpu_val: 49.0,
+                mem_val: 0,
+                expected: true,
+            },
+            TestCase {
+                target: MetricTarget::CpuTotalPct,
+                operator: ConditionOperator::LessThan,
+                threshold: 50.0,
+                cpu_val: 50.0,
+                mem_val: 0,
+                expected: false,
+            },
+            TestCase {
+                target: MetricTarget::MemoryUsedBytes,
+                operator: ConditionOperator::LessThan,
+                threshold: 1024.0,
+                cpu_val: 0.0,
+                mem_val: 1023,
+                expected: true,
+            },
+            TestCase {
+                target: MetricTarget::MemoryUsedBytes,
+                operator: ConditionOperator::LessThan,
+                threshold: 1024.0,
+                cpu_val: 0.0,
+                mem_val: 1024,
+                expected: false,
+            },
+            // Equals tests (with epsilon tolerance)
+            TestCase {
+                target: MetricTarget::CpuTotalPct,
+                operator: ConditionOperator::Equals,
+                threshold: 50.0,
+                cpu_val: 50.0,
+                mem_val: 0,
+                expected: true,
+            },
+            TestCase {
+                target: MetricTarget::CpuTotalPct,
+                operator: ConditionOperator::Equals,
+                threshold: 50.0,
+                cpu_val: 50.1,
+                mem_val: 0,
+                expected: false,
+            },
+            TestCase {
+                target: MetricTarget::MemoryUsedBytes,
+                operator: ConditionOperator::Equals,
+                threshold: 1024.0,
+                cpu_val: 0.0,
+                mem_val: 1024,
+                expected: true,
+            },
+            TestCase {
+                target: MetricTarget::MemoryUsedBytes,
+                operator: ConditionOperator::Equals,
+                threshold: 1024.0,
+                cpu_val: 0.0,
+                mem_val: 1025,
+                expected: false,
+            },
+        ];
+
+        for (i, case) in cases.into_iter().enumerate() {
+            let rule = SentinelRule {
+                name: format!("Test Case {i}"),
+                condition: SentinelCondition {
+                    target: case.target,
+                    operator: case.operator,
+                    threshold: case.threshold,
+                },
+            };
+
+            let snap = MetricsSnapshot {
+                timestamp_ms: 0,
+                cpu: CpuMetrics {
+                    total_pct: case.cpu_val,
+                    per_core: vec![],
+                    load_avg: [0.0, 0.0, 0.0],
+                },
+                memory: MemoryMetrics {
+                    total_bytes: 0,
+                    used_bytes: case.mem_val,
+                    free_bytes: 0,
+                    buffers_bytes: 0,
+                    cached_bytes: 0,
+                    swap_total: 0,
+                    swap_used: 0,
+                },
+                disks: vec![],
+                networks: vec![],
+                processes: vec![],
+            };
+
+            assert_eq!(
+                rule.evaluate(&snap),
+                case.expected,
+                "Failed on test case {i}"
+            );
+        }
+    }
 }
