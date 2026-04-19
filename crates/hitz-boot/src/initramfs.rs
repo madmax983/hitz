@@ -6,8 +6,31 @@
 )]
 //! Initramfs (cpio archive) loading into guest physical memory.
 //!
+//! # Abstract
+//!
 //! The kernel unpacks the cpio archive from the address stored in
-//! `boot_params.hdr.ramdisk_image` during early boot.
+//! `boot_params.hdr.ramdisk_image` during early boot. This module provides
+//! the logic to load that archive into guest RAM securely and handle alignment.
+//!
+//! # The Hero's Journey
+//!
+//! ```rust
+//! use hitz_boot::{load_initramfs, BootError};
+//! use hitz_hal::Gpa;
+//! use hitz_boot::GuestMemWriter;
+//!
+//! struct MockWriter;
+//! impl GuestMemWriter for MockWriter {
+//!     fn write_bytes(&self, gpa: Gpa, data: &[u8]) -> Result<(), BootError> { Ok(()) }
+//!     fn write_zeroes(&self, gpa: Gpa, len: usize) -> Result<(), BootError> { Ok(()) }
+//! }
+//!
+//! let data = b"archive_data";
+//! let writer = MockWriter;
+//! // Load an initramfs starting right after the kernel ends
+//! let result = load_initramfs(data, Gpa::new(0x20_0000), 0x800_0000, &writer).unwrap();
+//! assert_eq!(result.gpa, Gpa::new(0x20_0000));
+//! ```
 
 use hitz_hal::Gpa;
 
@@ -27,6 +50,31 @@ pub struct InitramfsLoadResult {
 ///
 /// Places the archive at a page-aligned GPA after `kernel_end`, ensuring
 /// it fits within `ram_size`.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_boot::{load_initramfs, BootError};
+/// use hitz_hal::Gpa;
+/// use hitz_boot::GuestMemWriter;
+///
+/// struct MockWriter;
+/// impl GuestMemWriter for MockWriter {
+///     fn write_bytes(&self, gpa: Gpa, data: &[u8]) -> Result<(), BootError> { Ok(()) }
+///     fn write_zeroes(&self, gpa: Gpa, len: usize) -> Result<(), BootError> { Ok(()) }
+/// }
+///
+/// let archive_data = vec![0u8; 1024];
+/// let writer = MockWriter;
+/// let res = load_initramfs(&archive_data, Gpa::new(0x10_0100), 0x800_0000, &writer).unwrap();
+/// // Aligns up to the next 4KiB page boundary!
+/// assert_eq!(res.gpa, Gpa::new(0x10_1000));
+/// ```
+///
+/// ```compile_fail
+/// use hitz_boot::load_initramfs;
+/// load_initramfs("wrong_type", 123, 456, &writer);
+/// ```
 ///
 /// # Errors
 ///

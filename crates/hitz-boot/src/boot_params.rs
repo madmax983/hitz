@@ -1,9 +1,27 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 //! Linux boot protocol zero page (`boot_params`) construction.
 //!
+//! # Abstract
+//!
 //! The Linux kernel expects a 4096-byte "zero page" at a well-known GPA
 //! containing an E820 memory map, a setup header with magic values, and
-//! pointers to the kernel command line and initrd.
+//! pointers to the kernel command line and initrd. This module provides
+//! the structures and builders to generate a compliant `boot_params` struct.
+//!
+//! # The Hero's Journey
+//!
+//! ```rust
+//! use hitz_boot::{build_boot_params, set_initramfs_params};
+//! use hitz_hal::Gpa;
+//!
+//! // 1. Build the base params for 128 MiB of RAM.
+//! let mut bp = build_boot_params(128 * 1024 * 1024, Gpa::new(0x2_0000)).unwrap();
+//!
+//! // 2. If an initramfs is loaded, update the headers.
+//! set_initramfs_params(&mut bp, Gpa::new(0x10_0000), 4096).unwrap();
+//!
+//! // The zero page is now ready to be written to memory.
+//! ```
 
 use hitz_hal::Gpa;
 
@@ -194,6 +212,16 @@ impl core::fmt::Debug for BootParams {
 /// Build a populated [`BootParams`] for a guest with `ram_bytes` of physical
 /// memory and a command line at `cmdline_gpa`.
 ///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_boot::build_boot_params;
+/// use hitz_hal::Gpa;
+///
+/// let bp = build_boot_params(128 * 1024 * 1024, Gpa::new(0x2_0000)).unwrap();
+/// assert_eq!(bp.e820_entries, 3);
+/// ```
+///
 /// # Errors
 ///
 /// Returns [`BootError::InvalidBootParams`] if `ram_bytes` is too small to
@@ -242,6 +270,20 @@ pub fn build_boot_params(ram_bytes: u64, cmdline_gpa: Gpa) -> Result<BootParams,
 ///
 /// Updates `hdr.ramdisk_image` and `hdr.ramdisk_size` so the kernel
 /// knows where to find the cpio archive in guest memory.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_boot::{BootParams, set_initramfs_params};
+/// use hitz_hal::Gpa;
+///
+/// let mut bp = BootParams::default();
+/// set_initramfs_params(&mut bp, Gpa::new(0x30_0000), 8192).unwrap();
+/// let img = { bp.hdr }.ramdisk_image;
+/// assert_eq!(img, 0x30_0000);
+/// let sz = { bp.hdr }.ramdisk_size;
+/// assert_eq!(sz, 8192);
+/// ```
 ///
 /// # Errors
 ///

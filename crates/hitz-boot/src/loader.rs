@@ -6,10 +6,32 @@
 )]
 //! Minimal ELF64 vmlinux loader.
 //!
+//! # Abstract
+//!
 //! Parses a statically-linked ELF64 binary (such as a vmlinux) and copies
 //! its `PT_LOAD` segments into guest physical memory via the [`GuestMemWriter`]
-//! trait.  No external ELF crate is used -- the header structures are defined
+//! trait. No external ELF crate is used -- the header structures are defined
 //! inline so the crate compiles cleanly on Windows.
+//!
+//! # The Hero's Journey
+//!
+//! ```rust
+//! use hitz_boot::{load_elf, GuestMemWriter};
+//! use hitz_boot::BootError;
+//! use hitz_hal::Gpa;
+//!
+//! struct DummyWriter;
+//! impl GuestMemWriter for DummyWriter {
+//!     fn write_bytes(&self, gpa: Gpa, data: &[u8]) -> Result<(), BootError> { Ok(()) }
+//!     fn write_zeroes(&self, gpa: Gpa, len: usize) -> Result<(), BootError> { Ok(()) }
+//! }
+//!
+//! // In a real scenario, this would be the actual bytes of `vmlinux`
+//! let elf_bytes = vec![0x7F, b'E', b'L', b'F']; // Just the magic header for illustration
+//! let writer = DummyWriter;
+//!
+//! // load_elf(&elf_bytes, &writer); // Parse the ELF and map it
+//! ```
 
 use hitz_hal::Gpa;
 
@@ -169,6 +191,24 @@ pub struct KernelLoadResult {
 /// Only `PT_LOAD` segments are processed.  Each segment's file-backed
 /// portion is copied verbatim; any excess `p_memsz` beyond `p_filesz`
 /// (the BSS) is zero-filled.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_boot::{load_elf, GuestMemWriter};
+/// use hitz_boot::BootError;
+/// use hitz_hal::Gpa;
+///
+/// struct MockWriter;
+/// impl GuestMemWriter for MockWriter {
+///     fn write_bytes(&self, gpa: Gpa, data: &[u8]) -> Result<(), BootError> { Ok(()) }
+///     fn write_zeroes(&self, gpa: Gpa, len: usize) -> Result<(), BootError> { Ok(()) }
+/// }
+///
+/// let writer = MockWriter;
+/// let res = load_elf(&[], &writer); // Passing empty bytes will fail
+/// assert!(res.is_err());
+/// ```
 ///
 /// # Errors
 ///

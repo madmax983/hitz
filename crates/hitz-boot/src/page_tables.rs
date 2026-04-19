@@ -6,9 +6,24 @@
 )]
 //! Identity-mapped x86-64 page table generation.
 //!
+//! # Abstract
+//!
 //! Builds 4-level page tables using 2 MiB huge pages. The output is a
 //! sequence of [`MemWrite`] chunks that the caller writes into guest
 //! physical memory — `hitz-boot` never touches guest RAM directly.
+//!
+//! # The Hero's Journey
+//!
+//! ```rust
+//! use hitz_boot::build_page_tables;
+//! use hitz_hal::Gpa;
+//!
+//! // Build page tables to map 1 GiB of RAM
+//! let (cr3_gpa, writes) = build_page_tables(1).unwrap();
+//!
+//! assert_eq!(cr3_gpa, Gpa::new(0x8000)); // The PML4 base
+//! assert_eq!(writes.len(), 3); // PML4, PDPT, and 1 PD table
+//! ```
 
 use hitz_hal::Gpa;
 
@@ -72,6 +87,21 @@ const MAX_GIB: u32 = 512;
 ///
 /// Uses 2 MiB huge pages so only three levels are needed:
 /// PML4 -> PDPT -> PD (with PS bit set).
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_boot::build_page_tables;
+///
+/// // Create page tables for a guest with 4 GiB of memory.
+/// let (cr3, writes) = build_page_tables(4).expect("should succeed");
+/// assert_eq!(writes.len(), 6); // 1 PML4 + 1 PDPT + 4 PDs
+/// ```
+///
+/// ```compile_fail
+/// use hitz_boot::build_page_tables;
+/// build_page_tables(-1); // Compiler error: must be u32
+/// ```
 ///
 /// # Errors
 ///
