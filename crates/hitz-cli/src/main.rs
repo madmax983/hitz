@@ -1103,11 +1103,41 @@ fn format_error_response(status: hyper::StatusCode, resp: &str, error_prefix: &s
     } else if let Ok(v) = serde_json::from_str::<serde_json::Value>(resp) {
         if let Some(msg) = v.get("message").and_then(|m| m.as_str()) {
             format!("✗ {error_prefix}: {}", msg)
+        } else if let Some(err) = v.get("error").and_then(|e| e.as_str()) {
+            format!("✗ {error_prefix}: {}", err)
         } else {
-            format!("✗ {error_prefix} ({status}): {resp}")
+            let mut parts = Vec::new();
+            if let Some(obj) = v.as_object() {
+                for (k, val) in obj {
+                    if let Some(s) = val.as_str() {
+                        parts.push(format!("{k}: {s}"));
+                    } else if let Some(n) = val.as_number() {
+                        parts.push(format!("{k}: {n}"));
+                    } else if val.is_boolean() || val.is_null() {
+                        parts.push(format!("{k}: {val}"));
+                    }
+                }
+            }
+            if parts.is_empty() {
+                format!("✗ {error_prefix} ({status})")
+            } else {
+                format!("✗ {error_prefix} ({status}): {}", parts.join(", "))
+            }
         }
     } else {
-        format!("✗ {error_prefix} ({status}): {resp}")
+        let clean = resp.trim();
+        if clean.is_empty() {
+            format!("✗ {error_prefix} ({status})")
+        } else {
+            let max_len = 200;
+            let display_text = if clean.chars().count() > max_len {
+                let truncated: String = clean.chars().take(max_len).collect();
+                format!("{}...", truncated)
+            } else {
+                clean.to_string()
+            };
+            format!("✗ {error_prefix} ({status}): {display_text}")
+        }
     };
     format!("\r\x1b[2K{}", msg)
 }
@@ -1376,9 +1406,11 @@ async fn handle_vm_status(args: &VmIdArgs) -> Result<()> {
 
             println!("{table}");
         } else {
-            use crossterm::style::Stylize;
-            let msg = format!("✗ Failed to parse VM {} status: {resp}", args.id);
-            println!("{}", msg.red());
+            print_error_response(
+                status,
+                &resp,
+                &format!("Failed to parse VM {} status", args.id),
+            );
         }
     } else {
         print!("\r\x1b[2K");
@@ -1433,9 +1465,7 @@ async fn handle_vm_list(args: &VmListArgs) -> Result<()> {
             }
             println!("{table}");
         } else {
-            use crossterm::style::Stylize;
-            let msg = format!("✗ Failed to parse VMs list: {resp}");
-            println!("{}", msg.red());
+            print_error_response(status, &resp, "Failed to parse VMs list");
         }
     } else {
         print!("\r\x1b[2K");
@@ -2100,7 +2130,11 @@ async fn handle_vm_analyze(args: &VmIdArgs) -> Result<()> {
     let info: hitz_api::VmInfo = match serde_json::from_str(&resp_info) {
         Ok(i) => i,
         Err(e) => {
-            println!("{}", format!("✗ Failed to parse VM info: {e}").red());
+            print_error_response(
+                status_info,
+                &resp_info,
+                &format!("Failed to parse VM {} info ({e})", args.id),
+            );
             return Ok(());
         }
     };
@@ -2139,7 +2173,11 @@ async fn handle_vm_analyze(args: &VmIdArgs) -> Result<()> {
     let metrics: hitz_api::MetricsSnapshot = match serde_json::from_str(&resp_metrics) {
         Ok(m) => m,
         Err(e) => {
-            println!("{}", format!("✗ Failed to parse VM metrics: {e}").red());
+            print_error_response(
+                status_metrics,
+                &resp_metrics,
+                &format!("Failed to parse VM {} metrics ({e})", args.id),
+            );
             return Ok(());
         }
     };
