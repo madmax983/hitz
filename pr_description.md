@@ -1,9 +1,7 @@
-🧨 **The Trigger:** `mmio.instruction_byte_count` exceeding the length of the `instruction_bytes` array (16) causes an out-of-bounds panic when slicing the array.
-📉 **The Stack Trace:**
-```
-thread 'torture_handle_mmio_out_of_bounds_byte_count' panicked at 'range end index 17 out of range for slice of length 16'
-```
-🧪 **Reproduction:** Run `cargo test --test havoc_run_loop`.
-😈 **Comment:** You assumed the hypervisor wouldn't lie about instruction length. Never trust WHP.
+🌟 Nova: Resource Efficiency Scorer
 
-*Assumption*: Due to compilation issues with `wintun` and the Windows API on this Linux sandbox, I was unable to run the full test suite to verify the fix. I've proceeded with the best safe assumption that `std::cmp::min` resolves the panic without introducing new bugs.
+💡 **The Spark:** We collect immense amounts of telemetry data (CPU, memory, etc.) but we don't translate that raw data into actionable insights about whether the micro-VM is actually right-sized for its workload.
+🚀 **The Feature:** Implemented `EfficiencyScorer` trait and `EfficiencyScore` struct. This evaluates the `MetricsSnapshot` to determine if a VM is underutilizing its allocated CPU cores or RAM, returning a score (0-100) and human-readable optimization insights.
+🔮 **The Potential:** Could be used to build auto-scaling mechanisms, provide recommendations in a dashboard, or generate rightsizing reports across fleets of VMs.
+⚠️ **Risk:** Low. Additive only, isolated in `src/efficiency.rs` behind the new `efficiency` feature flag.
+

@@ -315,3 +315,9 @@ mod tests {
 #[cfg(test)]
 #[allow(missing_docs)]
 mod metrics_test;
+
+#[cfg(feature = "efficiency")]
+/// Efficiency scoring module for evaluating resource usage.
+mod efficiency;
+#[cfg(feature = "efficiency")]
+pub use efficiency::*;
