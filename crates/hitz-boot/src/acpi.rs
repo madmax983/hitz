@@ -1,9 +1,25 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 //! ACPI table construction for SMP boot.
 //!
+//! # Abstract
+//!
 //! Builds RSDP, XSDT, and MADT (Multiple APIC Description Table) so the
 //! Linux kernel can discover multiple vCPUs. Tables are placed in the BIOS
 //! read-only region (`0x000E_xxxx`) which the E820 map marks as reserved.
+//!
+//! # The Hero's Journey
+//!
+//! ```rust
+//! use hitz_boot::{build_rsdp, build_xsdt, build_madt};
+//!
+//! let rsdp = build_rsdp();
+//! let xsdt = build_xsdt();
+//! let madt = build_madt(4).expect("failed to build MADT for 4 CPUs");
+//!
+//! assert_eq!(&rsdp[0..8], b"RSD PTR ");
+//! assert_eq!(&xsdt[0..4], b"XSDT");
+//! assert_eq!(&madt[0..4], b"APIC");
+//! ```
 
 use crate::error::BootError;
 
@@ -78,6 +94,16 @@ fn acpi_checksum(data: &[u8]) -> u8 {
 /// - Revision 2 (byte 15)
 /// - XSDT physical address (bytes 24..32)
 /// - Extended checksum covering all 36 bytes (byte 32)
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_boot::build_rsdp;
+///
+/// let rsdp = build_rsdp();
+/// assert_eq!(&rsdp[0..8], b"RSD PTR ");
+/// assert_eq!(rsdp[15], 2); // ACPI 2.0+
+/// ```
 #[must_use]
 pub fn build_rsdp() -> [u8; 36] {
     let mut rsdp = [0u8; 36];
@@ -154,6 +180,15 @@ fn build_sdt_header(signature: [u8; 4], total_length: u32) -> [u8; SDT_HEADER_LE
 ///
 /// Returns a `Vec<u8>` containing the 36-byte SDT header followed by a
 /// single 8-byte pointer to [`MADT_GPA`]. The checksum at byte 9 is valid.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_boot::build_xsdt;
+///
+/// let xsdt = build_xsdt();
+/// assert_eq!(&xsdt[0..4], b"XSDT");
+/// ```
 #[must_use]
 #[allow(clippy::cast_possible_truncation)] // total_len is always 44
 pub fn build_xsdt() -> Vec<u8> {
@@ -209,6 +244,22 @@ impl MadtLapicEntry {
 /// - N Local APIC entries (8 bytes each)
 ///
 /// Total length: `36 + 4 + 4 + cpu_count * 8`
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_boot::build_madt;
+///
+/// let madt = build_madt(2).expect("should build for 2 CPUs");
+/// assert_eq!(&madt[0..4], b"APIC");
+/// assert_eq!(madt.len(), 36 + 4 + 4 + 2 * 8);
+/// ```
+///
+/// ```compile_fail
+/// use hitz_boot::build_madt;
+/// // Fails at compile-time if used improperly (example syntax check)
+/// let madt = build_madt("two");
+/// ```
 ///
 /// # Errors
 ///
