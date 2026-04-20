@@ -1,8 +1,44 @@
 //! Boot register configuration for Linux x86-64 direct boot.
 //!
+//! # Abstract
 //! Sets up the vCPU in 64-bit long mode with identity-mapped page tables,
 //! a minimal GDT, and the entry point / `boot_params` pointer expected by
 //! the Linux boot protocol.
+//!
+//! # The Hero's Journey
+//! ```rust
+//! # use hitz_vmm::memory::GuestMemory;
+//! # use hitz_hal::{Gpa, Vcpu, VcpuExit, StandardRegs, SpecialRegs};
+//! # use hitz_vmm::boot_regs::{configure_regs, configure_sregs, write_gdt};
+//! #
+//! # struct DummyVcpu;
+//! # impl Vcpu for DummyVcpu {
+//! #     type CancelHandle = ();
+//! #     fn run(&mut self) -> Result<VcpuExit, hitz_hal::HalError> { Ok(VcpuExit::Halt) }
+//! #     fn cancel_handle(&self) -> Self::CancelHandle { () }
+//! #     fn cancel_via(_: &Self::CancelHandle) -> Result<(), hitz_hal::HalError> { Ok(()) }
+//! #     fn get_regs(&self) -> Result<StandardRegs, hitz_hal::HalError> { Ok(StandardRegs::default()) }
+//! #     fn set_regs(&mut self, _: &StandardRegs) -> Result<(), hitz_hal::HalError> { Ok(()) }
+//! #     fn get_sregs(&self) -> Result<SpecialRegs, hitz_hal::HalError> { Ok(SpecialRegs::default()) }
+//! #     fn set_sregs(&mut self, _: &SpecialRegs) -> Result<(), hitz_hal::HalError> { Ok(()) }
+//! #     fn inject_interrupt(&mut self, _: u8) -> Result<(), hitz_hal::HalError> { Ok(()) }
+//! #     fn request_interrupt_window(&mut self) -> Result<(), hitz_hal::HalError> { Ok(()) }
+//! # }
+//! # let mut mem = GuestMemory::new();
+//! # mem.add_region(Gpa::new(0), 4096).unwrap();
+//! # let mut vcpu = DummyVcpu;
+//! // 1. Write the Global Descriptor Table to guest memory
+//! write_gdt(&mem).unwrap();
+//!
+//! // 2. Configure Special Registers (CR0, CR3, segment descriptors, etc.)
+//! let pml4_gpa = Gpa::new(0x8000);
+//! configure_sregs(&mut vcpu, pml4_gpa).unwrap();
+//!
+//! // 3. Configure General Purpose Registers (RIP, RSI, etc.)
+//! let kernel_entry = Gpa::new(0x100000);
+//! let boot_params_gpa = Gpa::new(0x7000);
+//! configure_regs(&mut vcpu, kernel_entry, boot_params_gpa).unwrap();
+//! ```
 
 use hitz_hal::{DescriptorTable, Gpa, SegmentDescriptor, SpecialRegs, StandardRegs, Vcpu};
 

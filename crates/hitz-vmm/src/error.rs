@@ -1,4 +1,17 @@
 //! VMM error types.
+//!
+//! # Abstract
+//! This module defines the central error enums returned by `hitz-vmm` operations,
+//! bridging HAL errors and guest memory faults.
+//!
+//! # The Hero's Journey
+//! ```rust
+//! use hitz_vmm::MemError;
+//!
+//! // We can handle errors specifically
+//! let err = MemError::NotMapped { gpa: 0x1000, len: 4096 };
+//! assert!(err.to_string().contains("0x1000"));
+//! ```
 
 /// Errors arising from guest memory operations.
 #[derive(Debug, thiserror::Error)]

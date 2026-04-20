@@ -1,10 +1,23 @@
 //! Minimal newc (SVR4) cpio archive builder.
 //!
+//! # Abstract
 //! Produces archives compatible with the Linux kernel's initramfs loader.
 //! Reference: `Documentation/driver-api/early-userspace/buffer-format.rst`
 //!
 //! Format: each entry = 110-byte ASCII header + filename (null-term, 4-byte
 //! padded) + file data (4-byte padded). Ends with a TRAILER!!! entry.
+//!
+//! # The Hero's Journey
+//! ```rust
+//! use hitz_vmm::CpioBuilder;
+//!
+//! // Construct a tiny initramfs archive containing a single file.
+//! let archive = CpioBuilder::new()
+//!     .add_file("etc/hello.txt", b"Hello, World!", 0o644)
+//!     .finish();
+//!
+//! assert!(archive.len() > 110);
+//! ```
 
 use std::io::Write;
 

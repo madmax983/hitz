@@ -1,9 +1,46 @@
 //! vCPU run loop — dispatches exits to devices and advances RIP.
 //!
+//! # Abstract
+//! Handles the core execution loop for a virtual CPU.
+//!
 //! WHP does **not** auto-advance RIP on I/O port or MMIO exits. The VMM
 //! must read the current registers, add `instruction_len` to RIP, and
 //! write them back before re-entering the guest. Without this, the guest
 //! infinite-loops on the faulting instruction.
+//!
+//! # The Hero's Journey
+//! ```rust
+//! # use hitz_hal::{Gpa, Vcpu, VcpuExit, StandardRegs, SpecialRegs};
+//! # use hitz_vmm::run_loop::{ExitReason, run_vcpu_loop, SharedDevices};
+//! # use hitz_vmm::memory::GuestMemory;
+//! # use std::sync::atomic::{AtomicBool, Ordering};
+//! # use std::sync::Mutex;
+//! # use hitz_devices::{SerialDevice, MmioBus};
+//! #
+//! # struct DummyVcpu;
+//! # impl Vcpu for DummyVcpu {
+//! #     type CancelHandle = ();
+//! #     fn run(&mut self) -> Result<VcpuExit, hitz_hal::HalError> { Ok(VcpuExit::Halt) }
+//! #     fn cancel_handle(&self) -> Self::CancelHandle { () }
+//! #     fn cancel_via(_: &Self::CancelHandle) -> Result<(), hitz_hal::HalError> { Ok(()) }
+//! #     fn get_regs(&self) -> Result<StandardRegs, hitz_hal::HalError> { Ok(StandardRegs::default()) }
+//! #     fn set_regs(&mut self, _: &StandardRegs) -> Result<(), hitz_hal::HalError> { Ok(()) }
+//! #     fn get_sregs(&self) -> Result<SpecialRegs, hitz_hal::HalError> { Ok(SpecialRegs::default()) }
+//! #     fn set_sregs(&mut self, _: &SpecialRegs) -> Result<(), hitz_hal::HalError> { Ok(()) }
+//! #     fn inject_interrupt(&mut self, _: u8) -> Result<(), hitz_hal::HalError> { Ok(()) }
+//! #     fn request_interrupt_window(&mut self) -> Result<(), hitz_hal::HalError> { Ok(()) }
+//! # }
+//! # let mut vcpu = DummyVcpu;
+//! # let mem = GuestMemory::new();
+//! # let stop_flag = AtomicBool::new(false);
+//! # let devices = Mutex::new(SharedDevices { serial: SerialDevice::new(vec![]), mmio_bus: MmioBus::new() });
+//!
+//! // Enter the run loop!
+//! let result = run_vcpu_loop(&mut vcpu, &devices, &mem, &stop_flag);
+//!
+//! // In this dummy example, the vCPU immediately halts.
+//! assert!(matches!(result.unwrap(), ExitReason::Halt));
+//! ```
 
 use std::io::Write;
 use std::sync::Mutex;

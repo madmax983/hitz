@@ -1,11 +1,29 @@
 //! Channel handle bridging the vsock virtio device (sync run-loop)
 //! with the host-side async metrics runtime.
 //!
+//! # Abstract
+//! Provides the data structures required to move data across the sync/async boundary
+//! for the `VirtioVsockDevice`.
+//!
 //! The daemon creates a [`VsockIoHandle`] before calling `spawn_blocking`
 //! for `boot_and_run`, retaining it so the async task can send/receive
 //! vsock packets while the VM is running. Dropping the handle closes
 //! the channels, which signals the device's poll loop to stop injecting
 //! and draining packets.
+//!
+//! # The Hero's Journey
+//! ```rust
+//! use hitz_vmm::VsockIoHandle;
+//!
+//! // The daemon provisions the channel pairs before starting the VM
+//! let (handle, rx_recv, tx_send) = VsockIoHandle::new_pair();
+//!
+//! // The handle is kept in the async runtime...
+//! assert!(handle.tx_rx.is_empty());
+//!
+//! // ...and the other ends are passed to `boot_and_run`.
+//! assert!(rx_recv.is_empty());
+//! ```
 
 use hitz_devices::VsockPacket;
 

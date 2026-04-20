@@ -1,10 +1,4 @@
-Title: 🎨 Mosaic: UI Polish for hitz-cli error responses
-
-🖌️ **Before:**
-The CLI's error formatter (`format_error_response`) and error fallbacks in JSON parsing dumped raw JSON API responses to the user console. A failure to parse the `/vms` list would print `✗ Failed to parse VMs list: {"error": ...}` resulting in a giant, ugly text wall. Unrecognized JSON payloads generated ugly logs instead of looking like a dashboard.
-
-✨ **After:**
-The CLI now intercepts raw JSON errors, automatically extracts top-level fields (like `error` or arbitrary keys), and formats them into a clean, human-readable list (e.g. `key: value`). Giant HTML error dumps from gateways are safely truncated.
-
-🖼️ **Visuals:**
-JSON dumps are replaced with structured properties. `print_error_response` is now strictly used across parsing boundaries to prevent unformatted panics.
+📖 Chapter: The `hitz-vmm` module
+🔦 Insight: Expanded documentation to follow the "Hero's Journey" pattern with # Abstract and # The Hero's Journey headers, specifically for `error.rs`, `boot_regs.rs`, `cpio.rs`, `vsock_io.rs`, and `run_loop.rs`. Added missing copy-pasteable doctests and refined explanations for complex structs like `ExitReason` and `GuestMemory`.
+🧪 Example: Added 4 executable doctests across `cpio.rs`, `boot_regs.rs`, `error.rs`, and `vsock_io.rs` to demonstrate usage of core VM components.
+🖼️ Preview: No preview available, but documentation checks pass.
