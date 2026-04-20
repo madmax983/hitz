@@ -116,6 +116,14 @@ impl GuestMemory {
         }
     }
 
+    /// Creates an empty memory manager pre-allocated for `capacity` regions.
+    #[must_use]
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            regions: Vec::with_capacity(capacity),
+        }
+    }
+
     /// Allocate a page-aligned host memory region and register it at `gpa`.
     ///
     /// `size` is rounded up to the next page boundary. The region is
