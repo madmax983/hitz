@@ -283,7 +283,7 @@ fn handle_mmio<V: Vcpu, W: Write>(
         return vcpu.set_regs(&regs);
     }
 
-    let mut data = [0u8; 4];
+    let mut data = [0u8; 8];
     let value = if let Some(imm) = decoded.immediate {
         u64::from(imm)
     } else {
