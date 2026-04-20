@@ -321,3 +321,9 @@ mod metrics_test;
 mod efficiency;
 #[cfg(feature = "efficiency")]
 pub use efficiency::*;
+
+#[cfg(feature = "advisor")]
+/// Advisor module for providing actionable recommendations.
+mod advisor;
+#[cfg(feature = "advisor")]
+pub use advisor::*;

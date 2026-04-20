@@ -26,3 +26,4 @@ carbon = []
 
 sentinel = []
 efficiency = []
+advisor = ["efficiency", "carbon"]
