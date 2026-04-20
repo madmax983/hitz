@@ -9,9 +9,10 @@
 2. INPUT & LOGIC:
    - `SerialBuf` handles capacity wraps securely. `inner.total_written += len as u64` is safe on 64-bit systems, and ring buffer calculations correctly bound `to_read`.
    - Checked math is correctly used in `hitz-vmm/src/memory.rs` and `serial_buf.rs` to prevent integer overflows.
+   - VM config paths are explicitly checked for `..` traversals.
 
 3. SUPPLY CHAIN:
-   - `cargo audit` ran successfully and reported 0 vulnerabilities in 374 crate dependencies.
+   - `cargo audit` ran successfully and reported 0 vulnerabilities in crate dependencies.
 
 CONCLUSION:
 No active security risks or vulnerabilities found. System is secure under current scope.
