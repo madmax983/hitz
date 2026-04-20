@@ -752,6 +752,49 @@ mod tests {
     }
 
     #[test]
+    fn test_dispatch_exit_mmio_undecodable() {
+        let mut vcpu = DummyVcpu {
+            regs: Default::default(),
+            sregs: Default::default(),
+            exit: VcpuExit::Halt,
+        };
+        let devices = Mutex::new(SharedDevices {
+            serial: SerialDevice::new(std::io::sink()),
+            mmio_bus: MmioBus::new(),
+        });
+        let mem = DummyMem;
+        let mut pending_irq = None;
+        let exit_counter = opentelemetry::global::meter("hitz")
+            .u64_counter("hitz.vcpu.exits")
+            .build();
+
+        let mmio = hitz_hal::MmioExit {
+            gpa: hitz_hal::Gpa::new(0x1000),
+            data: [0; 8],
+            len: 4,
+            is_write: false,
+            // A truly undecodable instruction for our mmio_decoder
+            instruction_bytes: [0xFF; 16],
+            instruction_byte_count: 15,
+            instruction_len: 2, // The hypervisor might pass 2 here
+        };
+
+        let result = dispatch_exit(
+            &mut vcpu,
+            &devices,
+            &mem,
+            VcpuExit::Mmio(mmio),
+            &mut pending_irq,
+            &exit_counter,
+        )
+        .expect("dispatch_exit should succeed");
+
+        assert_eq!(result, None);
+        // It falls back to advance_rip with mmio.instruction_len
+        assert_eq!(vcpu.regs.rip, 2);
+    }
+
+    #[test]
     fn test_dispatch_exit_mmio_write() {
         let mut vcpu = DummyVcpu {
             regs: Default::default(),
