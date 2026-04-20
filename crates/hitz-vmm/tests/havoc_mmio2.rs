@@ -67,7 +67,9 @@ impl GuestMemAccess for DummyMem {
 #[test]
 #[should_panic(expected = "range end index 8 out of range for slice of length 4")]
 fn havoc_test_mmio_write_8bytes() {
-    let bytes: [u8; 16] = [0x48, 0xC7, 0x05, 0x00, 0x00, 0x00, 0x00, 0x12, 0x34, 0x56, 0x78, 0, 0, 0, 0, 0];
+    let bytes: [u8; 16] = [
+        0x48, 0xC7, 0x05, 0x00, 0x00, 0x00, 0x00, 0x12, 0x34, 0x56, 0x78, 0, 0, 0, 0, 0,
+    ];
 
     let mut vcpu = MaliciousVcpu {
         exit_to_return: VcpuExit::Mmio(MmioExit {
