@@ -392,7 +392,7 @@ pub fn boot_and_run<H: Hypervisor, W: Write + Send + 'static>(
     let gib_count = config.ram_mib.div_ceil(1024).max(1);
 
     // ── 2-7. Load Guest Memory ──
-    let mut guest_mem = GuestMemory::new();
+    let mut guest_mem = GuestMemory::with_capacity(4); // Pre-allocate typical region count
     let pml4_gpa = setup_guest_memory(&mut guest_mem, config, ram_bytes, gib_count)?;
 
     // ── 8. Write command line ──
