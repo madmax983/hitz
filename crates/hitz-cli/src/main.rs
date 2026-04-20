@@ -707,7 +707,7 @@ fn main() -> ExitCode {
     match cli.command {
         Command::Run(args) => run_vm(args).unwrap_or_else(|e| {
             use crossterm::style::Stylize;
-            eprintln!("{}", format!("✗ Error: {e:#}").red().bold());
+            eprintln!("\r\x1b[2K{}", format!("✗ Error: {e:#}").red().bold());
             ExitCode::FAILURE
         }),
         Command::Daemon(cmd) => {
@@ -719,7 +719,7 @@ fn main() -> ExitCode {
             result.map_or_else(
                 |e| {
                     use crossterm::style::Stylize;
-                    eprintln!("{}", format!("✗ Error: {e:#}").red().bold());
+                    eprintln!("\r\x1b[2K{}", format!("✗ Error: {e:#}").red().bold());
                     ExitCode::FAILURE
                 },
                 |()| ExitCode::SUCCESS,
@@ -728,7 +728,7 @@ fn main() -> ExitCode {
         Command::Vm(cmd) => run_vm_command(cmd).map_or_else(
             |e| {
                 use crossterm::style::Stylize;
-                eprintln!("{}", format!("✗ Error: {e:#}").red().bold());
+                eprintln!("\r\x1b[2K{}", format!("✗ Error: {e:#}").red().bold());
                 ExitCode::FAILURE
             },
             |()| ExitCode::SUCCESS,
@@ -1145,7 +1145,7 @@ fn format_error_response(status: hyper::StatusCode, resp: &str, error_prefix: &s
 fn print_error_response(status: hyper::StatusCode, resp: &str, error_prefix: &str) {
     use crossterm::style::Stylize;
     let msg = format_error_response(status, resp, error_prefix);
-    println!("{}", msg.red());
+    println!("\r\x1b[2K{}", msg.red());
 }
 
 fn print_action_result(
@@ -2057,7 +2057,7 @@ async fn handle_vm_export_metrics(args: &VmExportArgs) -> Result<()> {
         let json = serde_json::to_string_pretty(&snap).context("failed to serialize metrics")?;
         std::fs::write(&args.out, json).context("failed to write metrics export to file")?;
         println!(
-            "{}",
+            "\r\x1b[2K{}",
             format!("✓ Exported metrics to {}", args.out.display()).green()
         );
     } else {
