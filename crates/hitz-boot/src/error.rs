@@ -1,4 +1,25 @@
 //! Boot error types.
+//!
+//! # Abstract
+//!
+//! This module defines the `BootError` enum, which represents failures that
+//! can occur during Linux direct boot setup (e.g., ELF loading, page table creation).
+//!
+//! # The Hero's Journey
+//!
+//! ```rust
+//! use hitz_boot::BootError;
+//!
+//! fn load_kernel() -> Result<(), BootError> {
+//!     Err(BootError::InvalidElf("Missing magic bytes".to_string()))
+//! }
+//!
+//! match load_kernel() {
+//!     Ok(_) => println!("Kernel loaded!"),
+//!     Err(BootError::InvalidElf(reason)) => println!("Bad kernel image: {}", reason),
+//!     Err(e) => println!("Other boot error: {}", e),
+//! }
+//! ```
 
 /// Errors that can occur during Linux direct boot setup.
 #[derive(Debug, thiserror::Error)]

@@ -1,4 +1,32 @@
 //! HAL error type.
+//!
+//! # Abstract
+//!
+//! This module defines the `HalError` enum, representing all possible failure
+//! modes when interacting with the hypervisor abstraction layer.
+//!
+//! # The Hero's Journey
+//!
+//! ```rust
+//! use hitz_hal::HalError;
+//!
+//! fn setup_vm() -> Result<(), HalError> {
+//!     // Attempt to map memory, which might fail
+//!     Err(HalError::MapMemory {
+//!         gpa: 0x1000,
+//!         size: 4096,
+//!         reason: "Memory already mapped".to_string(),
+//!     })
+//! }
+//!
+//! match setup_vm() {
+//!     Ok(_) => println!("VM ready"),
+//!     Err(HalError::MapMemory { gpa, size, reason }) => {
+//!         println!("Failed to map {} bytes at 0x{:x}: {}", size, gpa, reason);
+//!     }
+//!     Err(e) => println!("Other error: {}", e),
+//! }
+//! ```
 
 /// Errors from hypervisor operations.
 ///

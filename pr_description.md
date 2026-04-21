@@ -1,4 +1,6 @@
-🎯 Target: `hitz-vmm::run_loop` `handle_mmio` function.
-💣 Risk: Undecodable MMIO instructions returning `None` might incorrectly fall back and cause a panic or advance RIP incorrectly if not verified via explicit test.
-🧪 Strategy: Added `test_dispatch_exit_mmio_undecodable` unit test which feeds a block of `0xFF` instruction bytes representing a truly undecodable event sequence.
-🔬 Verification: Run `cargo test -p hitz-vmm --lib --no-default-features --target x86_64-unknown-linux-gnu run_loop::tests::test_dispatch_exit_mmio_undecodable -- --exact`
+# 🎻 Bard: [documentation update]
+
+📖 Chapter: Documented the error modules in `hitz-boot` and `hitz-hal`.
+🔦 Insight: Added module level documentation and doctests for the `BootError` and `HalError` enums, to explain what they are and how to use them.
+🧪 Example: Added 2 executable doctests (one in `hitz-boot/src/error.rs` and one in `hitz-hal/src/error.rs`).
+🖼️ Preview:
