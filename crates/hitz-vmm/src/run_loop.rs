@@ -267,22 +267,44 @@ fn handle_mmio<V: Vcpu, W: Write>(
     // (it's always 0). Use the decoder-computed length instead.
     let instr_len = decoded.instruction_len;
 
-    if !mmio.is_write {
-        // Read: lock → device read → unlock, then update registers.
-        let size = usize::from(decoded.size);
-        let mut data = [0u8; 8];
-        {
-            let mut devs = devices.lock().expect("device lock poisoned");
-            devs.mmio_bus.read(mmio.gpa.as_u64(), &mut data[..size]);
-        }
-        let value = u64::from_le_bytes(data);
-
-        let mut regs = vcpu.get_regs()?;
-        mmio_decode::set_register(&mut regs, decoded.register, value);
-        regs.rip = regs.rip.wrapping_add(u64::from(instr_len));
-        return vcpu.set_regs(&regs);
+    if mmio.is_write {
+        handle_mmio_write(vcpu, devices, mem, mmio, pending_irq, &decoded, instr_len)
+    } else {
+        handle_mmio_read(vcpu, devices, mmio, &decoded, instr_len)
     }
+}
 
+fn handle_mmio_read<V: Vcpu, W: Write>(
+    vcpu: &mut V,
+    devices: &Mutex<SharedDevices<W>>,
+    mmio: &hitz_hal::MmioExit,
+    decoded: &mmio_decode::DecodedMmio,
+    instr_len: u8,
+) -> Result<(), HalError> {
+    // Read: lock → device read → unlock, then update registers.
+    let size = usize::from(decoded.size);
+    let mut data = [0u8; 8];
+    {
+        let mut devs = devices.lock().expect("device lock poisoned");
+        devs.mmio_bus.read(mmio.gpa.as_u64(), &mut data[..size]);
+    }
+    let value = u64::from_le_bytes(data);
+
+    let mut regs = vcpu.get_regs()?;
+    mmio_decode::set_register(&mut regs, decoded.register, value);
+    regs.rip = regs.rip.wrapping_add(u64::from(instr_len));
+    vcpu.set_regs(&regs)
+}
+
+fn handle_mmio_write<V: Vcpu, W: Write>(
+    vcpu: &mut V,
+    devices: &Mutex<SharedDevices<W>>,
+    mem: &dyn GuestMemAccess,
+    mmio: &hitz_hal::MmioExit,
+    pending_irq: &mut Option<u8>,
+    decoded: &mmio_decode::DecodedMmio,
+    instr_len: u8,
+) -> Result<(), HalError> {
     let mut data = [0u8; 8];
     let value = if let Some(imm) = decoded.immediate {
         u64::from(imm)
