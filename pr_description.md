@@ -1,10 +1,6 @@
-Title: 🎨 Mosaic: UI Polish for hitz-cli error responses
+Title: "🛡️ Sentry: [test coverage improvement] Hal Types and Errors"
 
-🖌️ **Before:**
-The CLI's error formatter (`format_error_response`) and error fallbacks in JSON parsing dumped raw JSON API responses to the user console. A failure to parse the `/vms` list would print `✗ Failed to parse VMs list: {"error": ...}` resulting in a giant, ugly text wall. Unrecognized JSON payloads generated ugly logs instead of looking like a dashboard.
-
-✨ **After:**
-The CLI now intercepts raw JSON errors, automatically extracts top-level fields (like `error` or arbitrary keys), and formats them into a clean, human-readable list (e.g. `key: value`). Giant HTML error dumps from gateways are safely truncated.
-
-🖼️ **Visuals:**
-JSON dumps are replaced with structured properties. `print_error_response` is now strictly used across parsing boundaries to prevent unformatted panics.
+🎯 Target: `hitz-hal::types::MmioExit`, `hitz-hal::types::IoPortExit`, and `hitz-hal::error::HalError`.
+💣 Risk: Types like `MmioExit` and `IoPortExit` contain complex fields (like instruction arrays) that must format correctly for debugging exits. The `HalError` variant messages represent critical, visible system failures that must be robust to format changes. These gaps represent missed test coverage.
+🧪 Strategy: Added unit tests using `#[cfg(test)] mod tests` in both files. Added explicit assertions on `format!("{:?}", exit)` for the exit types, and verified exact string output via `err.to_string()` for all variants of `HalError`.
+🔭 Verification: Run `cargo test -p hitz-hal`

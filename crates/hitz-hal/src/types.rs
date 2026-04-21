@@ -419,3 +419,37 @@ pub struct InterruptRequest {
     /// Interrupt vector number.
     pub vector: u8,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::Gpa;
+
+    #[test]
+    fn test_mmio_exit_debug() {
+        let exit = MmioExit {
+            gpa: Gpa::new(0x1000),
+            data: [1, 2, 3, 4, 0, 0, 0, 0],
+            len: 4,
+            is_write: true,
+            instruction_len: 2,
+            instruction_bytes: [0x89, 0x18, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            instruction_byte_count: 2,
+        };
+        let debug_str = format!("{exit:?}");
+        assert!(debug_str.contains("MmioExit"));
+    }
+
+    #[test]
+    fn test_io_port_exit_debug() {
+        let exit = IoPortExit {
+            port: 0x3F8,
+            data: [0x41, 0, 0, 0],
+            len: 1,
+            is_write: true,
+            instruction_len: 1,
+        };
+        let debug_str = format!("{exit:?}");
+        assert!(debug_str.contains("IoPortExit"));
+    }
+}

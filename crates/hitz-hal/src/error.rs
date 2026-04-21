@@ -110,3 +110,57 @@ pub enum HalError {
         message: String,
     },
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_hal_error_display() {
+        let err = HalError::CreatePartition("test error".to_string());
+        assert_eq!(err.to_string(), "failed to create partition: test error");
+
+        let err = HalError::MapMemory {
+            gpa: 0x1000,
+            size: 4096,
+            reason: "test reason".to_string(),
+        };
+        assert_eq!(
+            err.to_string(),
+            "failed to map guest memory at GPA 0x1000, size 0x1000: test reason"
+        );
+
+        let err = HalError::UnmapMemory {
+            gpa: 0x1000,
+            reason: "test reason".to_string(),
+        };
+        assert_eq!(
+            err.to_string(),
+            "failed to unmap guest memory at GPA 0x1000: test reason"
+        );
+
+        let err = HalError::CreateVcpu {
+            vcpu_id: 1,
+            reason: "test reason".to_string(),
+        };
+        assert_eq!(err.to_string(), "failed to create vCPU 1: test reason");
+
+        let err = HalError::GuestMem {
+            gpa: 0x1000,
+            reason: "test reason".to_string(),
+        };
+        assert_eq!(
+            err.to_string(),
+            "guest memory access at GPA 0x1000: test reason"
+        );
+
+        let err = HalError::Platform {
+            code: 0x1234,
+            message: "test message".to_string(),
+        };
+        assert_eq!(
+            err.to_string(),
+            "platform error (code 0x1234): test message"
+        );
+    }
+}
