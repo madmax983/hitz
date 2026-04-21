@@ -316,8 +316,14 @@ mod tests {
 #[allow(missing_docs)]
 mod metrics_test;
 
+#[cfg(feature = "billing")]
+/// Cloud FinOps Cost Simulator.
+mod billing;
 #[cfg(feature = "efficiency")]
 /// Efficiency scoring module for evaluating resource usage.
 mod efficiency;
+#[cfg(feature = "billing")]
+pub use billing::*;
+
 #[cfg(feature = "efficiency")]
 pub use efficiency::*;
