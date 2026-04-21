@@ -577,6 +577,20 @@ fn service_main(arguments: Vec<OsString>) {
     if let Err(e) = run_service(&arguments) {
         eprintln!("hitz service error: {e:#}");
     }
+    #[test]
+    fn test_format_error_response_json() {
+        let status = hyper::StatusCode::BAD_REQUEST;
+        let json_resp = r#"{"message": "Invalid config", "code": 400}"#;
+        let result = format_error_response(status, json_resp, "Failed");
+        assert!(result.contains("Invalid config"));
+    }
+
+    #[test]
+    fn test_format_error_response_plain() {
+        let status = hyper::StatusCode::NOT_FOUND;
+        let result = format_error_response(status, "Not found anywhere", "Failed");
+        assert!(result.contains("Not found anywhere"));
+    }
 }
 
 // Called only from service_main (itself FFI-only); suppress dead_code + pass-by-value.
@@ -734,6 +748,20 @@ fn main() -> ExitCode {
             |()| ExitCode::SUCCESS,
         ),
     }
+    #[test]
+    fn test_format_error_response_json() {
+        let status = hyper::StatusCode::BAD_REQUEST;
+        let json_resp = r#"{"message": "Invalid config", "code": 400}"#;
+        let result = format_error_response(status, json_resp, "Failed");
+        assert!(result.contains("Invalid config"));
+    }
+
+    #[test]
+    fn test_format_error_response_plain() {
+        let status = hyper::StatusCode::NOT_FOUND;
+        let result = format_error_response(status, "Not found anywhere", "Failed");
+        assert!(result.contains("Not found anywhere"));
+    }
 }
 
 // ── hitz run ──
@@ -823,6 +851,20 @@ fn run_vm(args: RunArgs) -> Result<ExitCode> {
     match result.exit_reason {
         ExitReason::Halt | ExitReason::Canceled => Ok(ExitCode::SUCCESS),
         ExitReason::Shutdown | ExitReason::Unexpected(_) => Ok(ExitCode::FAILURE),
+    }
+    #[test]
+    fn test_format_error_response_json() {
+        let status = hyper::StatusCode::BAD_REQUEST;
+        let json_resp = r#"{"message": "Invalid config", "code": 400}"#;
+        let result = format_error_response(status, json_resp, "Failed");
+        assert!(result.contains("Invalid config"));
+    }
+
+    #[test]
+    fn test_format_error_response_plain() {
+        let status = hyper::StatusCode::NOT_FOUND;
+        let result = format_error_response(status, "Not found anywhere", "Failed");
+        assert!(result.contains("Not found anywhere"));
     }
 }
 
@@ -1159,6 +1201,20 @@ fn print_action_result(
         println!("\r\x1b[2K{}", success_msg.green());
     } else {
         print_error_response(status, resp, error_prefix);
+    }
+    #[test]
+    fn test_format_error_response_json() {
+        let status = hyper::StatusCode::BAD_REQUEST;
+        let json_resp = r#"{"message": "Invalid config", "code": 400}"#;
+        let result = format_error_response(status, json_resp, "Failed");
+        assert!(result.contains("Invalid config"));
+    }
+
+    #[test]
+    fn test_format_error_response_plain() {
+        let status = hyper::StatusCode::NOT_FOUND;
+        let result = format_error_response(status, "Not found anywhere", "Failed");
+        assert!(result.contains("Not found anywhere"));
     }
 }
 
@@ -2708,6 +2764,20 @@ mod tests {
             "missing networks header: {output}"
         );
     }
+    #[test]
+    fn test_format_error_response_json() {
+        let status = hyper::StatusCode::BAD_REQUEST;
+        let json_resp = r#"{"message": "Invalid config", "code": 400}"#;
+        let result = format_error_response(status, json_resp, "Failed");
+        assert!(result.contains("Invalid config"));
+    }
+
+    #[test]
+    fn test_format_error_response_plain() {
+        let status = hyper::StatusCode::NOT_FOUND;
+        let result = format_error_response(status, "Not found anywhere", "Failed");
+        assert!(result.contains("Not found anywhere"));
+    }
 }
 
 #[cfg(test)]
@@ -2772,6 +2842,20 @@ mod top_tests {
         };
         assert!(true);
     }
+    #[test]
+    fn test_format_error_response_json() {
+        let status = hyper::StatusCode::BAD_REQUEST;
+        let json_resp = r#"{"message": "Invalid config", "code": 400}"#;
+        let result = format_error_response(status, json_resp, "Failed");
+        assert!(result.contains("Invalid config"));
+    }
+
+    #[test]
+    fn test_format_error_response_plain() {
+        let status = hyper::StatusCode::NOT_FOUND;
+        let result = format_error_response(status, "Not found anywhere", "Failed");
+        assert!(result.contains("Not found anywhere"));
+    }
 }
 
 #[cfg(test)]
@@ -2788,5 +2872,19 @@ mod tests {
         assert!(parse_port_forward("8080:abc").is_err());
         assert!(parse_port_forward("abc:80").is_err());
         assert!(parse_port_forward("70000:80").is_err()); // > 65535
+    }
+    #[test]
+    fn test_format_error_response_json() {
+        let status = hyper::StatusCode::BAD_REQUEST;
+        let json_resp = r#"{"message": "Invalid config", "code": 400}"#;
+        let result = format_error_response(status, json_resp, "Failed");
+        assert!(result.contains("Invalid config"));
+    }
+
+    #[test]
+    fn test_format_error_response_plain() {
+        let status = hyper::StatusCode::NOT_FOUND;
+        let result = format_error_response(status, "Not found anywhere", "Failed");
+        assert!(result.contains("Not found anywhere"));
     }
 }
