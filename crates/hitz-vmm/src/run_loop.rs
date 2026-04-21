@@ -1374,4 +1374,82 @@ mod tests {
             &counter,
         );
     }
+
+    #[test]
+    #[should_panic(expected = "device lock poisoned")]
+    fn should_panic_on_run_vcpu_loop_with_poisoned_lock() {
+        let mut vcpu = DummyVcpu {
+            regs: Default::default(),
+            sregs: Default::default(),
+            exit: VcpuExit::Halt,
+        };
+        let devices = Mutex::new(SharedDevices {
+            serial: SerialDevice::new(std::io::sink()),
+            mmio_bus: MmioBus::new(),
+        });
+
+        let _ = std::panic::catch_unwind(|| {
+            let _guard = devices.lock().unwrap();
+            panic!("poisoning");
+        });
+
+        let mem = DummyMem;
+        let stop_flag = AtomicBool::new(false);
+        let _ = run_vcpu_loop(&mut vcpu, &devices, &mem, &stop_flag);
+    }
+
+    #[test]
+    #[should_panic(expected = "device lock poisoned")]
+    fn should_panic_on_poll_devices_with_poisoned_lock() {
+        let mut vcpu = DummyVcpu {
+            regs: Default::default(),
+            sregs: Default::default(),
+            exit: VcpuExit::Halt,
+        };
+        let devices = Mutex::new(SharedDevices {
+            serial: SerialDevice::new(std::io::sink()),
+            mmio_bus: MmioBus::new(),
+        });
+
+        let _ = std::panic::catch_unwind(|| {
+            let _guard = devices.lock().unwrap();
+            panic!("poisoning");
+        });
+
+        let mut pending = None;
+        let _ = poll_devices(&mut vcpu, &devices, &mut pending);
+    }
+
+    #[test]
+    #[should_panic(expected = "device lock poisoned")]
+    fn should_panic_on_dispatch_exit_canceled_with_poisoned_lock() {
+        let mut vcpu = DummyVcpu {
+            regs: Default::default(),
+            sregs: Default::default(),
+            exit: VcpuExit::Halt,
+        };
+        let devices = Mutex::new(SharedDevices {
+            serial: SerialDevice::new(std::io::sink()),
+            mmio_bus: MmioBus::new(),
+        });
+
+        let _ = std::panic::catch_unwind(|| {
+            let _guard = devices.lock().unwrap();
+            panic!("poisoning");
+        });
+
+        let mut pending = Some(1);
+        let counter = opentelemetry::global::meter("hitz")
+            .u64_counter("hitz.vcpu.exits")
+            .build();
+
+        let _ = dispatch_exit(
+            &mut vcpu,
+            &devices,
+            &DummyMem,
+            VcpuExit::Canceled,
+            &mut pending,
+            &counter,
+        );
+    }
 }
