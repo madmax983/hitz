@@ -1,6 +1,5 @@
 //! WHP shared partition state.
 
-use std::sync::Arc;
 use windows::Win32::System::Hypervisor::{WHV_PARTITION_HANDLE, WHvDeletePartition};
 
 /// Shared state for a WHP partition, accessible by all vCPUs.
