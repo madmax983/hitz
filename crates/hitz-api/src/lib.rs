@@ -321,3 +321,9 @@ mod metrics_test;
 mod efficiency;
 #[cfg(feature = "efficiency")]
 pub use efficiency::*;
+
+#[cfg(feature = "fingerprint")]
+/// Fingerprinting module for categorizing VM workload behavior.
+mod fingerprint;
+#[cfg(feature = "fingerprint")]
+pub use fingerprint::*;
