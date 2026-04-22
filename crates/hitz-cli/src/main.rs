@@ -1148,22 +1148,29 @@ fn format_error_response(status: hyper::StatusCode, resp: &str, error_prefix: &s
         } else if let Some(err) = v.get("error").and_then(|e| e.as_str()) {
             format!("✗ {error_prefix}: {}", err)
         } else {
-            let mut parts = Vec::new();
-            if let Some(obj) = v.as_object() {
-                for (k, val) in obj {
+            // ⚡ Bolt Optimization: Replace intermediate `Vec` heap allocations and `.join(...)`
+            // with an iterator chain using `.fold(String::new(), ...)` to eliminate
+            // intermediate heap allocations and multiple `format!` calls when formatting CLI error responses.
+            let parts_str = v.as_object().map_or_else(String::new, |obj| {
+                obj.iter().fold(String::new(), |mut acc, (k, val)| {
+                    use std::fmt::Write;
                     if let Some(s) = val.as_str() {
-                        parts.push(format!("{k}: {s}"));
+                        if !acc.is_empty() { let _ = write!(acc, ", "); }
+                        let _ = write!(acc, "{k}: {s}");
                     } else if let Some(n) = val.as_number() {
-                        parts.push(format!("{k}: {n}"));
+                        if !acc.is_empty() { let _ = write!(acc, ", "); }
+                        let _ = write!(acc, "{k}: {n}");
                     } else if val.is_boolean() || val.is_null() {
-                        parts.push(format!("{k}: {val}"));
+                        if !acc.is_empty() { let _ = write!(acc, ", "); }
+                        let _ = write!(acc, "{k}: {val}");
                     }
-                }
-            }
-            if parts.is_empty() {
+                    acc
+                })
+            });
+            if parts_str.is_empty() {
                 format!("✗ {error_prefix} ({status})")
             } else {
-                format!("✗ {error_prefix} ({status}): {}", parts.join(", "))
+                format!("✗ {error_prefix} ({status}): {parts_str}")
             }
         }
     } else {
