@@ -23,51 +23,63 @@ mod config;
 /// Telemetry structures representing the VM's runtime resources.
 mod metrics;
 
-pub use api::*;
-pub use config::*;
-pub use metrics::*;
+pub use crate::api::{ActionVmRequest, ApiError, CloneVmRequest, CreateVmRequest, VmAction, VmInfo, VmState};
+pub use crate::config::{
+    DEFAULT_CMDLINE, DEFAULT_CPUS, DEFAULT_GUEST_CID, DEFAULT_GUEST_IP, DEFAULT_HOST_IP,
+    DEFAULT_RAM_MIB, VMADDR_CID_HOST, VSOCK_METRICS_PORT,
+    GuestAgentMode, NetConfig, PortForward, VmConfig,
+};
+pub use crate::metrics::{
+    CpuMetrics, DiskMetrics, MemoryMetrics, MetricsRequest, MetricsSnapshot, NetMetrics, ProcMetrics,
+};
 
 #[cfg(feature = "health_check")]
 /// Health assessment module for evaluating system telemetry.
 mod health;
 #[cfg(feature = "health_check")]
-pub use health::*;
+pub use crate::health::{HealthCheck, HealthStatus, SystemHealth};
 
 #[cfg(feature = "simulator")]
 /// Simulator module for generating synthetic telemetry streams.
 mod simulator;
 #[cfg(feature = "simulator")]
-pub use simulator::*;
+pub use crate::simulator::{VmSimulator, WorkloadProfile};
 
 #[cfg(feature = "diff")]
 /// Diff module for calculating rates of change between telemetry snapshots.
 mod diff;
 #[cfg(feature = "diff")]
-pub use diff::*;
+pub use crate::diff::{DiskRate, MetricsDiff, NetRate, CalculateDiff};
 
 #[cfg(feature = "classifier")]
 /// Classifier module for determining workload type.
 mod classifier;
 #[cfg(feature = "classifier")]
-pub use classifier::*;
+pub use crate::classifier::{WorkloadClass, WorkloadClassifier};
 
 #[cfg(feature = "prometheus")]
 /// Prometheus module for converting metrics to Prometheus text format.
 mod prometheus;
 #[cfg(feature = "prometheus")]
-pub use prometheus::*;
+pub use crate::prometheus::ToPrometheus;
 
 #[cfg(feature = "carbon")]
 /// Carbon footprint estimation module.
 mod carbon;
 #[cfg(feature = "carbon")]
-pub use carbon::*;
+pub use crate::carbon::{EmissionFactors, CarbonEstimator};
 
 #[cfg(feature = "sentinel")]
 /// Sentinel module for defining rules based on metrics.
 mod sentinel;
 #[cfg(feature = "sentinel")]
-pub use sentinel::*;
+pub use crate::sentinel::{ConditionOperator, MetricTarget, SentinelCondition, SentinelRule};
+
+#[cfg(feature = "efficiency")]
+/// Efficiency scoring module for evaluating resource usage.
+mod efficiency;
+#[cfg(feature = "efficiency")]
+pub use crate::efficiency::{EfficiencyScore, EfficiencyScorer};
 
 #[cfg(test)]
 #[allow(clippy::expect_used)]
@@ -315,9 +327,3 @@ mod tests {
 #[cfg(test)]
 #[allow(missing_docs)]
 mod metrics_test;
-
-#[cfg(feature = "efficiency")]
-/// Efficiency scoring module for evaluating resource usage.
-mod efficiency;
-#[cfg(feature = "efficiency")]
-pub use efficiency::*;
