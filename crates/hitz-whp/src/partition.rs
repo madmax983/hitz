@@ -4,10 +4,10 @@ use std::sync::Arc;
 
 use hitz_hal::{Gpa, HalError, MemFlags, Partition, PartitionConfig, VcpuId};
 use windows::Win32::System::Hypervisor::{
-    WHV_MAP_GPA_RANGE_FLAGS, WHV_PARTITION_HANDLE, WHV_PARTITION_PROPERTY, WHvCreatePartition,
-    WHvDeletePartition, WHvMapGpaRange, WHvPartitionPropertyCodeLocalApicEmulationMode,
-    WHvPartitionPropertyCodeProcessorCount, WHvSetPartitionProperty, WHvSetupPartition,
-    WHvUnmapGpaRange, WHvX64LocalApicEmulationModeXApic,
+    WHV_MAP_GPA_RANGE_FLAGS, WHV_PARTITION_PROPERTY, WHvCreatePartition, WHvMapGpaRange,
+    WHvPartitionPropertyCodeLocalApicEmulationMode, WHvPartitionPropertyCodeProcessorCount,
+    WHvSetPartitionProperty, WHvSetupPartition, WHvUnmapGpaRange,
+    WHvX64LocalApicEmulationModeXApic,
 };
 
 use crate::inner::PartitionInner;
