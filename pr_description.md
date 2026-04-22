@@ -1,4 +1,7 @@
-🎯 Target: `hitz-vmm::run_loop` `handle_mmio` function.
-💣 Risk: Undecodable MMIO instructions returning `None` might incorrectly fall back and cause a panic or advance RIP incorrectly if not verified via explicit test.
-🧪 Strategy: Added `test_dispatch_exit_mmio_undecodable` unit test which feeds a block of `0xFF` instruction bytes representing a truly undecodable event sequence.
-🔬 Verification: Run `cargo test -p hitz-vmm --lib --no-default-features --target x86_64-unknown-linux-gnu run_loop::tests::test_dispatch_exit_mmio_undecodable -- --exact`
+💡 **The Spark:** I noticed we capture detailed resource metrics across VMs but lack a quick, quantifiable way to identify similarly behaving VMs at a glance.
+
+🚀 **The Feature:** Implemented `VmFingerprint` generation in the new `fingerprint` module. It quantizes a continuous `MetricsSnapshot` into a discrete, deterministic identifier (e.g. `FP-C9-R4-D0-N1`) using percentage bucketing for CPU/RAM and logarithmic magnitude bucketing for Disk/Network I/O.
+
+🔭 **The Potential:** This enables rapid clustering, pattern matching, and caching. We could easily group "Compute Heavy" or "Network Heavy" nodes based purely on their structural fingerprint, instantly spotting anomalies or noisy neighbors without deep-diving into the raw metrics stream.
+
+⚠️ **Risk:** Low. The module is fully isolated in `src/fingerprint.rs` and placed behind a `fingerprint` cargo feature flag, avoiding any impact to core hypervisor logic or existing consumers.
