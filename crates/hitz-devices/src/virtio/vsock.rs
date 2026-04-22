@@ -248,6 +248,9 @@ impl VirtioVsockDevice {
                     break; // TX descriptors are all device-readable
                 }
                 let start_len = raw.len();
+                if raw.len().saturating_add(desc.len as usize) > 65536 {
+                    break;
+                }
                 raw.resize(start_len + desc.len as usize, 0);
                 if mem.read_guest(desc.gpa, &mut raw[start_len..]).is_err() {
                     raw.truncate(start_len); // Revert on read failure
@@ -338,9 +341,10 @@ impl VirtioBackend for VirtioVsockDevice {
 
             let _ = mem.write_guest(desc.gpa, &hdr_bytes);
             if !payload.is_empty() {
-                let payload_addr =
-                    desc.gpa + u64::try_from(hdr_bytes.len()).unwrap_or(VSOCK_HDR_SIZE as u64);
-                let _ = mem.write_guest(payload_addr, &payload);
+                let offset = u64::try_from(hdr_bytes.len()).unwrap_or(VSOCK_HDR_SIZE as u64);
+                if let Some(payload_addr) = desc.gpa.checked_add(offset) {
+                    let _ = mem.write_guest(payload_addr, &payload);
+                }
             }
             rx_queue.push_used(mem, head, u32::try_from(total).unwrap_or(u32::MAX));
             injected = true;
@@ -445,7 +449,10 @@ mod tests {
         fn read_guest(&self, gpa: u64, buf: &mut [u8]) -> Result<(), HalError> {
             let mem = self.inner.lock().unwrap();
             let start = gpa as usize;
-            if start + buf.len() > mem.len() {
+            if start
+                .checked_add(buf.len())
+                .map_or(true, |end| end > mem.len())
+            {
                 return Err(HalError::MapMemory {
                     gpa,
                     size: buf.len(),
@@ -459,7 +466,10 @@ mod tests {
         fn write_guest(&self, gpa: u64, data: &[u8]) -> Result<(), HalError> {
             let mut mem = self.inner.lock().unwrap();
             let start = gpa as usize;
-            if start + data.len() > mem.len() {
+            if start
+                .checked_add(data.len())
+                .map_or(true, |end| end > mem.len())
+            {
                 return Err(HalError::MapMemory {
                     gpa,
                     size: data.len(),
@@ -579,5 +589,35 @@ mod tests {
         assert_eq!(out_hdr.len, 5);
         assert_eq!(out_hdr.dst_cid, 2);
         assert_eq!(out_payload, vec![10, 20, 30, 40, 50]);
+    }
+
+    #[test]
+
+    fn havoc_vsock_tx_oom() {
+        let (mut device, _rx_recv, _tx_send) = VirtioVsockDevice::new(3);
+        let mem = MockMem::new(0x10000);
+        let mut q = setup_queue(&mem);
+
+        // Put a packet in the RX channel
+        let hdr = VsockHdr {
+            src_cid: 2,
+            dst_cid: 3,
+            src_port: 1000,
+            dst_port: 2000,
+            len: 4,
+            r#type: VSOCK_TYPE_STREAM,
+            op: VsockOp::Rw as u16,
+            flags: 0,
+            buf_alloc: 1024,
+            fwd_cnt: 0,
+        };
+        device.rx_pending.push_back((hdr, vec![1, 2, 3, 4]));
+
+        // Create a descriptor with a GPA near u64::MAX
+        write_desc(&mem, 0, u64::MAX - 20, 100, 2, 0); // VIRTQ_DESC_F_WRITE
+        write_avail_entry(&mem, 0, 0);
+        set_avail_idx(&mem, 1);
+
+        let _ = device.poll_rx(&mut q, &mem);
     }
 }
