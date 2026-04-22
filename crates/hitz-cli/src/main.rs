@@ -1097,47 +1097,61 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
 
 // ── hitz vm * ──
 
+fn format_json_value_error(
+    v: serde_json::Value,
+    error_prefix: &str,
+    status: hyper::StatusCode,
+) -> String {
+    if let Some(msg) = v.get("message").and_then(|m| m.as_str()) {
+        return format!("✗ {error_prefix}: {}", msg);
+    }
+    if let Some(err) = v.get("error").and_then(|e| e.as_str()) {
+        return format!("✗ {error_prefix}: {}", err);
+    }
+
+    let mut parts = Vec::new();
+    if let Some(obj) = v.as_object() {
+        for (k, val) in obj {
+            if let Some(s) = val.as_str() {
+                parts.push(format!("{k}: {s}"));
+            } else if let Some(n) = val.as_number() {
+                parts.push(format!("{k}: {n}"));
+            } else if val.is_boolean() || val.is_null() {
+                parts.push(format!("{k}: {val}"));
+            }
+        }
+    }
+
+    if parts.is_empty() {
+        format!("✗ {error_prefix} ({status})")
+    } else {
+        format!("✗ {error_prefix} ({status}): {}", parts.join(", "))
+    }
+}
+
+fn format_fallback_error(resp: &str, error_prefix: &str, status: hyper::StatusCode) -> String {
+    let clean = resp.trim();
+    if clean.is_empty() {
+        return format!("✗ {error_prefix} ({status})");
+    }
+
+    let max_len = 200;
+    let display_text = if clean.chars().count() > max_len {
+        let truncated: String = clean.chars().take(max_len).collect();
+        format!("{}...", truncated)
+    } else {
+        clean.to_string()
+    };
+    format!("✗ {error_prefix} ({status}): {display_text}")
+}
+
 fn format_error_response(status: hyper::StatusCode, resp: &str, error_prefix: &str) -> String {
     let msg = if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(resp) {
         format!("✗ {error_prefix}: {}", err.message)
     } else if let Ok(v) = serde_json::from_str::<serde_json::Value>(resp) {
-        if let Some(msg) = v.get("message").and_then(|m| m.as_str()) {
-            format!("✗ {error_prefix}: {}", msg)
-        } else if let Some(err) = v.get("error").and_then(|e| e.as_str()) {
-            format!("✗ {error_prefix}: {}", err)
-        } else {
-            let mut parts = Vec::new();
-            if let Some(obj) = v.as_object() {
-                for (k, val) in obj {
-                    if let Some(s) = val.as_str() {
-                        parts.push(format!("{k}: {s}"));
-                    } else if let Some(n) = val.as_number() {
-                        parts.push(format!("{k}: {n}"));
-                    } else if val.is_boolean() || val.is_null() {
-                        parts.push(format!("{k}: {val}"));
-                    }
-                }
-            }
-            if parts.is_empty() {
-                format!("✗ {error_prefix} ({status})")
-            } else {
-                format!("✗ {error_prefix} ({status}): {}", parts.join(", "))
-            }
-        }
+        format_json_value_error(v, error_prefix, status)
     } else {
-        let clean = resp.trim();
-        if clean.is_empty() {
-            format!("✗ {error_prefix} ({status})")
-        } else {
-            let max_len = 200;
-            let display_text = if clean.chars().count() > max_len {
-                let truncated: String = clean.chars().take(max_len).collect();
-                format!("{}...", truncated)
-            } else {
-                clean.to_string()
-            };
-            format!("✗ {error_prefix} ({status}): {display_text}")
-        }
+        format_fallback_error(resp, error_prefix, status)
     };
     format!("\r\x1b[2K{}", msg)
 }

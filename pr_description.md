@@ -1,4 +1,6 @@
-🎯 Target: `hitz-vmm::run_loop` `handle_mmio` function.
-💣 Risk: Undecodable MMIO instructions returning `None` might incorrectly fall back and cause a panic or advance RIP incorrectly if not verified via explicit test.
-🧪 Strategy: Added `test_dispatch_exit_mmio_undecodable` unit test which feeds a block of `0xFF` instruction bytes representing a truly undecodable event sequence.
-🔬 Verification: Run `cargo test -p hitz-vmm --lib --no-default-features --target x86_64-unknown-linux-gnu run_loop::tests::test_dispatch_exit_mmio_undecodable -- --exact`
+Title: ⚒️ Forge: Refactor format_error_response to flatten pyramid of doom
+
+🚮 Smell: The `format_error_response` function in `crates/hitz-cli/src/main.rs` was a "Pyramid of Doom" with deeply nested `if/else if/else` blocks handling different parsing states (`ApiError`, generic JSON `Value`, and fallback text).
+✨ Solution: Extracted the inner logic into `format_json_value_error` and `format_fallback_error` helper functions, and used Guard Clauses (early returns) to flatten the structure.
+🧼 Benefit: Reduces cognitive load and improves readability by keeping functions small and focused.
+🛡️ Verification: Tests passed. No logic changed.
