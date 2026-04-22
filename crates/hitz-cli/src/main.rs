@@ -1106,22 +1106,35 @@ fn format_error_response(status: hyper::StatusCode, resp: &str, error_prefix: &s
         } else if let Some(err) = v.get("error").and_then(|e| e.as_str()) {
             format!("✗ {error_prefix}: {}", err)
         } else {
-            let mut parts = Vec::new();
-            if let Some(obj) = v.as_object() {
-                for (k, val) in obj {
-                    if let Some(s) = val.as_str() {
-                        parts.push(format!("{k}: {s}"));
-                    } else if let Some(n) = val.as_number() {
-                        parts.push(format!("{k}: {n}"));
-                    } else if val.is_boolean() || val.is_null() {
-                        parts.push(format!("{k}: {val}"));
+            // ⚡ Bolt Optimization: Removed intermediate `.collect::<Vec<_>>()` allocation and multiple `format!`
+            // heap allocations by using `.fold()` and `std::fmt::Write` to construct the string directly.
+            let parts = if let Some(obj) = v.as_object() {
+                obj.iter().fold(String::new(), |mut acc, (k, val)| {
+                    use std::fmt::Write;
+                    let is_valid =
+                        val.is_string() || val.is_number() || val.is_boolean() || val.is_null();
+                    if is_valid {
+                        if !acc.is_empty() {
+                            acc.push_str(", ");
+                        }
+                        if let Some(s) = val.as_str() {
+                            let _ = write!(acc, "{k}: {s}");
+                        } else if let Some(n) = val.as_number() {
+                            let _ = write!(acc, "{k}: {n}");
+                        } else {
+                            let _ = write!(acc, "{k}: {val}");
+                        }
                     }
-                }
-            }
+                    acc
+                })
+            } else {
+                String::new()
+            };
+
             if parts.is_empty() {
                 format!("✗ {error_prefix} ({status})")
             } else {
-                format!("✗ {error_prefix} ({status}): {}", parts.join(", "))
+                format!("✗ {error_prefix} ({status}): {parts}")
             }
         }
     } else {
@@ -1991,26 +2004,39 @@ fn handle_vm_timeline(args: &VmTimelineArgs) -> Result<()> {
                 HealthStatus::Critical => Cell::new("Critical").fg(Color::Red),
             };
 
-            let mut added_reasons = Vec::new();
-            for reason in &health.reasons {
-                if !current_reasons.contains(reason) {
-                    added_reasons.push(format!("+ {reason}"));
-                }
-            }
+            // ⚡ Bolt Optimization: Eliminated intermediate `Vec` allocations and multiple `format!` heap
+            // allocations per loop iteration by folding directly into a single `String`.
+            let added_reasons = health
+                .reasons
+                .iter()
+                .filter(|r| !current_reasons.contains(r))
+                .fold(String::new(), |mut acc, reason| {
+                    use std::fmt::Write;
+                    if !acc.is_empty() {
+                        acc.push('\n');
+                    }
+                    let _ = write!(acc, "+ {reason}");
+                    acc
+                });
 
-            let mut removed_reasons = Vec::new();
-            for reason in &current_reasons {
-                if !health.reasons.contains(reason) {
-                    removed_reasons.push(format!("- {reason}"));
-                }
-            }
+            let removed_reasons = current_reasons
+                .iter()
+                .filter(|r| !health.reasons.contains(r))
+                .fold(String::new(), |mut acc, reason| {
+                    use std::fmt::Write;
+                    if !acc.is_empty() {
+                        acc.push('\n');
+                    }
+                    let _ = write!(acc, "- {reason}");
+                    acc
+                });
 
             if status_changed || !added_reasons.is_empty() || !removed_reasons.is_empty() {
                 let _ = table.add_row([
                     Cell::new(time_str),
                     status_cell,
-                    Cell::new(added_reasons.join("\n")),
-                    Cell::new(removed_reasons.join("\n")),
+                    Cell::new(added_reasons),
+                    Cell::new(removed_reasons),
                 ]);
             }
 
