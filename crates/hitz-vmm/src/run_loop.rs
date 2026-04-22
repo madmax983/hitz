@@ -433,6 +433,109 @@ pub(crate) fn advance_rip_with_rax<V: Vcpu>(
 #[cfg(test)]
 #[allow(clippy::expect_used, clippy::default_trait_access)]
 mod tests {
+
+    #[test]
+    fn test_handle_mmio_read_success() {
+        let mut vcpu = DummyVcpu {
+            regs: hitz_hal::StandardRegs {
+                rip: 100,
+                rax: 0,
+                ..Default::default()
+            },
+            sregs: Default::default(),
+            exit: VcpuExit::Halt,
+        };
+        let devices = Mutex::new(SharedDevices {
+            serial: SerialDevice::new(std::io::sink()),
+            mmio_bus: MmioBus::new(),
+        });
+
+        let mut pending = None;
+        let mmio = hitz_hal::MmioExit {
+            gpa: 0x1000,
+            data: [0; 8],
+            len: 4,
+            is_write: false,
+            // 8B 05 00 00 00 00 (MOV eax, [rip+disp32])
+            instruction_bytes: [
+                0x8B, 0x05, 0x00, 0x00, 0x00, 0x00, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            ],
+            instruction_byte_count: 6,
+            instruction_len: 6,
+        };
+
+        handle_mmio(&mut vcpu, &devices, &DummyMem, &mmio, &mut pending)
+            .expect("handle_mmio should succeed");
+        assert_eq!(vcpu.regs.rip, 106);
+    }
+
+    #[test]
+    fn test_handle_mmio_write_success() {
+        let mut vcpu = DummyVcpu {
+            regs: hitz_hal::StandardRegs {
+                rip: 100,
+                rax: 0x1234, // We'll write this
+                ..Default::default()
+            },
+            sregs: Default::default(),
+            exit: VcpuExit::Halt,
+        };
+        let devices = Mutex::new(SharedDevices {
+            serial: SerialDevice::new(std::io::sink()),
+            mmio_bus: MmioBus::new(),
+        });
+
+        let mut pending = None;
+        let mmio = hitz_hal::MmioExit {
+            gpa: 0x1000,
+            data: [0; 8],
+            len: 4,
+            is_write: true,
+            // 89 05 00 00 00 00 (MOV [rip+disp32], eax)
+            instruction_bytes: [
+                0x89, 0x05, 0x00, 0x00, 0x00, 0x00, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            ],
+            instruction_byte_count: 6,
+            instruction_len: 6,
+        };
+
+        handle_mmio(&mut vcpu, &devices, &DummyMem, &mmio, &mut pending)
+            .expect("handle_mmio should succeed");
+        assert_eq!(vcpu.regs.rip, 106);
+    }
+
+    #[test]
+    fn test_handle_mmio_undecodable() {
+        let mut vcpu = DummyVcpu {
+            regs: hitz_hal::StandardRegs {
+                rip: 100,
+                ..Default::default()
+            },
+            sregs: Default::default(),
+            exit: VcpuExit::Halt,
+        };
+        let devices = Mutex::new(SharedDevices {
+            serial: SerialDevice::new(std::io::sink()),
+            mmio_bus: MmioBus::new(),
+        });
+
+        let mut pending = None;
+        let mmio = hitz_hal::MmioExit {
+            gpa: 0x1000,
+            data: [0; 8],
+            len: 4,
+            is_write: false,
+            // 0xFF 0xFF is typically invalid/undecodable
+            instruction_bytes: [0xFF, 0xFF, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            instruction_byte_count: 2,
+            instruction_len: 2, // WHP provided length fallback
+        };
+
+        handle_mmio(&mut vcpu, &devices, &DummyMem, &mmio, &mut pending)
+            .expect("should succeed using fallback");
+        assert_eq!(vcpu.regs.rip, 102); // Advanced by WHP instruction length
+    }
+
     use super::*;
 
     /// Regression guard: the exit counter must not panic when the global meter
