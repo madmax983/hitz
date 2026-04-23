@@ -1512,7 +1512,13 @@ async fn handle_vm_list(args: &VmListArgs) -> Result<()> {
             use comfy_table::{Cell, Color, Table};
             let mut table = Table::new();
             let _ = table.load_preset(UTF8_FULL_CONDENSED);
-            let _ = table.set_header(["ID", "State", "RAM (MiB)", "CPUs", "Exit Reason"]);
+            let _ = table.set_header([
+                Cell::new("ID").add_attribute(comfy_table::Attribute::Bold),
+                Cell::new("State").add_attribute(comfy_table::Attribute::Bold),
+                Cell::new("RAM (MiB)").add_attribute(comfy_table::Attribute::Bold),
+                Cell::new("CPUs").add_attribute(comfy_table::Attribute::Bold),
+                Cell::new("Exit Reason").add_attribute(comfy_table::Attribute::Bold),
+            ]);
 
             for info in vms {
                 let state_cell = match info.state {

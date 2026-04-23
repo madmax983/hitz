@@ -1,4 +1,5 @@
-💡 What: Replaced intermediate vector allocations and string joins with iterator chains and std::fmt::Write in hitz-cli's health monitor.
-🎯 Why: The monitor loop unnecessarily allocated temporary Vecs and performed multiple format! heap allocations per frame/update.
-📊 Impact: Eliminates several heap allocations per monitor loop iteration.
-🔭 Measurement: Review monitor_health function for zero-allocation formatting.
+🎨 Mosaic: UI Polish for hitz-cli
+
+🖌️ **Before:** The VM list dashboard table (`handle_vm_list` in `hitz-cli/src/main.rs`) did not have bolded text in its headers, failing to establish visual hierarchy and making it inconsistent with the rest of the CLI tools.
+✨ **After:** Added bold formatting to the "ID", "State", "RAM (MiB)", "CPUs", and "Exit Reason" cells using `comfy_table::Attribute::Bold`.
+🖼️ **Visuals:** The `hitz vm list` command now features clearly styled headers that cleanly separate the metadata column titles from the dynamic data values, satisfying the 3-Click Rule for quick dashboard scanning.
