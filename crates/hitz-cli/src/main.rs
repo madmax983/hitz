@@ -1155,13 +1155,19 @@ fn format_error_response(status: hyper::StatusCode, resp: &str, error_prefix: &s
                 obj.iter().fold(String::new(), |mut acc, (k, val)| {
                     use std::fmt::Write;
                     if let Some(s) = val.as_str() {
-                        if !acc.is_empty() { let _ = write!(acc, ", "); }
+                        if !acc.is_empty() {
+                            let _ = write!(acc, ", ");
+                        }
                         let _ = write!(acc, "{k}: {s}");
                     } else if let Some(n) = val.as_number() {
-                        if !acc.is_empty() { let _ = write!(acc, ", "); }
+                        if !acc.is_empty() {
+                            let _ = write!(acc, ", ");
+                        }
                         let _ = write!(acc, "{k}: {n}");
                     } else if val.is_boolean() || val.is_null() {
-                        if !acc.is_empty() { let _ = write!(acc, ", "); }
+                        if !acc.is_empty() {
+                            let _ = write!(acc, ", ");
+                        }
                         let _ = write!(acc, "{k}: {val}");
                     }
                     acc
@@ -2054,26 +2060,40 @@ fn handle_vm_timeline(args: &VmTimelineArgs) -> Result<()> {
                 HealthStatus::Critical => Cell::new("Critical").fg(Color::Red),
             };
 
-            let mut added_reasons = Vec::new();
-            for reason in &health.reasons {
-                if !current_reasons.contains(reason) {
-                    added_reasons.push(format!("+ {reason}"));
-                }
-            }
+            // ⚡ Bolt Optimization: Replace intermediate `Vec` heap allocations and `.join(...)`
+            // with an iterator chain using `.fold(String::new(), ...)` to eliminate
+            // intermediate heap allocations and multiple `format!` calls when formatting reasons.
+            let added_reasons = health
+                .reasons
+                .iter()
+                .filter(|reason| !current_reasons.contains(*reason))
+                .fold(String::new(), |mut acc, reason| {
+                    use std::fmt::Write;
+                    if !acc.is_empty() {
+                        let _ = write!(acc, "\n");
+                    }
+                    let _ = write!(acc, "+ {reason}");
+                    acc
+                });
 
-            let mut removed_reasons = Vec::new();
-            for reason in &current_reasons {
-                if !health.reasons.contains(reason) {
-                    removed_reasons.push(format!("- {reason}"));
-                }
-            }
+            let removed_reasons = current_reasons
+                .iter()
+                .filter(|reason| !health.reasons.contains(*reason))
+                .fold(String::new(), |mut acc, reason| {
+                    use std::fmt::Write;
+                    if !acc.is_empty() {
+                        let _ = write!(acc, "\n");
+                    }
+                    let _ = write!(acc, "- {reason}");
+                    acc
+                });
 
             if status_changed || !added_reasons.is_empty() || !removed_reasons.is_empty() {
                 let _ = table.add_row([
                     Cell::new(time_str),
                     status_cell,
-                    Cell::new(added_reasons.join("\n")),
-                    Cell::new(removed_reasons.join("\n")),
+                    Cell::new(added_reasons),
+                    Cell::new(removed_reasons),
                 ]);
             }
 
