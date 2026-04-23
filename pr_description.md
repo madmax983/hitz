@@ -1,24 +1,19 @@
-# 🔭 Vantage: Spec for TCP Echo Test Initramfs
+# 🔒 Warden: Security Fixes for Virtio Devices (OOM & Integer Overflows)
 
-👤 **User Story:** As a VMM Developer, I want a test initramfs containing a TCP echo server, so that I can automatically verify bi-directional traffic flow across forwarded ports in integration tests.
+## 🦠 Threat
+The `hitz-devices` crate processes untrusted inputs directly from the guest VM via virtio descriptors. In `virtio/net.rs` and `virtio/block.rs`, the host explicitly trusted the guest-provided `desc.len` when resizing internal buffers or allocating vectors (`vec![0u8; len as usize]`). A malicious guest providing a massive `desc.len` (e.g., `u32::MAX`) could easily exhaust host memory, causing an Out-Of-Memory (OOM) panic and a Denial-of-Service (DoS) condition on the entire VMM.
 
-✅ **Acceptance Criteria:**
-- Build a minimal Linux initramfs with a TCP listener on port 9999 that echoes data.
-- The `phase10_port_forward_tcp` test must connect to `127.0.0.1:19999` and successfully receive an echoed payload back within a 5-second timeout.
-- Provide a reproducible build script for the initramfs.
+Additionally, in `virtio/block.rs`, an integer overflow existed where `sector * SECTOR_SIZE` was evaluated *before* validating that `sector` was within the disk capacity. A massive `sector` value provided by the guest could cause a host panic when compiled with overflow checks enabled.
 
-🚫 **Out of Scope:**
-- UDP port forwarding verification.
-- Full Linux distributions (must be minimal).
-🌟 Nova: Workload Imbalance Analyzer
+## 🛡️ Defense
+- **Contain (virtio-net):** Implemented a safety cap on `desc.len` accumulation in `virtio/net.rs`. Host buffers will now gracefully `break` and stop consuming descriptors if the accumulated frame size exceeds a realistic maximum (65536 bytes).
+- **Sanitize (virtio-block):** Enforced a hard 16MB maximum on incoming read/write request lengths in `virtio/block.rs`.
+- **Sanitize (virtio-block):** Moved the calculation of `byte_offset` *after* validating that `sector < self.capacity`.
+- **Fortify (virtio-block):** Explicitly implemented `saturating_add` and `checked_mul` bounds checking to ensure offset computations cannot integer overflow, falling back to safe limits that will trigger standard bounds errors.
 
-💡 **The Spark:** "We have per-core CPU metrics but don't expose when a single thread is bottlenecking an otherwise idle multi-core VM."
-🚀 **The Feature:** "Implemented `CoreImbalanceAnalyzer` trait to calculate per-core standard deviation and a normalized imbalance score."
-🔮 **The Potential:** "Could be used to recommend downscaling vCPUs when workloads are strictly single-threaded, improving overall host density."
-⚠️ **Risk:** "Low. Isolated in `crates/hitz-api/src/imbalance.rs` behind the `imbalance` feature flag."
-Title: 🎻 Bard: [documentation update]
+## 💥 Severity
+Critical - An untrusted guest could intentionally trigger an OOM panic or an integer overflow panic on the host, crashing the VMM and potentially affecting neighboring partitions.
 
-📖 Chapter: Documented hitz-vmm cpio module and havoc tests
-🔦 Insight: Clarified CpioBuilder usage and explained the chaos engineering test logic
-🧪 Example: Added executable doctests for CpioBuilder.
-🖼️ Preview: (No screenshot available)
+## 🧪 Verification
+- `cargo audit` passed (no new dependency vulnerabilities).
+- Implemented test cases (`havoc_net_tx_oom`, `havoc_blk_read_oom`, and `havoc_blk_write_oom`) that explicitly send massively large bounds. The application now bounds the sizes correctly and returns `VIRTIO_BLK_S_IOERR` or truncates gracefully without panicking.
