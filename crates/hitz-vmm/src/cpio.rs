@@ -9,6 +9,25 @@
 use std::io::Write;
 
 /// Builds a newc cpio archive in memory.
+///
+/// # Abstract
+///
+/// This struct provides a minimal implementation for building `newc` format
+/// cpio archives directly in memory. It is primarily used to construct the
+/// initramfs injected into the guest during the Linux boot sequence.
+///
+/// # The Hero's Journey
+///
+/// ```rust
+/// use hitz_vmm::CpioBuilder;
+///
+/// // Create a new archive, add a shell script, and finish it to get the bytes
+/// let archive_bytes = CpioBuilder::new()
+///     .add_file("init", b"#!/bin/sh\necho 'Hello from Hitz!'\n", 0o755)
+///     .finish();
+///
+/// assert!(archive_bytes.len() > 110);
+/// ```
 pub struct CpioBuilder {
     data: Vec<u8>,
     inode: u32,
@@ -16,6 +35,11 @@ pub struct CpioBuilder {
 
 impl CpioBuilder {
     /// Create an empty builder.
+    ///
+    /// # Abstract
+    ///
+    /// Initializes a new builder with an empty internal buffer and an initial
+    /// inode number of 1.
     #[must_use]
     pub const fn new() -> Self {
         Self {
@@ -25,6 +49,11 @@ impl CpioBuilder {
     }
 
     /// Create a builder with pre-allocated capacity.
+    ///
+    /// # Abstract
+    ///
+    /// Initializes a new builder with an internal buffer pre-allocated to the
+    /// specified capacity, avoiding reallocations when building large archives.
     #[must_use]
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
@@ -34,6 +63,11 @@ impl CpioBuilder {
     }
 
     /// Add a regular file entry.
+    ///
+    /// # Abstract
+    ///
+    /// Appends a new file entry to the cpio archive with the specified path, content,
+    /// and Unix permission bits.
     ///
     /// * `path` — file path inside the archive (no leading `/`)
     /// * `content` — file bytes
@@ -45,6 +79,11 @@ impl CpioBuilder {
     }
 
     /// Finish the archive by appending the TRAILER!!! entry.
+    ///
+    /// # Abstract
+    ///
+    /// Appends the required "TRAILER!!!" entry to signal the end of the cpio
+    /// archive and returns the fully assembled byte vector.
     #[must_use]
     pub fn finish(mut self) -> Vec<u8> {
         self.append_entry("TRAILER!!!", &[], 0);
