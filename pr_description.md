@@ -1,4 +1,9 @@
-💡 What: Replaced intermediate vector allocations and string joins with iterator chains and std::fmt::Write in hitz-cli's health monitor.
-🎯 Why: The monitor loop unnecessarily allocated temporary Vecs and performed multiple format! heap allocations per frame/update.
-📊 Impact: Eliminates several heap allocations per monitor loop iteration.
-🔭 Measurement: Review monitor_health function for zero-allocation formatting.
+🗺️ Atlas: [architectural change] explicit exports in hitz-api
+
+🕸️ Tangle: The wildcard exports (`pub use api::*;` etc.) in `crates/hitz-api/src/lib.rs` caused trait/type pollution and made module boundaries unclear, leading to a "Shotgun" architectural smell.
+
+📐 Blueprint: Replaced all `pub use module::*` statements with explicit explicit exports for each of the public structs, enums, constants, and traits.
+
+🧱 Stability: Reduced coupling, cleaner namespace, and clearer module contracts. Compile times shouldn't be affected.
+
+🔬 Verification: Builds successfully via `cargo check` and `cargo test`. All doc tests pass. Verified the file contents to ensure all explicit exports are correct.
