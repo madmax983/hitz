@@ -148,11 +148,23 @@ impl VirtioBlockDevice {
         mem: &dyn GuestMemAccess,
         total_written: &mut u32,
     ) -> u8 {
-        let byte_offset = sector * SECTOR_SIZE;
+        if len > 16_777_216 {
+            // Max 16MB per request to prevent OOM
+            return VIRTIO_BLK_S_IOERR;
+        }
+
         let data_len = u64::from(len);
+        let capacity_bytes = self.capacity.checked_mul(SECTOR_SIZE).unwrap_or(0);
 
         // Bounds check.
-        if sector >= self.capacity || byte_offset + data_len > self.capacity * SECTOR_SIZE {
+        if sector >= self.capacity {
+            tracing::warn!(sector, len, capacity = self.capacity, "read out of bounds");
+            return VIRTIO_BLK_S_IOERR;
+        }
+
+        let byte_offset = sector * SECTOR_SIZE;
+
+        if byte_offset.saturating_add(data_len) > capacity_bytes {
             tracing::warn!(sector, len, capacity = self.capacity, "read out of bounds");
             return VIRTIO_BLK_S_IOERR;
         }
@@ -552,5 +564,31 @@ mod tests {
         // Check status is IOERR.
         let status = mem.read_bytes(STATUS_GPA, 1);
         assert_eq!(status[0], VIRTIO_BLK_S_IOERR);
+    }
+
+    #[test]
+    fn havoc_blk_read_oom() {
+        let f = create_temp_disk(1);
+        let mut dev = VirtioBlockDevice::new(f).unwrap();
+        let mem = MockMem::new(0x10000);
+        let mut q = setup_queue(&mem);
+
+        // Create a massive desc length
+        setup_request_chain(&mem, 0, VIRTIO_BLK_T_IN, 0, u32::MAX, true);
+
+        dev.process_queue(0, &mut q, &mem);
+    }
+
+    #[test]
+    fn havoc_blk_write_oom() {
+        let f = create_temp_disk(1);
+        let mut dev = VirtioBlockDevice::new(f).unwrap();
+        let mem = MockMem::new(0x10000);
+        let mut q = setup_queue(&mem);
+
+        // Create a massive desc length
+        setup_request_chain(&mem, 0, VIRTIO_BLK_T_OUT, 0, u32::MAX, false);
+
+        dev.process_queue(0, &mut q, &mem);
     }
 }

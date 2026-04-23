@@ -1155,13 +1155,19 @@ fn format_error_response(status: hyper::StatusCode, resp: &str, error_prefix: &s
                 obj.iter().fold(String::new(), |mut acc, (k, val)| {
                     use std::fmt::Write;
                     if let Some(s) = val.as_str() {
-                        if !acc.is_empty() { let _ = write!(acc, ", "); }
+                        if !acc.is_empty() {
+                            let _ = write!(acc, ", ");
+                        }
                         let _ = write!(acc, "{k}: {s}");
                     } else if let Some(n) = val.as_number() {
-                        if !acc.is_empty() { let _ = write!(acc, ", "); }
+                        if !acc.is_empty() {
+                            let _ = write!(acc, ", ");
+                        }
                         let _ = write!(acc, "{k}: {n}");
                     } else if val.is_boolean() || val.is_null() {
-                        if !acc.is_empty() { let _ = write!(acc, ", "); }
+                        if !acc.is_empty() {
+                            let _ = write!(acc, ", ");
+                        }
                         let _ = write!(acc, "{k}: {val}");
                     }
                     acc

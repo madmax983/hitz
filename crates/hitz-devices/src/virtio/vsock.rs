@@ -451,7 +451,7 @@ mod tests {
             let start = gpa as usize;
             if start
                 .checked_add(buf.len())
-                .map_or(true, |end| end > mem.len())
+                .is_none_or(|end| end > mem.len())
             {
                 return Err(HalError::MapMemory {
                     gpa,
@@ -468,7 +468,7 @@ mod tests {
             let start = gpa as usize;
             if start
                 .checked_add(data.len())
-                .map_or(true, |end| end > mem.len())
+                .is_none_or(|end| end > mem.len())
             {
                 return Err(HalError::MapMemory {
                     gpa,
