@@ -327,3 +327,9 @@ pub use efficiency::*;
 mod fingerprint;
 #[cfg(feature = "fingerprint")]
 pub use fingerprint::*;
+
+#[cfg(feature = "imbalance")]
+/// Imbalance scoring module for evaluating per-core CPU utilization imbalance.
+mod imbalance;
+#[cfg(feature = "imbalance")]
+pub use imbalance::*;
