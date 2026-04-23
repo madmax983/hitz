@@ -1643,162 +1643,7 @@ async fn handle_vm_top(args: &VmIdArgs) -> Result<()> {
         loop {
             // Draw UI
             let _ = terminal.draw(|f| {
-                let size = f.area();
-                let main_chunks = Layout::default()
-                    .direction(Direction::Vertical)
-                    .constraints([
-                        Constraint::Length(3), // Header
-                        Constraint::Length(4), // CPU & Mem Gauges
-                        Constraint::Min(5),    // Main content (Tables)
-                    ])
-                    .split(size);
-
-                // Header
-                let header = Paragraph::new(format!("Hitz Top - VM: {}", args.id))
-                    .style(
-                        Style::default()
-                            .fg(Color::Cyan)
-                            .add_modifier(Modifier::BOLD),
-                    )
-                    .block(Block::default().borders(Borders::ALL));
-                f.render_widget(header, main_chunks[0]);
-
-                if let Some(ref err) = last_err {
-                    let err_p = Paragraph::new(err.as_str())
-                        .style(Style::default().fg(Color::Red))
-                        .block(Block::default().borders(Borders::ALL).title("Error"));
-                    f.render_widget(err_p, main_chunks[1]);
-                    return;
-                }
-
-                if let Some(ref snap) = last_snap {
-                    let top_chunks = Layout::default()
-                        .direction(Direction::Horizontal)
-                        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
-                        .split(main_chunks[1]);
-
-                    // CPU Gauge
-                    let cpu_label = format!(
-                        "{:.1}% (Load: {:.2}, {:.2}, {:.2})",
-                        snap.cpu.total_pct,
-                        snap.cpu.load_avg[0],
-                        snap.cpu.load_avg[1],
-                        snap.cpu.load_avg[2]
-                    );
-                    let cpu_gauge = Gauge::default()
-                        .block(Block::default().title("CPU").borders(Borders::ALL))
-                        .gauge_style(Style::default().fg(Color::Green))
-                        .percent((snap.cpu.total_pct as u16).min(100))
-                        .label(cpu_label);
-                    f.render_widget(cpu_gauge, top_chunks[0]);
-
-                    // Memory Gauge
-                    let used_mb = snap.memory.used_bytes / (1024 * 1024);
-                    let total_mb = snap.memory.total_bytes / (1024 * 1024);
-                    let mem_pct = if total_mb > 0 {
-                        ((used_mb as f64 / total_mb as f64) * 100.0) as u16
-                    } else {
-                        0
-                    };
-                    let mem_label = format!("{used_mb} MB / {total_mb} MB");
-                    let mem_gauge = Gauge::default()
-                        .block(Block::default().title("Memory").borders(Borders::ALL))
-                        .gauge_style(Style::default().fg(Color::Yellow))
-                        .percent(mem_pct.min(100))
-                        .label(mem_label);
-                    f.render_widget(mem_gauge, top_chunks[1]);
-
-                    let bottom_chunks = Layout::default()
-                        .direction(Direction::Horizontal)
-                        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
-                        .split(main_chunks[2]);
-
-                    let io_chunks = Layout::default()
-                        .direction(Direction::Vertical)
-                        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
-                        .split(bottom_chunks[0]);
-
-                    // Disk Table
-                    // ⚡ Bolt Optimization: Removed intermediate `.collect::<Vec<_>>()` allocation by passing
-                    // the iterator directly to `Table::new`. We also replaced `vec![...]` with
-                    // static arrays `[...]` for `Row::new` to eliminate heap allocations per frame on the UI hot path.
-                    let disk_table = Table::new(
-                        snap.disks.iter().map(|d| {
-                            Row::new([
-                                Cell::from(d.name.as_str()),
-                                Cell::from(format!("{}", d.read_bytes / 1024)),
-                                Cell::from(format!("{}", d.write_bytes / 1024)),
-                            ])
-                        }),
-                        [
-                            Constraint::Percentage(40),
-                            Constraint::Percentage(30),
-                            Constraint::Percentage(30),
-                        ],
-                    )
-                    .header(
-                        Row::new(["Device", "Read KB", "Write KB"])
-                            .style(Style::default().add_modifier(Modifier::BOLD)),
-                    )
-                    .block(Block::default().title("Disks").borders(Borders::ALL));
-                    f.render_widget(disk_table, io_chunks[0]);
-
-                    // Network Table
-                    // ⚡ Bolt Optimization: Replaced `vec![...]` with arrays for zero-allocation rows.
-                    let net_table = Table::new(
-                        snap.networks.iter().map(|n| {
-                            Row::new([
-                                Cell::from(n.interface.as_str()),
-                                Cell::from(format!("{}", n.rx_bytes / 1024)),
-                                Cell::from(format!("{}", n.tx_bytes / 1024)),
-                            ])
-                        }),
-                        [
-                            Constraint::Percentage(40),
-                            Constraint::Percentage(30),
-                            Constraint::Percentage(30),
-                        ],
-                    )
-                    .header(
-                        Row::new(["Interface", "Rx KB", "Tx KB"])
-                            .style(Style::default().add_modifier(Modifier::BOLD)),
-                    )
-                    .block(Block::default().title("Networks").borders(Borders::ALL));
-                    f.render_widget(net_table, io_chunks[1]);
-
-                    // Processes Table
-                    // ⚡ Bolt Optimization: Replaced `vec![...]` with arrays for zero-allocation rows.
-                    let proc_table = Table::new(
-                        snap.processes.iter().map(|p| {
-                            Row::new([
-                                Cell::from(p.pid.to_string()),
-                                Cell::from(p.name.as_str()),
-                                Cell::from(format!("{:.1}%", p.cpu_pct)),
-                                Cell::from(format!("{} MB", p.rss_bytes / (1024 * 1024))),
-                            ])
-                        }),
-                        [
-                            Constraint::Percentage(15),
-                            Constraint::Percentage(45),
-                            Constraint::Percentage(20),
-                            Constraint::Percentage(20),
-                        ],
-                    )
-                    .header(
-                        Row::new(["PID", "Name", "CPU", "RSS"])
-                            .style(Style::default().add_modifier(Modifier::BOLD)),
-                    )
-                    .block(
-                        Block::default()
-                            .title("Top Processes")
-                            .borders(Borders::ALL),
-                    );
-                    f.render_widget(proc_table, bottom_chunks[1]);
-                } else if last_err.is_none() {
-                    let loading = Paragraph::new("Loading metrics...")
-                        .block(Block::default().borders(Borders::ALL));
-                    f.render_widget(loading, main_chunks[1]);
-                }
+                draw_vm_top_ui(f, &args.id, last_err.as_deref(), last_snap.as_ref());
             })?;
 
             // Event handling
@@ -1858,6 +1703,180 @@ async fn handle_vm_top(args: &VmIdArgs) -> Result<()> {
 
     res
 }
+
+#[allow(
+    clippy::too_many_lines,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss
+)]
+fn draw_vm_top_ui(
+    f: &mut ratatui::Frame<'_>,
+    vm_id: &str,
+    last_err: Option<&str>,
+    last_snap: Option<&hitz_api::MetricsSnapshot>,
+) {
+    use ratatui::{
+        layout::{Constraint, Direction, Layout},
+        style::{Color, Modifier, Style},
+        widgets::{Block, Borders, Cell, Gauge, Paragraph, Row, Table},
+    };
+
+    let size = f.area();
+    let main_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(3), // Header
+            Constraint::Length(4), // CPU & Mem Gauges
+            Constraint::Min(5),    // Main content (Tables)
+        ])
+        .split(size);
+
+    // Header
+    let header = Paragraph::new(format!("Hitz Top - VM: {}", vm_id))
+        .style(
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        )
+        .block(Block::default().borders(Borders::ALL));
+    f.render_widget(header, main_chunks[0]);
+
+    if let Some(ref err) = last_err {
+        let err_p = Paragraph::new(err.as_str())
+            .style(Style::default().fg(Color::Red))
+            .block(Block::default().borders(Borders::ALL).title("Error"));
+        f.render_widget(err_p, main_chunks[1]);
+        return;
+    }
+
+    if let Some(ref snap) = last_snap {
+        let top_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+            .split(main_chunks[1]);
+
+        // CPU Gauge
+        let cpu_label = format!(
+            "{:.1}% (Load: {:.2}, {:.2}, {:.2})",
+            snap.cpu.total_pct, snap.cpu.load_avg[0], snap.cpu.load_avg[1], snap.cpu.load_avg[2]
+        );
+        let cpu_gauge = Gauge::default()
+            .block(Block::default().title("CPU").borders(Borders::ALL))
+            .gauge_style(Style::default().fg(Color::Green))
+            .percent((snap.cpu.total_pct as u16).min(100))
+            .label(cpu_label);
+        f.render_widget(cpu_gauge, top_chunks[0]);
+
+        // Memory Gauge
+        let used_mb = snap.memory.used_bytes / (1024 * 1024);
+        let total_mb = snap.memory.total_bytes / (1024 * 1024);
+        let mem_pct = if total_mb > 0 {
+            ((used_mb as f64 / total_mb as f64) * 100.0) as u16
+        } else {
+            0
+        };
+        let mem_label = format!("{used_mb} MB / {total_mb} MB");
+        let mem_gauge = Gauge::default()
+            .block(Block::default().title("Memory").borders(Borders::ALL))
+            .gauge_style(Style::default().fg(Color::Yellow))
+            .percent(mem_pct.min(100))
+            .label(mem_label);
+        f.render_widget(mem_gauge, top_chunks[1]);
+
+        let bottom_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+            .split(main_chunks[2]);
+
+        let io_chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+            .split(bottom_chunks[0]);
+
+        // Disk Table
+        // ⚡ Bolt Optimization: Removed intermediate `.collect::<Vec<_>>()` allocation by passing
+        // the iterator directly to `Table::new`. We also replaced `vec![...]` with
+        // static arrays `[...]` for `Row::new` to eliminate heap allocations per frame on the UI hot path.
+        let disk_table = Table::new(
+            snap.disks.iter().map(|d| {
+                Row::new([
+                    Cell::from(d.name.as_str()),
+                    Cell::from(format!("{}", d.read_bytes / 1024)),
+                    Cell::from(format!("{}", d.write_bytes / 1024)),
+                ])
+            }),
+            [
+                Constraint::Percentage(40),
+                Constraint::Percentage(30),
+                Constraint::Percentage(30),
+            ],
+        )
+        .header(
+            Row::new(["Device", "Read KB", "Write KB"])
+                .style(Style::default().add_modifier(Modifier::BOLD)),
+        )
+        .block(Block::default().title("Disks").borders(Borders::ALL));
+        f.render_widget(disk_table, io_chunks[0]);
+
+        // Network Table
+        // ⚡ Bolt Optimization: Replaced `vec![...]` with arrays for zero-allocation rows.
+        let net_table = Table::new(
+            snap.networks.iter().map(|n| {
+                Row::new([
+                    Cell::from(n.interface.as_str()),
+                    Cell::from(format!("{}", n.rx_bytes / 1024)),
+                    Cell::from(format!("{}", n.tx_bytes / 1024)),
+                ])
+            }),
+            [
+                Constraint::Percentage(40),
+                Constraint::Percentage(30),
+                Constraint::Percentage(30),
+            ],
+        )
+        .header(
+            Row::new(["Interface", "Rx KB", "Tx KB"])
+                .style(Style::default().add_modifier(Modifier::BOLD)),
+        )
+        .block(Block::default().title("Networks").borders(Borders::ALL));
+        f.render_widget(net_table, io_chunks[1]);
+
+        // Processes Table
+        // ⚡ Bolt Optimization: Replaced `vec![...]` with arrays for zero-allocation rows.
+        let proc_table = Table::new(
+            snap.processes.iter().map(|p| {
+                Row::new([
+                    Cell::from(p.pid.to_string()),
+                    Cell::from(p.name.as_str()),
+                    Cell::from(format!("{:.1}%", p.cpu_pct)),
+                    Cell::from(format!("{} MB", p.rss_bytes / (1024 * 1024))),
+                ])
+            }),
+            [
+                Constraint::Percentage(15),
+                Constraint::Percentage(45),
+                Constraint::Percentage(20),
+                Constraint::Percentage(20),
+            ],
+        )
+        .header(
+            Row::new(["PID", "Name", "CPU", "RSS"])
+                .style(Style::default().add_modifier(Modifier::BOLD)),
+        )
+        .block(
+            Block::default()
+                .title("Top Processes")
+                .borders(Borders::ALL),
+        );
+        f.render_widget(proc_table, bottom_chunks[1]);
+    } else if last_err.is_none() {
+        let loading =
+            Paragraph::new("Loading metrics...").block(Block::default().borders(Borders::ALL));
+        f.render_widget(loading, main_chunks[1]);
+    }
+}
+
 async fn handle_vm_metrics(args: &VmIdArgs) -> Result<()> {
     use crossterm::style::Stylize;
     use std::io::Write;

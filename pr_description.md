@@ -1,4 +1,6 @@
-💡 What: Replaced intermediate vector allocations and string joins with iterator chains and std::fmt::Write in hitz-cli's health monitor.
-🎯 Why: The monitor loop unnecessarily allocated temporary Vecs and performed multiple format! heap allocations per frame/update.
-📊 Impact: Eliminates several heap allocations per monitor loop iteration.
-🔭 Measurement: Review monitor_health function for zero-allocation formatting.
+# ⚒️ Forge: Extract UI rendering in handle_vm_top
+
+- 🚽 Smell: The UI rendering logic inside `handle_vm_top` is over 150 lines long, nested deeply inside the terminal drawing loop, creating a "God Function" that is difficult to read.
+- ✨ Solution: Extracted the entire frame rendering block into a separate helper function `draw_vm_top_ui`.
+- 🧹 Benefit: Greatly reduces the cognitive load of `handle_vm_top`, pulling out rendering logic into a neatly scoped function.
+- 🛡️ Verification: Tests passed. No logic changed.
