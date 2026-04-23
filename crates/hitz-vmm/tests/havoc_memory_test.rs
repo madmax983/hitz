@@ -1,9 +1,10 @@
-#![allow(missing_docs)]
 #![allow(clippy::unwrap_used)]
 
 use hitz_hal::Gpa;
 use hitz_vmm::{GuestMemory, MemError};
 
+/// Tests that adding a memory region that overflows `u64::MAX` safely
+/// returns an `InvalidSize` error instead of panicking.
 #[test]
 fn havoc_test_add_region_integer_overflow() {
     let mut mem = GuestMemory::new();
