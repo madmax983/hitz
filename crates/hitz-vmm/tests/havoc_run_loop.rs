@@ -1,4 +1,3 @@
-#![allow(missing_docs)]
 #![allow(clippy::unwrap_used)]
 
 use hitz_devices::{MmioBus, SerialDevice};
@@ -9,6 +8,8 @@ use proptest::prelude::*;
 use std::sync::Mutex;
 use std::sync::atomic::AtomicBool;
 
+/// A mock vCPU designed to return specific crafted exits to test
+/// run loop resilience and bounds checking logic.
 struct MaliciousVcpu {
     exit_to_return: VcpuExit,
     run_called: bool,
@@ -58,6 +59,7 @@ impl Vcpu for MaliciousVcpu {
     }
 }
 
+/// A dummy guest memory access implementation for testing.
 struct DummyMem;
 impl GuestMemAccess for DummyMem {
     fn read_guest(&self, _: u64, _: &mut [u8]) -> Result<(), HalError> {
@@ -69,6 +71,8 @@ impl GuestMemAccess for DummyMem {
 }
 
 proptest! {
+    /// Tests that returning an out-of-bounds byte count does not cause a panic
+    /// inside the MMIO handling logic of the run loop.
     #[test]
     fn torture_handle_mmio_out_of_bounds_byte_count(
         byte_count in 17..=255u8, // > 16 causes panic when slicing mmio.instruction_bytes
@@ -98,6 +102,8 @@ proptest! {
     }
 }
 
+/// Tests that a simulated 8-byte MMIO write exit is handled correctly
+/// without panicking due to buffer truncation or indexing issues.
 #[test]
 fn havoc_test_mmio_write_8bytes() {
     let bytes: [u8; 16] = [

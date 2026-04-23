@@ -110,6 +110,9 @@ impl VirtioNetDevice {
             while let Some(desc) = chain.next_descriptor(mem) {
                 if !desc.is_device_writable {
                     let start_len = frame_data.len();
+                    if start_len.saturating_add(desc.len as usize) > 65536 {
+                        break; // Prevent unbounded memory allocation from massive descriptors
+                    }
                     frame_data.resize(start_len + desc.len as usize, 0);
                     if mem
                         .read_guest(desc.gpa, &mut frame_data[start_len..])
@@ -335,5 +338,91 @@ mod tests {
         // But the frame should be in rx_pending.
         assert_eq!(dev.rx_pending.len(), 1);
         assert_eq!(dev.rx_pending[0], test_frame);
+    }
+
+    use std::sync::Mutex;
+    struct MockMem {
+        inner: Mutex<Vec<u8>>,
+    }
+    impl MockMem {
+        fn new(size: usize) -> Self {
+            Self {
+                inner: Mutex::new(vec![0u8; size]),
+            }
+        }
+        fn write_bytes(&self, offset: u64, data: &[u8]) {
+            let mut mem = self.inner.lock().unwrap();
+            let start = offset as usize;
+            if start + data.len() <= mem.len() {
+                mem[start..start + data.len()].copy_from_slice(data);
+            }
+        }
+    }
+    impl GuestMemAccess for MockMem {
+        #[allow(clippy::significant_drop_tightening)]
+        fn read_guest(&self, gpa: u64, buf: &mut [u8]) -> Result<(), hitz_hal::HalError> {
+            let mem = self.inner.lock().unwrap();
+            let start = gpa as usize;
+            if start + buf.len() > mem.len() {
+                return Err(hitz_hal::HalError::MapMemory {
+                    gpa,
+                    size: buf.len(),
+                    reason: "out of bounds".to_string(),
+                });
+            }
+            buf.copy_from_slice(&mem[start..start + buf.len()]);
+            Ok(())
+        }
+        #[allow(clippy::significant_drop_tightening)]
+        fn write_guest(&self, gpa: u64, data: &[u8]) -> Result<(), hitz_hal::HalError> {
+            let mut mem = self.inner.lock().unwrap();
+            let start = gpa as usize;
+            if start + data.len() > mem.len() {
+                return Err(hitz_hal::HalError::MapMemory {
+                    gpa,
+                    size: data.len(),
+                    reason: "out of bounds".to_string(),
+                });
+            }
+            mem[start..start + data.len()].copy_from_slice(data);
+            Ok(())
+        }
+    }
+
+    fn write_desc(mem: &MockMem, idx: u16, addr: u64, len: u32, flags: u16, next: u16) {
+        let offset = u64::from(idx) * 16;
+        mem.write_bytes(offset, &addr.to_le_bytes());
+        mem.write_bytes(offset + 8, &len.to_le_bytes());
+        mem.write_bytes(offset + 12, &flags.to_le_bytes());
+        mem.write_bytes(offset + 14, &next.to_le_bytes());
+    }
+
+    fn write_avail_entry(mem: &MockMem, ring_idx: u16, desc_idx: u16) {
+        let offset = 0x1000 + 4 + u64::from(ring_idx) * 2;
+        mem.write_bytes(offset, &desc_idx.to_le_bytes());
+    }
+
+    fn set_avail_idx(mem: &MockMem, idx: u16) {
+        mem.write_bytes(0x1000 + 2, &idx.to_le_bytes());
+    }
+
+    #[test]
+    fn havoc_net_tx_oom() {
+        let mac = [0x02, 0x00, 0x00, 0x00, 0x00, 0x01];
+        let (dev, _tx_receiver, _rx_sender) = VirtioNetDevice::new(mac);
+
+        let mem = MockMem::new(0x10000);
+        let mut q = VirtQueue::new(16);
+        q.configure(0, 0x1000, 0x2000);
+        q.set_ready(true);
+        set_avail_idx(&mem, 0);
+        mem.write_bytes(0x2000 + 2, &0u16.to_le_bytes());
+
+        // Create a massive desc
+        write_desc(&mem, 0, 0x4000, u32::MAX, 0, 0); // VIRTQ_DESC_F_WRITE = 2, so 0 is readable
+        write_avail_entry(&mem, 0, 0);
+        set_avail_idx(&mem, 1);
+
+        dev.process_tx(&mut q, &mem);
     }
 }

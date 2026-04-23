@@ -2055,9 +2055,18 @@ fn handle_vm_timeline(args: &VmTimelineArgs) -> Result<()> {
             let time_str = format!("T+{:02}:{:02}", elapsed_secs / 60, elapsed_secs % 60);
 
             let status_cell = match health.status {
-                HealthStatus::Healthy => Cell::new("Healthy").fg(Color::Green),
-                HealthStatus::Warning => Cell::new("Warning").fg(Color::Yellow),
-                HealthStatus::Critical => Cell::new("Critical").fg(Color::Red),
+                HealthStatus::Healthy => Cell::new(" ✅ HEALTHY ")
+                    .fg(Color::White)
+                    .bg(Color::DarkGreen)
+                    .add_attribute(comfy_table::Attribute::Bold),
+                HealthStatus::Warning => Cell::new(" ⚠️ WARN ")
+                    .fg(Color::Black)
+                    .bg(Color::Yellow)
+                    .add_attribute(comfy_table::Attribute::Bold),
+                HealthStatus::Critical => Cell::new(" 🚨 CRIT ")
+                    .fg(Color::White)
+                    .bg(Color::DarkRed)
+                    .add_attribute(comfy_table::Attribute::Bold),
             };
 
             // ⚡ Bolt Optimization: Replace intermediate `Vec` heap allocations and `.join(...)`
