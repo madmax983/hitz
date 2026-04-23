@@ -1,10 +1,11 @@
-#![allow(missing_docs)]
 #![allow(clippy::unwrap_used)]
 use hitz_vmm::SerialBuf;
 use proptest::prelude::*;
 use std::io::Write;
 
 proptest! {
+    /// Fuzz test for serial buffer writing with tiny capacity to force
+    /// overlapping wrapping writes and verify no data corruption occurs.
     #[test]
     fn torture_serial_buf_write_edge_cases_v3(
         cap in 1..10usize, // Make capacity tiny to force overlapping wrapping writes
@@ -43,6 +44,8 @@ proptest! {
     }
 }
 
+/// Tests the notify race condition to ensure a delayed read does not deadlock
+/// or timeout due to lost notifications.
 #[test]
 fn havoc_test_notify_race_condition() {
     let rt = tokio::runtime::Builder::new_current_thread()
