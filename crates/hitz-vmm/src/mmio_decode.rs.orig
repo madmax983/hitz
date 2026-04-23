@@ -95,7 +95,6 @@ pub fn decode_mmio_instruction(bytes: &[u8]) -> Option<DecodedMmio> {
         0x88..=0x8B => Some(decode_mov_r_rm(
             opcode,
             has_operand_size_prefix,
-            rex_w,
             reg_field,
             pos,
         )),
@@ -150,7 +149,6 @@ fn parse_sib_and_disp(bytes: &[u8], modrm: u8, pos: &mut usize) -> Option<()> {
 const fn decode_mov_r_rm(
     opcode: u8,
     has_operand_size_prefix: bool,
-    rex_w: u8,
     reg_field: u8,
     pos: usize,
 ) -> DecodedMmio {
@@ -158,8 +156,6 @@ const fn decode_mov_r_rm(
         1 // 0x88, 0x8A = byte
     } else if has_operand_size_prefix {
         2
-    } else if rex_w == 1 {
-        8
     } else {
         4
     };

@@ -109,8 +109,4 @@ pub enum HalError {
         /// Human-readable description.
         message: String,
     },
-
-    /// Invalid MMIO size.
-    #[error("invalid MMIO size: {0}")]
-    InvalidMmioSize(usize),
 }

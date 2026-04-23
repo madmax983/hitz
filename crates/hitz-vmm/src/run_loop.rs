@@ -283,6 +283,9 @@ fn handle_mmio_read<V: Vcpu, W: Write>(
 ) -> Result<(), HalError> {
     // Read: lock → device read → unlock, then update registers.
     let size = usize::from(decoded.size);
+    if size > 8 {
+        return Err(HalError::InvalidMmioSize(size));
+    }
     let mut data = [0u8; 8];
     {
         let mut devs = devices.lock().expect("device lock poisoned");
@@ -313,6 +316,9 @@ fn handle_mmio_write<V: Vcpu, W: Write>(
         mmio_decode::register_value(&regs, decoded.register)
     };
     let size = usize::from(decoded.size);
+    if size > 8 {
+        return Err(HalError::InvalidMmioSize(size));
+    }
     data[..size].copy_from_slice(&value.to_le_bytes()[..size]);
 
     // Lock → device write → unlock, then handle IRQ.
@@ -455,6 +461,89 @@ pub(crate) fn advance_rip_with_rax<V: Vcpu>(
 #[cfg(test)]
 #[allow(clippy::expect_used, clippy::default_trait_access)]
 mod tests {
+
+    #[test]
+    fn test_handle_mmio_read_size_too_large() {
+        let mut vcpu = DummyVcpu {
+            regs: Default::default(),
+            sregs: Default::default(),
+            exit: VcpuExit::Halt,
+        };
+        let devices = Mutex::new(SharedDevices {
+            serial: SerialDevice::new(std::io::sink()),
+            mmio_bus: MmioBus::new(),
+        });
+
+        let decoded = mmio_decode::DecodedMmio {
+            register: 0,
+            size: 16, // Size > 8 triggers the error
+            immediate: None,
+            instruction_len: 2,
+        };
+
+        let mmio = hitz_hal::MmioExit {
+            gpa: 0x1000,
+            data: [0; 8],
+            len: 16,
+            is_write: false,
+            instruction_bytes: [0; 16],
+            instruction_byte_count: 0,
+            instruction_len: 2,
+        };
+
+        let result = handle_mmio_read(&mut vcpu, &devices, &mmio, &decoded, 2);
+        assert!(matches!(
+            result,
+            Err(hitz_hal::HalError::InvalidMmioSize(16))
+        ));
+    }
+
+    #[test]
+    fn test_handle_mmio_write_size_too_large() {
+        let mut vcpu = DummyVcpu {
+            regs: Default::default(),
+            sregs: Default::default(),
+            exit: VcpuExit::Halt,
+        };
+        let devices = Mutex::new(SharedDevices {
+            serial: SerialDevice::new(std::io::sink()),
+            mmio_bus: MmioBus::new(),
+        });
+        let mem = DummyMem;
+
+        let decoded = mmio_decode::DecodedMmio {
+            register: 0,
+            size: 16, // Size > 8 triggers the error
+            immediate: None,
+            instruction_len: 2,
+        };
+
+        let mmio = hitz_hal::MmioExit {
+            gpa: 0x1000,
+            data: [0; 8],
+            len: 16,
+            is_write: true,
+            instruction_bytes: [0; 16],
+            instruction_byte_count: 0,
+            instruction_len: 2,
+        };
+
+        let mut pending_irq = None;
+
+        let result = handle_mmio_write(
+            &mut vcpu,
+            &devices,
+            &mem,
+            &mmio,
+            &mut pending_irq,
+            &decoded,
+            2,
+        );
+        assert!(matches!(
+            result,
+            Err(hitz_hal::HalError::InvalidMmioSize(16))
+        ));
+    }
 
     #[test]
     fn test_handle_mmio_read_success() {
