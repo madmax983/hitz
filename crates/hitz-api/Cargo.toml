@@ -28,3 +28,5 @@ sentinel = []
 efficiency = []
 fingerprint = []
 imbalance = []
+
+cost = []
