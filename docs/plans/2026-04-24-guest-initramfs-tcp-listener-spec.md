@@ -1,3 +1,5 @@
+# 🔭 Vantage: Spec for Guest Initramfs TCP Listener
+
 ## Problem Statement
 The `phase10_port_forward_tcp` integration test currently only verifies that a VM boots and exits cleanly with port forwarding configured (`ports: [19999:9999]`). It lacks a mechanism to verify that network traffic can actually flow over the forwarded port to the guest. A full TCP connect and echo assertion is currently a TODO because we do not have a test initramfs containing a TCP listener on port 9999.
 
