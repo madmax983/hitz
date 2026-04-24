@@ -4,7 +4,7 @@
 //! [`SerialBuf`] implements [`std::io::Write`] so it can serve as the output
 //! sink for `hitz_devices::serial::SerialDevice<SerialBuf>`. Multiple
 //! independent [`SerialReader`]s can be spawned from a single buffer; each
-//! tracks its own read position and is woken via [`tokio::sync::Notify`]
+//! tracks its own read position and is woken via a [`tokio::sync::watch`] channel
 //! when new data arrives (or the buffer is closed).
 //!
 //! # The Hero's Journey
@@ -38,7 +38,7 @@ use loom::sync::{Arc, Mutex};
 #[cfg(not(loom))]
 use std::sync::{Arc, Mutex};
 
-use tokio::sync::Notify;
+use tokio::sync::watch;
 
 /// Default ring buffer capacity (64 KiB).
 const DEFAULT_CAPACITY: usize = 64 * 1024;
@@ -63,7 +63,7 @@ struct Inner {
 #[derive(Clone)]
 pub struct SerialBuf {
     inner: Arc<Mutex<Inner>>,
-    notify: Arc<Notify>,
+    notify: Arc<watch::Sender<u64>>,
 }
 
 impl SerialBuf {
@@ -91,6 +91,7 @@ impl SerialBuf {
     #[must_use]
     pub fn with_capacity(capacity: usize) -> Self {
         assert!(capacity > 0, "capacity must be greater than 0");
+        let (tx, _rx) = watch::channel(0);
         Self {
             inner: Arc::new(Mutex::new(Inner {
                 buf: vec![0u8; capacity],
@@ -98,7 +99,7 @@ impl SerialBuf {
                 total_written: 0,
                 closed: false,
             })),
-            notify: Arc::new(Notify::new()),
+            notify: Arc::new(tx),
         }
     }
 
@@ -117,7 +118,7 @@ impl SerialBuf {
         let read_pos = self.inner.lock().total_written;
         SerialReader {
             inner: self.inner.clone(),
-            notify: self.notify.clone(),
+            notify_rx: self.notify.subscribe(),
             read_pos,
         }
     }
@@ -136,7 +137,7 @@ impl SerialBuf {
             let mut inner = self.inner.lock();
             inner.closed = true;
         }
-        self.notify.notify_waiters();
+        let _ = self.notify.send(u64::MAX);
     }
 }
 
@@ -188,8 +189,9 @@ impl Write for SerialBuf {
             inner.write_pos = remaining;
         }
         inner.total_written += len as u64;
+        let total_written = inner.total_written;
         drop(inner);
-        self.notify.notify_waiters();
+        let _ = self.notify.send(total_written);
         Ok(len)
     }
 
@@ -204,7 +206,7 @@ impl Write for SerialBuf {
 /// the reader skips ahead to the oldest available data.
 pub struct SerialReader {
     inner: Arc<Mutex<Inner>>,
-    notify: Arc<Notify>,
+    notify_rx: watch::Receiver<u64>,
     /// Monotonic byte offset this reader has consumed up to.
     read_pos: u64,
 }
@@ -216,7 +218,6 @@ impl SerialReader {
     /// and all remaining data has been drained.
     pub async fn read_chunk(&mut self) -> Option<Vec<u8>> {
         loop {
-            let notified = self.notify.notified();
             {
                 #[cfg(not(loom))]
                 let Ok(inner) = self.inner.lock() else {
@@ -262,7 +263,9 @@ impl SerialReader {
                 }
             }
             // Park until the writer pushes more data or closes.
-            notified.await;
+            if self.notify_rx.changed().await.is_err() {
+                return None;
+            }
         }
     }
 }
