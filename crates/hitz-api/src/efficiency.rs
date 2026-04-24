@@ -55,7 +55,8 @@ impl EfficiencyScorer for MetricsSnapshot {
     #[allow(clippy::cast_precision_loss)]
     fn calculate_efficiency(&self) -> EfficiencyScore {
         let mut score = 100.0;
-        let mut insights = Vec::new();
+        // ⚡ Bolt Optimization: Pre-allocate Vec with known maximum size (2) to avoid heap reallocation.
+        let mut insights = Vec::with_capacity(2);
 
         // CPU evaluation
         // Optimal is considered > 40% usage. Less than that wastes CPU cycles.
