@@ -19,7 +19,7 @@ use std::io::Write;
 /// # The Hero's Journey
 ///
 /// ```rust
-/// use hitz_vmm::CpioBuilder;
+/// use hitz_vmm::cpio::CpioBuilder;
 ///
 /// // Create a new archive, add a shell script, and finish it to get the bytes
 /// let archive_bytes = CpioBuilder::new()
@@ -54,6 +54,19 @@ impl CpioBuilder {
     ///
     /// Initializes a new builder with an internal buffer pre-allocated to the
     /// specified capacity, avoiding reallocations when building large archives.
+    ///
+    /// # The Hero's Journey
+    ///
+    /// ```rust
+    /// use hitz_vmm::cpio::CpioBuilder;
+    ///
+    /// // If we know we are packing a 2MB agent binary, pre-allocate space!
+    /// let builder = CpioBuilder::with_capacity(2 * 1024 * 1024);
+    /// ```
+    ///
+    /// # Details
+    /// Pre-allocating is heavily recommended when injecting the guest agent,
+    /// as dynamic resizing of large vectors during VM boot can delay startup.
     #[must_use]
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
@@ -68,6 +81,22 @@ impl CpioBuilder {
     ///
     /// Appends a new file entry to the cpio archive with the specified path, content,
     /// and Unix permission bits.
+    ///
+    /// # The Hero's Journey
+    ///
+    /// ```rust
+    /// use hitz_vmm::cpio::CpioBuilder;
+    ///
+    /// let builder = CpioBuilder::new()
+    ///     // Add an executable shell script (0o755)
+    ///     .add_file("init", b"#!/bin/sh
+echo 'Booting!'
+", 0o755)
+    ///     // Add a read-only configuration file (0o644)
+    ///     .add_file("etc/hitz.conf", b"agent=auto", 0o644);
+    /// ```
+    ///
+    /// # Details
     ///
     /// * `path` — file path inside the archive (no leading `/`)
     /// * `content` — file bytes
@@ -84,6 +113,20 @@ impl CpioBuilder {
     ///
     /// Appends the required "TRAILER!!!" entry to signal the end of the cpio
     /// archive and returns the fully assembled byte vector.
+    ///
+    /// # The Hero's Journey
+    ///
+    /// ```rust
+    /// use hitz_vmm::cpio::CpioBuilder;
+    ///
+    /// let cpio_bytes = CpioBuilder::new()
+    ///     .add_file("hello.txt", b"world", 0o644)
+    ///     .finish(); // Seal the archive
+    ///
+    /// // The Linux kernel requires this exact trailer to know when to stop reading.
+    /// let trailer = b"TRAILER!!!";
+    /// assert!(cpio_bytes.windows(10).any(|window| window == trailer));
+    /// ```
     #[must_use]
     pub fn finish(mut self) -> Vec<u8> {
         self.append_entry("TRAILER!!!", &[], 0);

@@ -117,6 +117,15 @@ impl GuestMemory {
     }
 
     /// Creates an empty memory manager pre-allocated for `capacity` regions.
+    ///
+    /// # The Hero's Journey
+    ///
+    /// ```rust
+    /// use hitz_vmm::memory::GuestMemory;
+    ///
+    /// // If we know we're going to create 4 memory regions (e.g. low RAM, high RAM, MMIO, etc.)
+    /// let mem = GuestMemory::with_capacity(4);
+    /// ```
     #[must_use]
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
@@ -126,8 +135,26 @@ impl GuestMemory {
 
     /// Allocate a page-aligned host memory region and register it at `gpa`.
     ///
+    /// # The Hero's Journey
+    ///
+    /// ```rust
+    /// use hitz_vmm::memory::GuestMemory;
+    /// use hitz_hal::Gpa;
+    ///
+    /// let mut mem = GuestMemory::new();
+    /// // Add 2 MiB of RAM at GPA 0x100000
+    /// mem.add_region(Gpa::new(0x100000), 2 * 1024 * 1024).unwrap();
+    /// ```
+    ///
+    /// # Details
+    ///
     /// `size` is rounded up to the next page boundary. The region is
     /// zero-initialized by the OS.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `MemError` if the new region overlaps with an existing one or if
+    /// the host OS fails to allocate the requested physical memory.
     pub fn add_region(&mut self, gpa: Gpa, size: usize) -> Result<(), MemError> {
         let aligned_size = align_up(size, PAGE_SIZE).ok_or(MemError::InvalidSize {
             gpa: gpa.as_u64(),
@@ -186,7 +213,17 @@ impl GuestMemory {
 
     /// Map every region into a hypervisor partition.
     ///
-    /// Calls [`Partition::map_memory`] for each region with the given flags.
+    /// # Abstract
+    ///
+    /// Calls [`Partition::map_memory`](hitz_hal::Partition::map_memory) for each registered
+    /// guest memory region, granting the virtual CPU access to the host virtual addresses.
+    ///
+    /// # The Hero's Journey
+    ///
+    /// ```rust,ignore
+    /// // Assume `mem` is a fully populated GuestMemory and `partition` is a hypervisor partition
+    /// mem.map_to_partition(&mut partition, MemFlags::READ | MemFlags::WRITE | MemFlags::EXECUTE).unwrap();
+    /// ```
     pub fn map_to_partition(
         &self,
         partition: &mut impl Partition,
@@ -247,7 +284,27 @@ impl GuestMemory {
 
     /// Translate a guest physical address to a host virtual address.
     ///
-    /// Returns `None` if the GPA is not mapped in any region.
+    /// # Abstract
+    ///
+    /// Converts an absolute guest physical address (GPA) into a raw host pointer (HVA).
+    /// This is used internally for direct memory reads/writes.
+    ///
+    /// # The Hero's Journey
+    ///
+    /// ```rust
+    /// use hitz_vmm::memory::GuestMemory;
+    /// use hitz_hal::Gpa;
+    ///
+    /// let mut mem = GuestMemory::new();
+    /// mem.add_region(Gpa::new(0x1000), 4096).unwrap();
+    ///
+    /// let hva_ptr = mem.gpa_to_hva(Gpa::new(0x1000)).unwrap();
+    /// assert!(!hva_ptr.is_null());
+    /// ```
+    ///
+    /// # Details
+    ///
+    /// Returns `None` if the GPA is not mapped in any registered memory region.
     #[must_use]
     pub fn gpa_to_hva(&self, gpa: Gpa) -> Option<*mut u8> {
         self.find_region(gpa, 1).ok().map(|(hva, _)| hva)

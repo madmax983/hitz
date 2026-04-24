@@ -1,4 +1,7 @@
-💡 What: Replaced intermediate vector allocations and string joins with iterator chains and std::fmt::Write in hitz-cli's health monitor.
-🎯 Why: The monitor loop unnecessarily allocated temporary Vecs and performed multiple format! heap allocations per frame/update.
-📊 Impact: Eliminates several heap allocations per monitor loop iteration.
-🔭 Measurement: Review monitor_health function for zero-allocation formatting.
+📖 Chapter: The Core Execution & Initialization Modules (`hitz-vmm::cpio`, `hitz-vmm::memory`, `hitz-vmm::run_loop`, `hitz-api::config`)
+
+🔦 Insight: Refactored existing module documentation to explicitly explain *why* structs and functions exist using the Bard philosophy. Added `# Abstract`, `# The Hero's Journey`, `# Details`, and `# Errors`/`# Panics` headers to clearly separate purpose, usage, edge cases, and safety contracts without lying.
+
+🧪 Example: Added multiple executable doctests across `GuestMemory::add_region`, `CpioBuilder::finish`, `VmConfig`, and others.
+
+🖼️ Preview: Documentation can be generated and viewed via `cargo doc -p hitz-vmm -p hitz-api --open`.
