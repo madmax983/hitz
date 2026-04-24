@@ -1,4 +1,4 @@
-💡 What: Replaced intermediate vector allocations and string joins with iterator chains and std::fmt::Write in hitz-cli's health monitor.
-🎯 Why: The monitor loop unnecessarily allocated temporary Vecs and performed multiple format! heap allocations per frame/update.
-📊 Impact: Eliminates several heap allocations per monitor loop iteration.
-🔭 Measurement: Review monitor_health function for zero-allocation formatting.
+💡 What: Replaced `format!` with `format_args!` for Prometheus label generation in `hitz-api`.
+🎯 Why: The `metric!` macro writes directly to a pre-allocated string using `writeln!`. By using `format!`, intermediate heap-allocated strings were unnecessarily created just to be immediately formatted into the buffer. `format_args!` returns a lightweight stack structure that `writeln!` can consume directly, eliminating the heap allocation completely.
+📊 Impact: Eliminates a heap allocation for every metric label iteration (CPU cores, disks, networks, and processes). During a single snapshot conversion, this saves 2 allocations per disk/network, and 2 per process, significantly reducing GC pressure/heap churn in the metrics hot path.
+🔬 Measurement: Run `cargo test -p hitz-api --lib --no-default-features --target x86_64-unknown-linux-gnu` to ensure correctness.
