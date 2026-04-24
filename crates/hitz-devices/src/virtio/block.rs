@@ -189,6 +189,11 @@ impl VirtioBlockDevice {
     /// Handle a write request: guest memory -> disk.
     #[allow(clippy::cast_possible_truncation)]
     fn handle_write(&mut self, sector: u64, gpa: u64, len: u32, mem: &dyn GuestMemAccess) -> u8 {
+        if len > 16_777_216 {
+            // Max 16MB per request to prevent OOM
+            return VIRTIO_BLK_S_IOERR;
+        }
+
         let byte_offset = sector * SECTOR_SIZE;
         let data_len = u64::from(len);
 
