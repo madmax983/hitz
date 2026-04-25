@@ -170,6 +170,35 @@ pub struct SentinelRule {
 
 impl SentinelRule {
     /// Evaluates the underlying condition against a live telemetry snapshot.
+    ///
+    /// # Abstract
+    /// Checks whether the rule's criteria are met by the current snapshot data.
+    ///
+    /// ## Examples
+    ///
+    /// ```rust
+    /// use hitz_api::{SentinelRule, SentinelCondition, MetricTarget, ConditionOperator, MetricsSnapshot, CpuMetrics, MemoryMetrics};
+    ///
+    /// let rule = SentinelRule {
+    ///     name: "Test".to_string(),
+    ///     condition: SentinelCondition {
+    ///         target: MetricTarget::CpuTotalPct,
+    ///         operator: ConditionOperator::GreaterThan,
+    ///         threshold: 50.0,
+    ///     },
+    /// };
+    ///
+    /// let snap = MetricsSnapshot {
+    ///     timestamp_ms: 0,
+    ///     cpu: CpuMetrics { total_pct: 60.0, per_core: vec![], load_avg: [0.0, 0.0, 0.0] },
+    ///     memory: MemoryMetrics { total_bytes: 0, used_bytes: 0, free_bytes: 0, buffers_bytes: 0, cached_bytes: 0, swap_total: 0, swap_used: 0 },
+    ///     disks: vec![],
+    ///     networks: vec![],
+    ///     processes: vec![],
+    /// };
+    ///
+    /// assert!(rule.evaluate(&snap));
+    /// ```
     #[must_use]
     pub fn evaluate(&self, snapshot: &MetricsSnapshot) -> bool {
         let value = match self.condition.target {

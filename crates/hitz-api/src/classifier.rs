@@ -21,6 +21,18 @@ use crate::{MetricsDiff, MetricsSnapshot};
 use serde::{Deserialize, Serialize};
 
 /// The categorized type of workload running on the VM.
+///
+/// # Abstract
+/// Represents the discrete behavioral category of the VM, based on resource usage.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::WorkloadClass;
+///
+/// let cls = WorkloadClass::ComputeBound;
+/// assert_eq!(cls, WorkloadClass::ComputeBound);
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum WorkloadClass {
     /// The VM is heavily utilizing the CPU.

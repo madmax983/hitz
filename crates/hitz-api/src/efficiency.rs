@@ -37,6 +37,21 @@ use crate::MetricsSnapshot;
 use serde::{Deserialize, Serialize};
 
 /// The computed resource efficiency score.
+///
+/// # Abstract
+/// Represents an evaluation of how well a VM is utilizing its allocated resources.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::EfficiencyScore;
+///
+/// let score = EfficiencyScore {
+///     score: 100.0,
+///     insights: vec![],
+/// };
+/// assert_eq!(score.score, 100.0);
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EfficiencyScore {
     /// Overall score from 0.0 to 100.0.

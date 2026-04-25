@@ -66,6 +66,7 @@ pub enum MetricsRequest {
 /// Full guest resource snapshot, describing exactly what the VM is doing at
 /// a given millisecond.
 ///
+/// # Abstract
 /// This is the response sent by the guest agent when the host requests
 /// telemetry via [`MetricsRequest::Snapshot`]. It contains aggregated CPU,
 /// memory, disk, network, and top process data.
@@ -116,6 +117,7 @@ pub struct MetricsSnapshot {
 
 /// CPU utilisation metrics.
 ///
+/// # Abstract
 /// Captures overall and per-core CPU usage, alongside system load averages.
 ///
 /// ## Examples
@@ -144,6 +146,7 @@ pub struct CpuMetrics {
 
 /// Memory utilisation metrics.
 ///
+/// # Abstract
 /// Details total RAM and Swap, along with how much is actively used vs
 /// free or cached.
 ///
@@ -184,6 +187,9 @@ pub struct MemoryMetrics {
 
 /// I/O metrics for a single block device.
 ///
+/// # Abstract
+/// Provides usage statistics for a specific disk attached to the VM.
+///
 /// ## Examples
 ///
 /// ```rust
@@ -214,6 +220,9 @@ pub struct DiskMetrics {
 }
 
 /// Network metrics for a single interface.
+///
+/// # Abstract
+/// Provides statistics on data transmitted and received across a network boundary.
 ///
 /// ## Examples
 ///
@@ -252,6 +261,7 @@ pub struct NetMetrics {
 
 /// Process-level metrics.
 ///
+/// # Abstract
 /// Captures the resource usage of a specific process running in the guest.
 /// Usually collected for the top N processes by CPU usage.
 ///

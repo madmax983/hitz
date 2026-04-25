@@ -38,6 +38,7 @@ use serde::{Deserialize, Serialize};
 
 /// Action that can be performed on a running VM.
 ///
+/// # Abstract
 /// This enum represents the discrete commands that can be issued to
 /// the daemon to control a micro-VM's lifecycle over the REST API.
 ///
@@ -66,6 +67,7 @@ pub enum VmAction {
 
 /// Current lifecycle state of a VM.
 ///
+/// # Abstract
 /// This tracks the operational status of a micro-VM from its initial
 /// creation, through active execution, until it is gracefully stopped
 /// or encounters a fatal error.

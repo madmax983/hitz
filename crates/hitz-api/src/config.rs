@@ -62,6 +62,7 @@ pub const VMADDR_CID_HOST: u32 = 2;
 
 /// Network configuration for a VM.
 ///
+/// # Abstract
 /// This structure defines how the micro-VM connects to the host network.
 /// By default, Hitz sets up a point-to-point interface (like `WinTun` on Windows
 /// or `TAP` on Linux) to allow network traffic between the host and the guest.
@@ -96,6 +97,9 @@ pub struct NetConfig {
 /// A single TCP port forward rule: `host_port` on the host forwards to
 /// `guest_port` inside the VM.
 ///
+/// # Abstract
+/// Defines how external host connections are proxy'd into the guest.
+///
 /// ## Examples
 ///
 /// ```rust
@@ -122,6 +126,7 @@ pub struct PortForward {
 
 /// Controls whether and which guest metrics agent is injected into the initramfs.
 ///
+/// # Abstract
 /// Hitz supports injecting a lightweight agent into the guest environment to
 /// extract process and resource usage telemetry. By default, it auto-injects
 /// the bundled `hitz-guest-agent`.
@@ -164,6 +169,7 @@ const fn default_guest_cid() -> u32 {
 
 /// VM configuration — everything needed to boot a micro-VM.
 ///
+/// # Abstract
 /// Serializable for the future daemon REST API (Phase 6).
 ///
 /// ## Examples
@@ -222,7 +228,10 @@ pub struct VmConfig {
 impl VmConfig {
     /// Returns the effective command line: custom if set, otherwise the default.
     ///
-    /// # Examples
+    /// # Abstract
+    /// Retrieves the command line to be passed to the kernel at boot.
+    ///
+    /// ## Examples
     ///
     /// ```rust
     /// use hitz_api::{VmConfig, DEFAULT_CMDLINE, DEFAULT_RAM_MIB, DEFAULT_CPUS, DEFAULT_GUEST_CID, GuestAgentMode};

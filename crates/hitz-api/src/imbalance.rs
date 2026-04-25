@@ -40,6 +40,22 @@ use crate::MetricsSnapshot;
 use serde::{Deserialize, Serialize};
 
 /// The computed resource imbalance score.
+///
+/// # Abstract
+/// Represents the statistical spread of utilization across virtual CPUs.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::ImbalanceResult;
+///
+/// let result = ImbalanceResult {
+///     std_dev: 0.0,
+///     imbalance_score: 0.0,
+///     is_imbalanced: false,
+/// };
+/// assert!(!result.is_imbalanced);
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ImbalanceResult {
     /// Overall standard deviation of per-core utilization.
