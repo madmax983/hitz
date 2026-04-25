@@ -1512,7 +1512,23 @@ async fn handle_vm_list(args: &VmListArgs) -> Result<()> {
             use comfy_table::{Cell, Color, Table};
             let mut table = Table::new();
             let _ = table.load_preset(UTF8_FULL_CONDENSED);
-            let _ = table.set_header(["ID", "State", "RAM (MiB)", "CPUs", "Exit Reason"]);
+            let _ = table.set_header([
+                Cell::new("ID")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(Color::Cyan),
+                Cell::new("State")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(Color::Cyan),
+                Cell::new("RAM (MiB)")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(Color::Cyan),
+                Cell::new("CPUs")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(Color::Cyan),
+                Cell::new("Exit Reason")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(Color::Cyan),
+            ]);
 
             for info in vms {
                 let state_cell = match info.state {
@@ -1525,7 +1541,7 @@ async fn handle_vm_list(args: &VmListArgs) -> Result<()> {
                 // This eliminates an unnecessary `String` allocation on the hot path of formatting CLI output.
                 let exit_reason = info.exit_reason.as_deref().unwrap_or("-");
                 let _ = table.add_row([
-                    Cell::new(&info.id),
+                    Cell::new(&info.id).add_attribute(comfy_table::Attribute::Bold),
                     state_cell,
                     Cell::new(info.config.ram_mib.to_string()),
                     Cell::new(info.config.cpus.to_string()),
@@ -1737,8 +1753,12 @@ async fn handle_vm_top(args: &VmIdArgs) -> Result<()> {
                         ],
                     )
                     .header(
-                        Row::new(["Device", "Read KB", "Write KB"])
-                            .style(Style::default().add_modifier(Modifier::BOLD)),
+                        Row::new(["Device", "Read KB", "Write KB"]).style(
+                            Style::default()
+                                .fg(Color::Cyan)
+                                .add_modifier(Modifier::BOLD)
+                                .add_modifier(Modifier::UNDERLINED),
+                        ),
                     )
                     .block(Block::default().title("Disks").borders(Borders::ALL));
                     f.render_widget(disk_table, io_chunks[0]);
@@ -1760,8 +1780,12 @@ async fn handle_vm_top(args: &VmIdArgs) -> Result<()> {
                         ],
                     )
                     .header(
-                        Row::new(["Interface", "Rx KB", "Tx KB"])
-                            .style(Style::default().add_modifier(Modifier::BOLD)),
+                        Row::new(["Interface", "Rx KB", "Tx KB"]).style(
+                            Style::default()
+                                .fg(Color::Cyan)
+                                .add_modifier(Modifier::BOLD)
+                                .add_modifier(Modifier::UNDERLINED),
+                        ),
                     )
                     .block(Block::default().title("Networks").borders(Borders::ALL));
                     f.render_widget(net_table, io_chunks[1]);
@@ -1785,8 +1809,12 @@ async fn handle_vm_top(args: &VmIdArgs) -> Result<()> {
                         ],
                     )
                     .header(
-                        Row::new(["PID", "Name", "CPU", "RSS"])
-                            .style(Style::default().add_modifier(Modifier::BOLD)),
+                        Row::new(["PID", "Name", "CPU", "RSS"]).style(
+                            Style::default()
+                                .fg(Color::Cyan)
+                                .add_modifier(Modifier::BOLD)
+                                .add_modifier(Modifier::UNDERLINED),
+                        ),
                     )
                     .block(
                         Block::default()
@@ -2449,7 +2477,8 @@ async fn handle_vm_dashboard(args: &VmListArgs) -> Result<()> {
                     // rendering loop, which runs several times per second. `Cell::from` correctly
                     // accepts `&str`.
                     Row::new([
-                        Cell::from(vm.id.as_str()),
+                        Cell::from(vm.id.as_str())
+                            .style(Style::default().add_modifier(Modifier::BOLD)),
                         Cell::from(state_str).style(Style::default().fg(state_color)),
                         Cell::from(vm.config.ram_mib.to_string()),
                         Cell::from(vm.config.cpus.to_string()),
@@ -2470,8 +2499,9 @@ async fn handle_vm_dashboard(args: &VmListArgs) -> Result<()> {
                 .header(
                     Row::new(["ID", "State", "RAM (MiB)", "CPUs", "Exit Reason"]).style(
                         Style::default()
-                            .fg(Color::Yellow)
-                            .add_modifier(Modifier::BOLD),
+                            .fg(Color::Cyan)
+                            .add_modifier(Modifier::BOLD)
+                            .add_modifier(Modifier::UNDERLINED),
                     ),
                 )
                 .block(
