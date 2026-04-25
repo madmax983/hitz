@@ -78,7 +78,7 @@ impl ToPrometheus for MetricsSnapshot {
                 "hitz_cpu_core_pct",
                 "gauge",
                 "Per-core CPU utilisation percentage",
-                format!("core=\"{}\"", i),
+                format_args!("core=\"{}\"", i),
                 core_pct
             );
         }
@@ -151,7 +151,7 @@ impl ToPrometheus for MetricsSnapshot {
 
         // --- Disk Metrics ---
         for disk in &self.disks {
-            let labels = format!("device=\"{}\"", disk.name);
+            let labels = format_args!("device=\"{}\"", disk.name);
             metric!(
                 "hitz_disk_reads_total",
                 "counter",
@@ -184,7 +184,7 @@ impl ToPrometheus for MetricsSnapshot {
 
         // --- Network Metrics ---
         for net in &self.networks {
-            let labels = format!("interface=\"{}\"", net.interface);
+            let labels = format_args!("interface=\"{}\"", net.interface);
             metric!(
                 "hitz_net_rx_bytes_total",
                 "counter",
@@ -231,7 +231,7 @@ impl ToPrometheus for MetricsSnapshot {
 
         // --- Process Metrics ---
         for proc in &self.processes {
-            let labels = format!("pid=\"{}\",name=\"{}\"", proc.pid, proc.name);
+            let labels = format_args!("pid=\"{}\",name=\"{}\"", proc.pid, proc.name);
             metric!(
                 "hitz_process_cpu_pct",
                 "gauge",
