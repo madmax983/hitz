@@ -1291,4 +1291,58 @@ mod tests {
             "stop_flag should be set to true by stop_all_and_wait"
         );
     }
+
+    #[test]
+    fn test_new_recovers_vms() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().to_path_buf();
+        let store = StateStore::new(path.clone()).expect("new store");
+
+        let (config, _tmp) = make_config();
+
+        // Save a VM in Created state
+        store
+            .save_config("vm-created", &config)
+            .expect("save config");
+        store
+            .save_state(
+                "vm-created",
+                &hitz_api::VmStateInfo {
+                    state: VmState::Created,
+                    exit_reason: None,
+                },
+            )
+            .expect("save state");
+
+        // Save a VM in Running state
+        store
+            .save_config("vm-running", &config)
+            .expect("save config");
+        store
+            .save_state(
+                "vm-running",
+                &hitz_api::VmStateInfo {
+                    state: VmState::Running,
+                    exit_reason: None,
+                },
+            )
+            .expect("save state");
+
+        // Now create a new manager and verify it recovers the VMs
+        let mgr = VmManager::new(Arc::new(FakeHypervisor), path).expect("new manager");
+
+        let vms = mgr.vms.lock().unwrap();
+        assert_eq!(vms.len(), 2);
+
+        let created_vm = vms
+            .get("vm-created")
+            .expect("created vm should be recovered");
+        assert_eq!(created_vm.state, VmState::Created);
+
+        let running_vm = vms
+            .get("vm-running")
+            .expect("running vm should be recovered");
+        // Running VM should be safely transitioned to Stopped upon recovery
+        assert_eq!(running_vm.state, VmState::Stopped);
+    }
 }
