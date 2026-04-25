@@ -923,4 +923,79 @@ mod tests {
         // Magic is 0x74726976 (LE: 76 69 72 74)
         assert_eq!(buf, [0x76, 0x69]);
     }
+
+    struct DefaultPollRxVirtioBackend;
+    impl VirtioBackend for DefaultPollRxVirtioBackend {
+        fn device_id(&self) -> u32 {
+            42
+        }
+        fn device_features(&self) -> u64 {
+            0
+        }
+        fn process_queue(&mut self, _idx: u16, _q: &mut VirtQueue, _m: &dyn GuestMemAccess) {}
+        fn read_config(&self, _off: u64, _data: &mut [u8]) {}
+        fn write_config(&mut self, _off: u64, _data: &[u8]) {}
+        fn queue_count(&self) -> usize {
+            1
+        }
+        // Uses default poll_rx
+    }
+
+    #[test]
+    fn default_poll_rx_returns_false() {
+        let mem = Arc::new(MockMem::new(0x10000));
+        let mut t = VirtioMmioTransport::new(DefaultPollRxVirtioBackend, mem, 5);
+        assert_eq!(
+            t.poll_rx(),
+            None,
+            "Default poll_rx should return None as device returns false"
+        );
+    }
+
+    #[test]
+    fn device_reset_clears_all_registers() {
+        let mem = Arc::new(MockMem::new(0x10000));
+        let mut t = VirtioMmioTransport::new(DefaultPollRxVirtioBackend, mem.clone(), 5);
+
+        // Mutate the state
+        t.status = 1;
+        t.interrupt_status = 1;
+        t.driver_features = 0x1234_5678;
+        t.driver_features_sel = 1;
+        t.device_features_sel = 1;
+
+        // Write to valid queue 0
+        t.mmio_write(MMIO_QUEUE_SEL, &0u32.to_le_bytes(), &*mem);
+        t.mmio_write(MMIO_QUEUE_NUM, &16u32.to_le_bytes(), &*mem);
+        t.mmio_write(MMIO_QUEUE_DESC_LOW, &0x1111u32.to_le_bytes(), &*mem);
+        t.mmio_write(MMIO_QUEUE_DESC_HIGH, &0x2222u32.to_le_bytes(), &*mem);
+        t.mmio_write(MMIO_QUEUE_AVAIL_LOW, &0x3333u32.to_le_bytes(), &*mem);
+        t.mmio_write(MMIO_QUEUE_AVAIL_HIGH, &0x4444u32.to_le_bytes(), &*mem);
+        t.mmio_write(MMIO_QUEUE_USED_LOW, &0x5555u32.to_le_bytes(), &*mem);
+        t.mmio_write(MMIO_QUEUE_USED_HIGH, &0x6666u32.to_le_bytes(), &*mem);
+
+        assert_eq!(t.queues[0].desc_low, 0x1111);
+
+        // Change queue sel
+        t.mmio_write(MMIO_QUEUE_SEL, &1u32.to_le_bytes(), &*mem);
+
+        // Reset device
+        t.mmio_write(MMIO_STATUS, &0u32.to_le_bytes(), &*mem);
+
+        // Verify state is cleared
+        assert_eq!(t.status, 0);
+        assert_eq!(t.interrupt_status, 0);
+        assert_eq!(t.driver_features, 0);
+        assert_eq!(t.driver_features_sel, 0);
+        assert_eq!(t.device_features_sel, 0);
+        assert_eq!(t.queue_sel, 0);
+
+        assert_eq!(t.queues[0].desc_low, 0);
+        assert_eq!(t.queues[0].desc_high, 0);
+        assert_eq!(t.queues[0].avail_low, 0);
+        assert_eq!(t.queues[0].avail_high, 0);
+        assert_eq!(t.queues[0].used_low, 0);
+        assert_eq!(t.queues[0].used_high, 0);
+        assert_eq!(t.queues[0].num, QUEUE_NUM_MAX);
+    }
 }

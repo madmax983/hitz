@@ -168,4 +168,14 @@ mod tests {
         let lsr = serial.pio_read(0x3FD);
         assert_ne!(lsr & 0x60, 0, "THRE+TEMT should be set after write");
     }
+
+    #[test]
+    fn noop_trigger_succeeds() {
+        use vm_superio::Trigger;
+        let trigger = NoopTrigger;
+        assert!(
+            trigger.trigger().is_ok(),
+            "NoopTrigger should always succeed"
+        );
+    }
 }

@@ -373,4 +373,41 @@ mod tests {
         // Complete outer overlap
         bus.register(0xCFFF_0000, 0x12000, Box::new(StubDevice::new(0)));
     }
+
+    #[test]
+    fn default_mmio_bus_is_empty() {
+        let mut bus = MmioBus::default();
+        let mut buf = [0u8; 4];
+        bus.read(0x1000, &mut buf);
+        assert_eq!(
+            buf,
+            [0xFF, 0xFF, 0xFF, 0xFF],
+            "Default bus should have no devices"
+        );
+    }
+
+    struct DefaultPollRxDevice;
+    impl MmioDevice for DefaultPollRxDevice {
+        fn mmio_read(&mut self, _offset: u64, _data: &mut [u8]) {}
+        fn mmio_write(
+            &mut self,
+            _offset: u64,
+            _data: &[u8],
+            _mem: &dyn GuestMemAccess,
+        ) -> Option<u8> {
+            None
+        }
+        // Uses default poll_rx
+    }
+
+    #[test]
+    fn default_poll_rx_returns_none() {
+        let mut bus = MmioBus::new();
+        bus.register(0xD000_0000, 0x1000, Box::new(DefaultPollRxDevice));
+        assert_eq!(
+            bus.poll_devices(),
+            None,
+            "Default poll_rx should return None"
+        );
+    }
 }
