@@ -56,17 +56,16 @@ where
 {
     // ⚡ Bolt Optimization: Avoid cloning the HTTP method.
     // It's cheaper to borrow it or let it remain bound to the request.
-    let method = req.method().clone();
-    let path = req.uri().path().to_string();
-
     let span = tracing::info_span!(
         "daemon.request",
-        http.method = %method,
-        http.route = %path,
+        http.method = %req.method(),
+        http.route = %req.uri().path(),
         http.status_code = tracing::field::Empty,
     );
 
     let result = async {
+        let method = req.method().clone();
+        let path = req.uri().path().to_string();
         match (&method, path.as_str()) {
             (&Method::GET, "/vms") => handle_list(manager),
             _ if path.starts_with("/vms/") => {
