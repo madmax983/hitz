@@ -333,3 +333,9 @@ pub use fingerprint::*;
 mod imbalance;
 #[cfg(feature = "imbalance")]
 pub use imbalance::*;
+
+#[cfg(feature = "billing")]
+/// Billing estimation module.
+mod billing;
+#[cfg(feature = "billing")]
+pub use billing::*;
