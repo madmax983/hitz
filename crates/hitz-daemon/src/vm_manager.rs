@@ -458,16 +458,23 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
             if let Ok(mut vms) = vms.lock() {
                 if let Some(entry) = vms.get_mut(&vm_id) {
                     match result {
-                        Ok(Ok(run_result)) => match run_result.exit_reason {
-                            ExitReason::Halt | ExitReason::Shutdown | ExitReason::Canceled => {
-                                entry.state = VmState::Stopped;
+                        Ok(Ok(run_result))
+                            if matches!(
+                                run_result.exit_reason,
+                                ExitReason::Halt | ExitReason::Shutdown | ExitReason::Canceled
+                            ) =>
+                        {
+                            entry.state = VmState::Stopped;
+                            entry.exit_reason = Some(format!("{:?}", run_result.exit_reason));
+                        }
+                        Ok(Ok(run_result)) => {
+                            entry.state = VmState::Failed;
+                            if let ExitReason::Unexpected(ref reason) = run_result.exit_reason {
+                                entry.exit_reason = Some(reason.clone());
+                            } else {
                                 entry.exit_reason = Some(format!("{:?}", run_result.exit_reason));
                             }
-                            ExitReason::Unexpected(ref reason) => {
-                                entry.state = VmState::Failed;
-                                entry.exit_reason = Some(reason.clone());
-                            }
-                        },
+                        }
                         Ok(Err(e)) => {
                             entry.state = VmState::Failed;
                             entry.exit_reason = Some(e.to_string());
