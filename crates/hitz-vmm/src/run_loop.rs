@@ -188,8 +188,7 @@ fn dispatch_exit<V: Vcpu, W: Write>(
         VcpuExit::IoPort(io) => {
             record_exit(exit_counter, "IoPort");
             let mut devs = devices.lock().expect("device lock poisoned");
-            handle_io_port(vcpu, &mut devs.serial, &io)?;
-            Ok(None)
+            handle_io_port(vcpu, &mut devs.serial, &io).map(|_| None)
         }
         VcpuExit::Halt => {
             record_exit(exit_counter, "Halt");
@@ -201,13 +200,10 @@ fn dispatch_exit<V: Vcpu, W: Write>(
         }
         VcpuExit::Mmio(mmio) => {
             record_exit(exit_counter, "Mmio");
-            handle_mmio(vcpu, devices, mem, &mmio, pending_irq)?;
-            Ok(None)
+            handle_mmio(vcpu, devices, mem, &mmio, pending_irq).map(|_| None)
         }
         VcpuExit::InterruptWindow => {
             record_exit(exit_counter, "InterruptWindow");
-            // Guest is now interruptible. WHP auto-clears the
-            // deliverability notification after this exit fires.
             if let Some(vector) = pending_irq.take() {
                 vcpu.inject_interrupt(vector)?;
                 tracing::debug!(vector, "deferred interrupt injected via interrupt window");
@@ -216,9 +212,6 @@ fn dispatch_exit<V: Vcpu, W: Write>(
         }
         VcpuExit::Canceled => {
             record_exit(exit_counter, "Canceled");
-            // vCPU run was canceled (e.g. by another thread).
-            // If we have a pending IRQ, re-request the interrupt window
-            // so we get notified once the guest becomes interruptible.
             if pending_irq.is_some() {
                 vcpu.request_interrupt_window()?;
             }

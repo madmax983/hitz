@@ -81,12 +81,10 @@ impl StateStore {
         };
 
         for entry in read_dir {
-            let entry = match entry {
-                Ok(e) => e,
-                Err(e) => {
-                    tracing::warn!(error = %e, "failed to read state directory entry — skipping");
-                    continue;
-                }
+            let Ok(entry) = entry.inspect_err(|e| {
+                tracing::warn!(error = %e, "failed to read state directory entry — skipping");
+            }) else {
+                continue;
             };
             let path = entry.path();
             if !path.is_dir() {
@@ -104,12 +102,10 @@ impl StateStore {
                 tracing::warn!(vm_id = %id, "missing config.json — skipping");
                 continue;
             };
-            let config: VmConfig = match serde_json::from_str(&config_json) {
-                Ok(c) => c,
-                Err(e) => {
-                    tracing::warn!(vm_id = %id, error = %e, "corrupt config.json — skipping");
-                    continue;
-                }
+            let Ok(config) = serde_json::from_str::<VmConfig>(&config_json).inspect_err(|e| {
+                tracing::warn!(vm_id = %id, error = %e, "corrupt config.json — skipping");
+            }) else {
+                continue;
             };
 
             let state = self.load_raw_state(&id).map_or(VmState::Created, |s| {
