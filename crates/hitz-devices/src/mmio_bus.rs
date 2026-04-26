@@ -373,4 +373,23 @@ mod tests {
         // Complete outer overlap
         bus.register(0xCFFF_0000, 0x12000, Box::new(StubDevice::new(0)));
     }
+
+    #[test]
+    fn poll_rx_default_returns_none() {
+        struct DefaultDevice;
+        impl MmioDevice for DefaultDevice {
+            fn mmio_read(&mut self, _offset: u64, _data: &mut [u8]) {}
+            fn mmio_write(
+                &mut self,
+                _offset: u64,
+                _data: &[u8],
+                _mem: &dyn GuestMemAccess,
+            ) -> Option<u8> {
+                None
+            }
+        }
+
+        let mut dev = DefaultDevice;
+        assert_eq!(dev.poll_rx(), None);
+    }
 }

@@ -923,4 +923,31 @@ mod tests {
         // Magic is 0x74726976 (LE: 76 69 72 74)
         assert_eq!(buf, [0x76, 0x69]);
     }
+
+    #[test]
+    fn unhandled_mmio_read_returns_zero() {
+        let t = make_transport();
+        assert_eq!(t.read_reg(0x9999), 0);
+    }
+
+    #[test]
+    fn unhandled_mmio_write_returns_none() {
+        let mut t = make_transport();
+        assert_eq!(t.write_reg(0x9999, 0), None);
+    }
+
+    #[test]
+    fn unhandled_mmio_write_unaligned() {
+        let mut t = make_transport();
+        let mem = Arc::new(MockMem::new(16));
+
+        // Write unaligned config size
+        t.mmio_write(MMIO_CONFIG_START + 0, &[0x11, 0x22], &*mem);
+
+        let mut buf = [0u8; 4];
+        t.mmio_read(MMIO_CONFIG_START + 0, &mut buf);
+        // Only 2 bytes are written (from dummy config write which copies min len)
+        assert_eq!(buf[0], 0x11);
+        assert_eq!(buf[1], 0x22);
+    }
 }

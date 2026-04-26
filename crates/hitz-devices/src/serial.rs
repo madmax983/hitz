@@ -168,4 +168,10 @@ mod tests {
         let lsr = serial.pio_read(0x3FD);
         assert_ne!(lsr & 0x60, 0, "THRE+TEMT should be set after write");
     }
+
+    #[test]
+    fn trigger_is_infallible() {
+        let trigger = NoopTrigger;
+        assert_eq!(trigger.trigger(), Ok(()));
+    }
 }

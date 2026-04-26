@@ -1,4 +1,6 @@
-💡 What: Replaced intermediate vector allocations and string joins with iterator chains and std::fmt::Write in hitz-cli's health monitor.
-🎯 Why: The monitor loop unnecessarily allocated temporary Vecs and performed multiple format! heap allocations per frame/update.
-📊 Impact: Eliminates several heap allocations per monitor loop iteration.
-🔭 Measurement: Review monitor_health function for zero-allocation formatting.
+🛡️ Sentry: MMIO and Serial test coverage improvement
+
+🎯 Target: `crates/hitz-devices` (`mmio_bus.rs`, `virtio/mmio_transport.rs`, `serial.rs`)
+💣 Risk: Unhandled MMIO accesses or unsupported configurations might lead to silent drops or panics if not explicitly returning deterministic values (e.g. returning 0 for unmapped registers, `None` for unmapped writes).
+🧪 Strategy: Added tests for the `Default` implementations, unhandled MMIO reads/writes, unaligned configurations, and the infallibility of `NoopTrigger` inside `serial.rs`.
+🔬 Verification: Run `cargo test -p hitz-devices --lib --no-default-features --target x86_64-unknown-linux-gnu`.
