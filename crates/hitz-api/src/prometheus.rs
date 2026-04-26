@@ -65,6 +65,9 @@ impl ToPrometheus for MetricsSnapshot {
             };
         }
 
+        // ⚡ Bolt Optimization: Eliminated `format!` heap allocations for Prometheus labels.
+        // We use `format_args!` instead, which passes the formatting arguments
+        // directly to the underlying `writeln!` without creating intermediate `String`s.
         // --- CPU Metrics ---
         metric!(
             "hitz_cpu_total_pct",
