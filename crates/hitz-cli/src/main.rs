@@ -2382,7 +2382,7 @@ async fn handle_vm_dashboard(args: &VmListArgs) -> Result<()> {
     let mut last_fetch = last_tick
         .checked_sub(Duration::from_secs(10))
         .unwrap_or(last_tick);
-    let mut vms: Vec<hitz_api::VmInfo> = Vec::new();
+    let mut vms: Vec<hitz_api::VmInfo> = Vec::with_capacity(16);
     let mut err_msg: Option<String> = None;
 
     let mut should_quit = false;

@@ -78,7 +78,7 @@ impl ToPrometheus for MetricsSnapshot {
                 "hitz_cpu_core_pct",
                 "gauge",
                 "Per-core CPU utilisation percentage",
-                format!("core=\"{}\"", i),
+                format_args!("core=\"{}\"", i),
                 core_pct
             );
         }
@@ -151,99 +151,96 @@ impl ToPrometheus for MetricsSnapshot {
 
         // --- Disk Metrics ---
         for disk in &self.disks {
-            let labels = format!("device=\"{}\"", disk.name);
             metric!(
                 "hitz_disk_reads_total",
                 "counter",
                 "Total completed read operations",
-                labels,
+                format_args!("device=\"{}\"", disk.name),
                 disk.reads_total
             );
             metric!(
                 "hitz_disk_writes_total",
                 "counter",
                 "Total completed write operations",
-                labels,
+                format_args!("device=\"{}\"", disk.name),
                 disk.writes_total
             );
             metric!(
                 "hitz_disk_read_bytes_total",
                 "counter",
                 "Total bytes read",
-                labels,
+                format_args!("device=\"{}\"", disk.name),
                 disk.read_bytes
             );
             metric!(
                 "hitz_disk_write_bytes_total",
                 "counter",
                 "Total bytes written",
-                labels,
+                format_args!("device=\"{}\"", disk.name),
                 disk.write_bytes
             );
         }
 
         // --- Network Metrics ---
         for net in &self.networks {
-            let labels = format!("interface=\"{}\"", net.interface);
             metric!(
                 "hitz_net_rx_bytes_total",
                 "counter",
                 "Total bytes received",
-                labels,
+                format_args!("interface=\"{}\"", net.interface),
                 net.rx_bytes
             );
             metric!(
                 "hitz_net_tx_bytes_total",
                 "counter",
                 "Total bytes transmitted",
-                labels,
+                format_args!("interface=\"{}\"", net.interface),
                 net.tx_bytes
             );
             metric!(
                 "hitz_net_rx_packets_total",
                 "counter",
                 "Total packets received",
-                labels,
+                format_args!("interface=\"{}\"", net.interface),
                 net.rx_packets
             );
             metric!(
                 "hitz_net_tx_packets_total",
                 "counter",
                 "Total packets transmitted",
-                labels,
+                format_args!("interface=\"{}\"", net.interface),
                 net.tx_packets
             );
             metric!(
                 "hitz_net_rx_errors_total",
                 "counter",
                 "Total receive errors",
-                labels,
+                format_args!("interface=\"{}\"", net.interface),
                 net.rx_errors
             );
             metric!(
                 "hitz_net_tx_errors_total",
                 "counter",
                 "Total transmit errors",
-                labels,
+                format_args!("interface=\"{}\"", net.interface),
                 net.tx_errors
             );
         }
 
         // --- Process Metrics ---
         for proc in &self.processes {
-            let labels = format!("pid=\"{}\",name=\"{}\"", proc.pid, proc.name);
             metric!(
                 "hitz_process_cpu_pct",
                 "gauge",
                 "CPU utilisation percentage for process",
-                labels,
+                format_args!("pid=\"{}\",name=\"{}\"", proc.pid, proc.name),
                 proc.cpu_pct
             );
             metric!(
                 "hitz_process_rss_bytes",
                 "gauge",
                 "Resident set size in bytes for process",
-                labels,
+                format_args!("pid=\"{}\",name=\"{}\"", proc.pid, proc.name),
                 proc.rss_bytes
             );
         }
