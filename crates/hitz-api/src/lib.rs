@@ -333,3 +333,9 @@ pub use fingerprint::*;
 mod imbalance;
 #[cfg(feature = "imbalance")]
 pub use imbalance::*;
+
+#[cfg(feature = "recommendation")]
+/// Rightsizing recommendation engine for micro-VMs.
+mod recommendation;
+#[cfg(feature = "recommendation")]
+pub use recommendation::*;
