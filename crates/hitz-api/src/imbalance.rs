@@ -40,6 +40,20 @@ use crate::MetricsSnapshot;
 use serde::{Deserialize, Serialize};
 
 /// The computed resource imbalance score.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::ImbalanceResult;
+///
+/// let result = ImbalanceResult {
+///     std_dev: 43.3,
+///     imbalance_score: 0.85,
+///     is_imbalanced: true,
+/// };
+///
+/// assert!(result.is_imbalanced);
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ImbalanceResult {
     /// Overall standard deviation of per-core utilization.
@@ -51,6 +65,11 @@ pub struct ImbalanceResult {
 }
 
 /// Trait to analyze core utilization imbalance.
+///
+/// # Abstract
+/// Exposes the capability to check whether work is being distributed
+/// evenly across the virtual CPUs of a micro-VM, or if a single thread
+/// is hogging one core while others sleep.
 pub trait CoreImbalanceAnalyzer {
     /// Analyzes per-core utilization and computes an imbalance score.
     fn analyze_imbalance(&self) -> ImbalanceResult;

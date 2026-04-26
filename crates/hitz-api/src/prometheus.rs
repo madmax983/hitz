@@ -33,6 +33,10 @@
 use crate::MetricsSnapshot;
 
 /// Trait to convert metrics into Prometheus text exposition format.
+///
+/// # Abstract
+/// Provides the ability to render complex metrics snapshots into flat,
+/// text-based time-series lines suitable for Prometheus scrapers.
 pub trait ToPrometheus {
     /// Convert the metrics snapshot to a Prometheus text string, tagging with the given `vm_id`.
     fn to_prometheus(&self, vm_id: &str) -> String;

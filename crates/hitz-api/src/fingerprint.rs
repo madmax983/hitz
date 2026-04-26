@@ -40,6 +40,18 @@ use crate::MetricsSnapshot;
 use serde::{Deserialize, Serialize};
 
 /// A discrete identifier for a VM's resource usage profile.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::VmFingerprint;
+///
+/// let fp = VmFingerprint {
+///     id: "FP-C9-R4-D0-N0".to_string(),
+/// };
+///
+/// assert!(fp.id.starts_with("FP-"));
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct VmFingerprint {
     /// The formatted fingerprint string (e.g., "FP-C9-R4-D0-N0").
@@ -47,6 +59,10 @@ pub struct VmFingerprint {
 }
 
 /// Trait to generate a fingerprint.
+///
+/// # Abstract
+/// This trait defines the ability to quantize continuous telemetry metrics into
+/// a reproducible, discrete string ID.
 pub trait FingerprintGenerator {
     /// Generates a fingerprint based on current state.
     fn generate_fingerprint(&self) -> VmFingerprint;

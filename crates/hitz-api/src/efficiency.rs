@@ -37,6 +37,19 @@ use crate::MetricsSnapshot;
 use serde::{Deserialize, Serialize};
 
 /// The computed resource efficiency score.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::EfficiencyScore;
+///
+/// let score = EfficiencyScore {
+///     score: 85.5,
+///     insights: vec!["CPU is well utilized.".to_string()],
+/// };
+///
+/// assert!(score.score > 80.0);
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EfficiencyScore {
     /// Overall score from 0.0 to 100.0.
@@ -46,6 +59,10 @@ pub struct EfficiencyScore {
 }
 
 /// Trait to calculate efficiency.
+///
+/// # Abstract
+/// This trait provides a standard mechanism to score a system's resource usage,
+/// highlighting areas where the VM might be over-provisioned (wasting resources).
 pub trait EfficiencyScorer {
     /// Calculates efficiency from metrics.
     fn calculate_efficiency(&self) -> EfficiencyScore;

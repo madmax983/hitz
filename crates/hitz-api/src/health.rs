@@ -37,7 +37,16 @@ use serde::{Deserialize, Serialize};
 /// An enum representing the three states of being for a micro-VM:
 /// perfectly fine, starting to sweat, and actively melting down.
 ///
-/// # The Hero's Journey
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::HealthStatus;
+///
+/// let s1 = HealthStatus::Healthy;
+/// let s2 = HealthStatus::Critical;
+///
+/// assert!(s2 > s1);
+/// ```
 /// ```rust
 /// use hitz_api::HealthStatus;
 ///
@@ -105,6 +114,28 @@ pub struct SystemHealth {
 ///
 /// let sys = MySystem;
 /// let report = sys.assess_health();
+/// ```
+///
+/// # Abstract
+/// This trait defines the ability to evaluate metrics against configured thresholds
+/// to produce a categorized health assessment.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::{HealthCheck, HealthStatus, SystemHealth};
+/// use hitz_api::{MetricsSnapshot, CpuMetrics, MemoryMetrics};
+///
+/// let metrics = MetricsSnapshot {
+///     timestamp_ms: 0,
+///     cpu: CpuMetrics { total_pct: 10.0, per_core: vec![10.0], load_avg: [0.1, 0.1, 0.1] },
+///     memory: MemoryMetrics { total_bytes: 1000, used_bytes: 100, free_bytes: 900, buffers_bytes: 0, cached_bytes: 0, swap_total: 1000, swap_used: 100 },
+///     disks: vec![],
+///     networks: vec![],
+///     processes: vec![],
+/// };
+///
+/// let report = metrics.assess_health();
 /// assert_eq!(report.status, HealthStatus::Healthy);
 /// ```
 pub trait HealthCheck {
