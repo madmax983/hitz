@@ -1198,9 +1198,30 @@ fn format_error_response(status: hyper::StatusCode, resp: &str, error_prefix: &s
 }
 
 fn print_error_response(status: hyper::StatusCode, resp: &str, error_prefix: &str) {
+    use comfy_table::presets::UTF8_FULL_CONDENSED;
+    use comfy_table::{Cell, Color, Table};
     use crossterm::style::Stylize;
+
     let msg = format_error_response(status, resp, error_prefix);
-    println!("\r\x1b[2K{}", msg.red());
+    // Strip our old plain-text error symbol and carriage returns to wrap the message cleanly
+    let msg_clean = msg
+        .replace("\r\x1b[2K", "")
+        .replace("✗ ", "")
+        .trim()
+        .to_string();
+
+    let mut table = Table::new();
+    table.load_preset(UTF8_FULL_CONDENSED);
+
+    table.add_row([
+        Cell::new(" 🛑 ERROR ")
+            .fg(Color::White)
+            .bg(Color::Red)
+            .add_attribute(comfy_table::Attribute::Bold),
+        Cell::new(&msg_clean).fg(Color::Red),
+    ]);
+    println!("\r\x1b[2K");
+    println!("{table}");
 }
 
 fn print_action_result(
