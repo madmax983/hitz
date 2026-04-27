@@ -1,6 +1,4 @@
-# ⚒️ Forge: Extract UI rendering in handle_vm_top
-
-- 🚽 Smell: The UI rendering logic inside `handle_vm_top` is over 150 lines long, nested deeply inside the terminal drawing loop, creating a "God Function" that is difficult to read.
-- ✨ Solution: Extracted the entire frame rendering block into a separate helper function `draw_vm_top_ui`.
-- 🧹 Benefit: Greatly reduces the cognitive load of `handle_vm_top`, pulling out rendering logic into a neatly scoped function.
-- 🛡️ Verification: Tests passed. No logic changed.
+💡 **The Spark:** "I noticed we can take point-in-time metrics snapshots and check their difference, but we don't have a way to forecast when critical resources like memory or CPU will be exhausted based on their current trajectory."
+🚀 **The Feature:** "Implemented the `CapacityForecaster` module that provides a predictive `CapacityForecast` struct, calculating 'Time to Out-Of-Memory (OOM)' and 'Time to CPU Saturation' using linear trend analysis across two telemetry snapshots."
+🔭 **The Potential:** "Could be hooked into the daemon to trigger proactive alerts or autoscaling events *before* a micro-VM crashes, moving our telemetry from reactive to predictive."
+⚠️ **Risk:** "Low. Entirely isolated in `crates/hitz-api/src/forecast.rs` and safely guarded behind the `forecast` feature flag. The logic operates strictly on snapshots."

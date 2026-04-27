@@ -333,3 +333,9 @@ pub use fingerprint::*;
 mod imbalance;
 #[cfg(feature = "imbalance")]
 pub use imbalance::*;
+
+#[cfg(feature = "forecast")]
+/// Capacity forecasting module.
+mod forecast;
+#[cfg(feature = "forecast")]
+pub use forecast::*;
