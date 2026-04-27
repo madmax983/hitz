@@ -2020,7 +2020,7 @@ fn handle_vm_timeline(args: &VmTimelineArgs) -> Result<()> {
     println!();
 
     let mut current_status = None;
-    let mut current_reasons: Vec<String> = Vec::new();
+    let mut current_reasons: Vec<String> = Vec::with_capacity(4);
 
     let mut line_count = 0;
     let mut initial_timestamp = None;
