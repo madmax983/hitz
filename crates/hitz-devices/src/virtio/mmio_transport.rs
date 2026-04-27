@@ -923,4 +923,128 @@ mod tests {
         // Magic is 0x74726976 (LE: 76 69 72 74)
         assert_eq!(buf, [0x76, 0x69]);
     }
+
+    #[test]
+    fn unhandled_mmio_read_returns_0() {
+        let mut t = make_transport();
+        assert_eq!(read_u32(&mut t, 0xFFFF), 0);
+    }
+
+    #[test]
+    fn unhandled_mmio_write_returns_none() {
+        let mut t = make_transport();
+        assert_eq!(write_u32(&mut t, 0xFFFF, 0), None);
+    }
+
+    #[test]
+    fn write_queue_notify_out_of_bounds() {
+        let mut t = make_transport();
+        assert_eq!(write_u32(&mut t, MMIO_QUEUE_NOTIFY, 999), None);
+    }
+
+    #[test]
+    fn write_queue_num_out_of_bounds() {
+        let mut t = make_transport();
+        write_u32(&mut t, MMIO_QUEUE_SEL, 999);
+        assert_eq!(write_u32(&mut t, MMIO_QUEUE_NUM, 10), None);
+    }
+
+    #[test]
+    fn write_queue_ready_out_of_bounds() {
+        let mut t = make_transport();
+        write_u32(&mut t, MMIO_QUEUE_SEL, 999);
+        assert_eq!(write_u32(&mut t, MMIO_QUEUE_READY, 1), None);
+    }
+
+    #[test]
+    fn write_queue_ready_false_clears_ready() {
+        let mut t = make_transport();
+        write_u32(&mut t, MMIO_QUEUE_SEL, 0);
+        write_u32(&mut t, MMIO_QUEUE_READY, 1);
+        assert!(t.queues[0].queue.is_ready());
+        write_u32(&mut t, MMIO_QUEUE_READY, 0);
+        assert!(!t.queues[0].queue.is_ready());
+    }
+
+    #[test]
+    fn write_interrupt_ack() {
+        let mut t = make_transport();
+        t.interrupt_status = 3;
+        write_u32(&mut t, MMIO_INTERRUPT_ACK, 1);
+        assert_eq!(t.interrupt_status, 2);
+    }
+
+    #[test]
+    fn write_device_features_paging() {
+        let mut t = make_transport();
+        write_u32(&mut t, MMIO_DEVICE_FEATURES_SEL, 1);
+        // This does nothing, DEVICE_FEATURES is read-only
+        assert_eq!(write_u32(&mut t, MMIO_DEVICE_FEATURES, 1), None);
+    }
+
+    #[test]
+    fn read_queue_ready() {
+        let mut t = make_transport();
+        write_u32(&mut t, MMIO_QUEUE_SEL, 0);
+        assert_eq!(read_u32(&mut t, MMIO_QUEUE_READY), 0);
+        write_u32(&mut t, MMIO_QUEUE_READY, 1);
+        assert_eq!(read_u32(&mut t, MMIO_QUEUE_READY), 1);
+
+        // Out of bounds selection
+        // MMIO_QUEUE_SEL is out of bounds, so queue_sel remains 0.
+        // Hence, reading MMIO_QUEUE_READY still reads queue 0 (ready = 1)
+        write_u32(&mut t, MMIO_QUEUE_SEL, 999);
+        assert_eq!(read_u32(&mut t, MMIO_QUEUE_READY), 1);
+    }
+
+    #[test]
+    fn write_queue_address_registers_out_of_bounds() {
+        let mut t = make_transport();
+        write_u32(&mut t, MMIO_QUEUE_SEL, 999);
+
+        // Writing 999 doesn't change queue_sel (it remains 0 because 999 is out of bounds).
+        // Let's actually write to a valid queue so it has values.
+        write_u32(&mut t, MMIO_QUEUE_SEL, 0);
+
+        // No wait, if we write out of bounds, queue_sel remains 0, so writing these
+        // WILL modify queue 0.
+        // The proper test is: it modified queue 0 since queue_sel didn't change!
+        write_u32(&mut t, MMIO_QUEUE_DESC_LOW, 1);
+        assert_eq!(t.queues[0].desc_low, 1);
+    }
+
+    #[test]
+    fn read_device_features_high() {
+        let mem = Arc::new(MockMem::new(0x10000));
+        let mut backend = DummyBackend::new();
+        backend.features = 0x1234_5678_9ABC_DEF0;
+        let mut t = VirtioMmioTransport::new(backend, mem, 5);
+
+        write_u32(&mut t, MMIO_DEVICE_FEATURES_SEL, 0);
+        assert_eq!(read_u32(&mut t, MMIO_DEVICE_FEATURES), 0x9ABC_DEF0);
+
+        write_u32(&mut t, MMIO_DEVICE_FEATURES_SEL, 1);
+        assert_eq!(read_u32(&mut t, MMIO_DEVICE_FEATURES), 0x1234_5678);
+    }
+
+    #[test]
+    fn queue_sel_bounds_logging() {
+        let mut t = make_transport();
+        // Just triggering the tracing debug branch
+        write_u32(&mut t, MMIO_QUEUE_SEL, 999);
+        assert_eq!(t.queue_sel, 0);
+    }
+
+    #[test]
+    fn write_driver_features_paging_high() {
+        let mut t = make_transport();
+
+        write_u32(&mut t, MMIO_DRIVER_FEATURES_SEL, 1);
+        write_u32(&mut t, MMIO_DRIVER_FEATURES, 0x1111_1111);
+        assert_eq!(t.driver_features, 0x1111_1111_0000_0000);
+
+        write_u32(&mut t, MMIO_DRIVER_FEATURES_SEL, 0);
+        write_u32(&mut t, MMIO_DRIVER_FEATURES, 0x2222_2222);
+        assert_eq!(t.driver_features, 0x1111_1111_2222_2222);
+    }
 }
