@@ -661,7 +661,11 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
             .vms
             .lock()
             .map_err(|e| DaemonError::Internal(e.to_string()))?;
-        Ok(vms.iter().map(|(id, entry)| entry.to_info(id)).collect())
+        let mut res = Vec::with_capacity(vms.len());
+        for (id, entry) in vms.iter() {
+            res.push(entry.to_info(id));
+        }
+        Ok(res)
     }
 
     /// Deletes a VM.
