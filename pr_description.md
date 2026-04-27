@@ -1,6 +1,14 @@
-Title: 🛡️ Sentry: [test coverage improvement]
+## 🚮 Smell
+- `crates/hitz-vmm/src/vm.rs`: In `run_multi_vcpu`, there was a deeply nested `match` block around the thread result `result` that handled `Ok(Ok(ExitReason::Canceled))` as a no-op, while doing the same cleanup action for all other variants, creating a "Pyramid of Doom" that obscured intent.
+- `crates/hitz-devices/src/virtio/mmio_transport.rs`: In the `write` handler, there were 6 repetitive match arms for writing the low/high values of the Queue Descriptors (`MMIO_QUEUE_DESC_LOW`, `MMIO_QUEUE_DESC_HIGH`, `MMIO_QUEUE_AVAIL_LOW`, `MMIO_QUEUE_AVAIL_HIGH`, `MMIO_QUEUE_USED_LOW`, `MMIO_QUEUE_USED_HIGH`), breaking the DRY principle.
 
-🎯 Target: `virtio::mmio_transport` module in `hitz-devices`
-💣 Risk: Missing test coverage for edge cases like out-of-bounds writes to MMIO registers, unhandled read/write handling, and proper state transition logic.
-🧪 Strategy: Added 13 new unit tests to cover missing read_reg/write_reg cases, paging logic, queue bounds checks, and unaligned writes/reads.
-🔬 Verification: `cargo test -p hitz-devices --lib --no-default-features --target x86_64-unknown-linux-gnu`
+## ✨ Solution
+- **Flattened** the thread exit `match` in `run_multi_vcpu` into a single early-return-style `if !matches!(&result, Ok(Ok(ExitReason::Canceled)))` Guard Clause.
+- **Extracted** the 6 `MMIO_QUEUE` address writes in `virtio/mmio_transport.rs` into a single combined match arm with a clean inner `match offset` dispatch.
+
+## 🧼 Benefit
+- Reduces cognitive load by eliminating deep nesting and boilerplate repetition.
+- Enforces strict DRY and idiomatic `matches!` Rust patterns without altering any runtime behavior.
+
+## 🛡️ Verification
+- Tests passed. No logic changed.

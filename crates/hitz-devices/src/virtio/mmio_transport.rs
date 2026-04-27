@@ -390,34 +390,22 @@ impl<D: VirtioBackend> VirtioMmioTransport<D> {
                     self.status = val;
                 }
             }
-            MMIO_QUEUE_DESC_LOW => {
+            MMIO_QUEUE_DESC_LOW
+            | MMIO_QUEUE_DESC_HIGH
+            | MMIO_QUEUE_AVAIL_LOW
+            | MMIO_QUEUE_AVAIL_HIGH
+            | MMIO_QUEUE_USED_LOW
+            | MMIO_QUEUE_USED_HIGH => {
                 if let Some(qs) = self.queues.get_mut(self.queue_sel) {
-                    qs.desc_low = value;
-                }
-            }
-            MMIO_QUEUE_DESC_HIGH => {
-                if let Some(qs) = self.queues.get_mut(self.queue_sel) {
-                    qs.desc_high = value;
-                }
-            }
-            MMIO_QUEUE_AVAIL_LOW => {
-                if let Some(qs) = self.queues.get_mut(self.queue_sel) {
-                    qs.avail_low = value;
-                }
-            }
-            MMIO_QUEUE_AVAIL_HIGH => {
-                if let Some(qs) = self.queues.get_mut(self.queue_sel) {
-                    qs.avail_high = value;
-                }
-            }
-            MMIO_QUEUE_USED_LOW => {
-                if let Some(qs) = self.queues.get_mut(self.queue_sel) {
-                    qs.used_low = value;
-                }
-            }
-            MMIO_QUEUE_USED_HIGH => {
-                if let Some(qs) = self.queues.get_mut(self.queue_sel) {
-                    qs.used_high = value;
+                    match offset {
+                        MMIO_QUEUE_DESC_LOW => qs.desc_low = value,
+                        MMIO_QUEUE_DESC_HIGH => qs.desc_high = value,
+                        MMIO_QUEUE_AVAIL_LOW => qs.avail_low = value,
+                        MMIO_QUEUE_AVAIL_HIGH => qs.avail_high = value,
+                        MMIO_QUEUE_USED_LOW => qs.used_low = value,
+                        MMIO_QUEUE_USED_HIGH => qs.used_high = value,
+                        _ => unreachable!(),
+                    }
                 }
             }
             _ => {

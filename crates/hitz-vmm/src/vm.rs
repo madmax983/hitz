@@ -670,16 +670,9 @@ fn run_multi_vcpu<H: Hypervisor>(
                         run_loop::run_vcpu_loop(&mut vcpu, &devs, &*mem, &stop)
                     }));
 
-                    match &result {
-                        Ok(
-                            Ok(ExitReason::Halt | ExitReason::Shutdown | ExitReason::Unexpected(_))
-                            | Err(_),
-                        )
-                        | Err(_) => {
-                            stop.store(true, Ordering::Relaxed);
-                            cancel_all_vcpus::<<H::Partition as Partition>::Vcpu>(&cancel_handles);
-                        }
-                        Ok(Ok(ExitReason::Canceled)) => {}
+                    if !matches!(&result, Ok(Ok(ExitReason::Canceled))) {
+                        stop.store(true, Ordering::Relaxed);
+                        cancel_all_vcpus::<<H::Partition as Partition>::Vcpu>(&cancel_handles);
                     }
 
                     let exit = match result {
