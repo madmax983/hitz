@@ -23,9 +23,18 @@ mod config;
 /// Telemetry structures representing the VM's runtime resources.
 mod metrics;
 
-pub use api::*;
-pub use config::*;
-pub use metrics::*;
+pub use api::{
+    ActionVmRequest, ApiError, CloneVmRequest, CreateVmRequest, VmAction, VmInfo, VmState,
+};
+pub use config::{
+    DEFAULT_CMDLINE, DEFAULT_CPUS, DEFAULT_GUEST_CID, DEFAULT_GUEST_IP, DEFAULT_HOST_IP,
+    DEFAULT_RAM_MIB, GuestAgentMode, NetConfig, PortForward, VMADDR_CID_HOST, VSOCK_METRICS_PORT,
+    VmConfig,
+};
+pub use metrics::{
+    CpuMetrics, DiskMetrics, MemoryMetrics, MetricsRequest, MetricsSnapshot, NetMetrics,
+    ProcMetrics,
+};
 
 #[cfg(feature = "health_check")]
 /// Health assessment module for evaluating system telemetry.

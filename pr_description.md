@@ -1,6 +1,4 @@
-Title: 🛡️ Sentry: [test coverage improvement]
-
-🎯 Target: `virtio::mmio_transport` module in `hitz-devices`
-💣 Risk: Missing test coverage for edge cases like out-of-bounds writes to MMIO registers, unhandled read/write handling, and proper state transition logic.
-🧪 Strategy: Added 13 new unit tests to cover missing read_reg/write_reg cases, paging logic, queue bounds checks, and unaligned writes/reads.
-🔬 Verification: `cargo test -p hitz-devices --lib --no-default-features --target x86_64-unknown-linux-gnu`
+* 🕸️ **Tangle**: The `hitz-api` crate previously used wildcard re-exports (`pub use module::*`) in its root `lib.rs`. This was a structural smell that leaked private items into the public API and polluted traits, violating the public API contract and making it harder to track where symbols were coming from.
+* 📐 **Blueprint**: I extracted the specific structures required for communication and explicitly re-exported them using the Facade pattern. The `lib.rs` file now explicitly lists the required `api`, `config`, and `metrics` sub-module symbols.
+* 🧱 **Stability**: This strictly enforces the domain boundaries of the API crate. It clarifies exactly what items are intended to be consumed by other crates in the `hitz` workspace and provides a solid public interface.
+* 🔬 **Verification**: The API crate compiles successfully without unresolved imports, and all API crate tests pass, confirming the explicit types fulfill the API contract.
