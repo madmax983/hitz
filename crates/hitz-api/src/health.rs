@@ -72,6 +72,19 @@ pub enum HealthStatus {
 ///
 /// assert_eq!(report.status, HealthStatus::Warning);
 /// ```
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::{SystemHealth, HealthStatus};
+///
+/// let health = SystemHealth {
+///     status: HealthStatus::Warning,
+///     reasons: vec!["High CPU usage".to_string()],
+/// };
+///
+/// assert_eq!(health.status, HealthStatus::Warning);
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SystemHealth {
     /// The aggregated health status.

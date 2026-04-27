@@ -53,6 +53,17 @@ pub enum WorkloadProfile {
 /// tailored to the specific [`WorkloadProfile`] provided at creation. Because
 /// it implements the standard library's `Iterator` trait, you can easily compose
 /// it with other iterator adapters.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::{VmSimulator, WorkloadProfile};
+///
+/// let mut sim = VmSimulator::new(WorkloadProfile::Idle);
+/// let snap = sim.next().unwrap();
+///
+/// assert_eq!(snap.cpu.total_pct, 5.0);
+/// ```
 #[derive(Debug)]
 pub struct VmSimulator {
     profile: WorkloadProfile,

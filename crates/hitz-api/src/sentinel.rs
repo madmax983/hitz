@@ -54,7 +54,7 @@ use serde::{Deserialize, Serialize};
 /// # Abstract
 /// Defines the comparative logic for a sentinel watchdog condition.
 ///
-/// # The Hero's Journey
+/// ## Examples
 /// ```rust
 /// use hitz_api::ConditionOperator;
 ///
@@ -76,7 +76,7 @@ pub enum ConditionOperator {
 /// # Abstract
 /// Specifies exactly which slice of a `MetricsSnapshot` should be evaluated.
 ///
-/// # The Hero's Journey
+/// ## Examples
 /// ```rust
 /// use hitz_api::MetricTarget;
 ///
@@ -96,7 +96,7 @@ pub enum MetricTarget {
 /// # Abstract
 /// Combines a target metric, an operator, and a threshold into a single boolean assertion.
 ///
-/// # The Hero's Journey
+/// ## Examples
 /// ```rust
 /// use hitz_api::{SentinelCondition, MetricTarget, ConditionOperator};
 ///
@@ -124,7 +124,7 @@ pub struct SentinelCondition {
 /// The fundamental unit of the Sentinel Rules Engine. Evaluates incoming `MetricsSnapshot`
 /// payloads against predefined logic to spot anomalies (like CPU spikes or memory leaks).
 ///
-/// # The Hero's Journey
+/// ## Examples
 /// ```rust
 /// use hitz_api::{SentinelRule, SentinelCondition, MetricTarget, ConditionOperator, MetricsSnapshot, CpuMetrics, MemoryMetrics};
 ///
@@ -170,6 +170,32 @@ pub struct SentinelRule {
 
 impl SentinelRule {
     /// Evaluates the underlying condition against a live telemetry snapshot.
+    ///
+    /// ## Examples
+    ///
+    /// ```rust
+    /// use hitz_api::{SentinelRule, SentinelCondition, MetricTarget, ConditionOperator, MetricsSnapshot, CpuMetrics, MemoryMetrics};
+    ///
+    /// let rule = SentinelRule {
+    ///     name: "High CPU".to_string(),
+    ///     condition: SentinelCondition {
+    ///         target: MetricTarget::CpuTotalPct,
+    ///         operator: ConditionOperator::GreaterThan,
+    ///         threshold: 80.0,
+    ///     },
+    /// };
+    ///
+    /// let snap = MetricsSnapshot {
+    ///     timestamp_ms: 0,
+    ///     cpu: CpuMetrics { total_pct: 90.0, per_core: vec![], load_avg: [0.0; 3] },
+    ///     memory: MemoryMetrics { total_bytes: 0, used_bytes: 0, free_bytes: 0, buffers_bytes: 0, cached_bytes: 0, swap_total: 0, swap_used: 0 },
+    ///     disks: vec![],
+    ///     networks: vec![],
+    ///     processes: vec![],
+    /// };
+    ///
+    /// assert!(rule.evaluate(&snap));
+    /// ```
     #[must_use]
     pub fn evaluate(&self, snapshot: &MetricsSnapshot) -> bool {
         let value = match self.condition.target {

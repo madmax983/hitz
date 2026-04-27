@@ -1,6 +1,8 @@
-Title: 🛡️ Sentry: [test coverage improvement]
+📖 Chapter: The `hitz-api` module's domain objects (`MetricsDiff`, `SystemHealth`, `EfficiencyScore`, etc).
 
-🎯 Target: `virtio::mmio_transport` module in `hitz-devices`
-💣 Risk: Missing test coverage for edge cases like out-of-bounds writes to MMIO registers, unhandled read/write handling, and proper state transition logic.
-🧪 Strategy: Added 13 new unit tests to cover missing read_reg/write_reg cases, paging logic, queue bounds checks, and unaligned writes/reads.
-🔬 Verification: `cargo test -p hitz-devices --lib --no-default-features --target x86_64-unknown-linux-gnu`
+🔦 Insight: The structural types for our REST API were missing concrete examples. If a tired developer at 3 AM needs to know how to construct a `SystemHealth` object to test a mock endpoint, they shouldn't have to guess. I've added executable doctests to all public structs and functions that were missing them.
+
+🧪 Example: Added executable `## Examples` doctests to `MetricsDiff`, `DiskRate`, `NetRate`, `EfficiencyScore`, `VmFingerprint`, `ImbalanceResult`, `SystemHealth`, `VmSimulator`, and `SentinelRule::evaluate`.
+
+🖼️ Preview:
+*A glorious set of copy-pasteable examples now adorns the `cargo doc` output for `hitz-api`, ensuring every struct tells a story of how it is used.*

@@ -37,6 +37,19 @@ use crate::MetricsSnapshot;
 use serde::{Deserialize, Serialize};
 
 /// The computed resource efficiency score.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::EfficiencyScore;
+///
+/// let score = EfficiencyScore {
+///     score: 85.5,
+///     insights: vec!["CPU is reasonably utilized".to_string()],
+/// };
+///
+/// assert!(score.score > 80.0);
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EfficiencyScore {
     /// Overall score from 0.0 to 100.0.
