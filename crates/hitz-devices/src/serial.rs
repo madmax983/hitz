@@ -168,4 +168,32 @@ mod tests {
         let lsr = serial.pio_read(0x3FD);
         assert_ne!(lsr & 0x60, 0, "THRE+TEMT should be set after write");
     }
+
+    #[test]
+    fn test_noop_trigger() {
+        use vm_superio::Trigger;
+        let trigger = NoopTrigger;
+        assert!(trigger.trigger().is_ok());
+    }
+
+    struct FailingSink;
+    impl std::io::Write for FailingSink {
+        fn write(&mut self, _buf: &[u8]) -> std::io::Result<usize> {
+            Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "failing sink",
+            ))
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn test_pio_write_failing_sink() {
+        let mut dev = SerialDevice::new(FailingSink);
+        // Writing to failing sink will trigger the inner.write to return Err.
+        // It should log a warning but not panic.
+        dev.pio_write(0x3F8, b'A');
+    }
 }

@@ -373,4 +373,11 @@ mod tests {
         // Complete outer overlap
         bus.register(0xCFFF_0000, 0x12000, Box::new(StubDevice::new(0)));
     }
+
+    #[test]
+    fn default_mmio_bus_and_default_device() {
+        let _bus = MmioBus::default();
+        let mut dev = StubDevice::new(0);
+        assert_eq!(MmioDevice::poll_rx(&mut dev), None);
+    }
 }
