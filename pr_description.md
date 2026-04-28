@@ -1,6 +1,4 @@
-Title: 🛡️ Sentry: [test coverage improvement]
-
-🎯 Target: `virtio::mmio_transport` module in `hitz-devices`
-💣 Risk: Missing test coverage for edge cases like out-of-bounds writes to MMIO registers, unhandled read/write handling, and proper state transition logic.
-🧪 Strategy: Added 13 new unit tests to cover missing read_reg/write_reg cases, paging logic, queue bounds checks, and unaligned writes/reads.
-🔬 Verification: `cargo test -p hitz-devices --lib --no-default-features --target x86_64-unknown-linux-gnu`
+💡 What: Removed an unnecessary `.to_string()` heap allocation in `hitz-vmm/src/vm.rs` inside an `std::io::Error` instantiation on the vCPU error path.
+🎯 Why: `std::io::Error::new()` accepts any type that implements `Into<Box<dyn std::error::Error + Send + Sync>>`, which includes `&str`. Converting a static string slice to an owned `String` via `.to_string()` incurs an unneeded heap allocation and memory copy, violating the zero-cost abstraction philosophy.
+📊 Impact: Minor reduction in heap allocations when handling a vCPU creation failure path.
+🔬 Measurement: Verified with `cargo clippy -p hitz-vmm`.
