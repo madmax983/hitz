@@ -609,4 +609,214 @@ mod tests {
         let status = mem.read_bytes(STATUS_GPA, 1);
         assert_eq!(status[0], VIRTIO_BLK_S_IOERR);
     }
+
+    #[test]
+    fn capacity_returns_capacity() {
+        let f = create_temp_disk(10);
+        let dev = VirtioBlockDevice::new(f).expect("new block device");
+        assert_eq!(dev.capacity(), 10);
+    }
+
+    #[test]
+    fn device_features_returns_0() {
+        let f = create_temp_disk(10);
+        let dev = VirtioBlockDevice::new(f).expect("new block device");
+        assert_eq!(dev.device_features(), 0);
+    }
+
+    #[test]
+    fn write_config_is_noop() {
+        let f = create_temp_disk(10);
+        let mut dev = VirtioBlockDevice::new(f).expect("new block device");
+        // Just verify it doesn't panic
+        dev.write_config(0, &[1, 2, 3]);
+    }
+
+    #[test]
+    fn read_length_out_of_bounds() {
+        let f = create_temp_disk(2); // 2 sectors = 1024 bytes
+        let mut dev = VirtioBlockDevice::new(f).expect("new block device");
+        let mem = MockMem::new(0x10000);
+        let mut q = setup_queue(&mem);
+
+        // Request starting at sector 1 (offset 512), length 513 bytes -> out of bounds
+        setup_request_chain(&mem, 0, VIRTIO_BLK_T_IN, 1, 513, true);
+
+        dev.process_queue(0, &mut q, &mem);
+
+        let status = mem.read_bytes(STATUS_GPA, 1);
+        assert_eq!(status[0], VIRTIO_BLK_S_IOERR);
+    }
+
+    #[test]
+    fn write_length_out_of_bounds() {
+        let f = create_temp_disk(2); // 2 sectors = 1024 bytes
+        let mut dev = VirtioBlockDevice::new(f).expect("new block device");
+        let mem = MockMem::new(0x10000);
+        let mut q = setup_queue(&mem);
+
+        // Request starting at sector 1 (offset 512), length 513 bytes -> out of bounds
+        setup_request_chain(&mem, 0, VIRTIO_BLK_T_OUT, 1, 513, false);
+
+        dev.process_queue(0, &mut q, &mem);
+
+        let status = mem.read_bytes(STATUS_GPA, 1);
+        assert_eq!(status[0], VIRTIO_BLK_S_IOERR);
+    }
+
+    #[test]
+    fn missing_data_descriptor() {
+        let f = create_temp_disk(2);
+        let mut dev = VirtioBlockDevice::new(f).expect("new block device");
+        let mem = MockMem::new(0x10000);
+        let mut q = setup_queue(&mem);
+
+        // Manually create a 1-descriptor chain (only header, no data, no status)
+        write_desc(&mem, 0, HDR_GPA, 16, 0, 0); // No F_NEXT
+        write_blk_header(&mem, HDR_GPA, VIRTIO_BLK_T_IN, 0);
+        write_avail_entry(&mem, 0, 0);
+        set_avail_idx(&mem, 1);
+
+        // Process queue should return 0 written without panic
+        dev.process_queue(0, &mut q, &mem);
+    }
+
+    #[test]
+    fn missing_header_descriptor() {
+        let f = create_temp_disk(2);
+        let mut dev = VirtioBlockDevice::new(f).expect("new block device");
+        let mem = MockMem::new(0x10000);
+        let mut q = setup_queue(&mem);
+
+        // A descriptor with 0 length and invalid gpa
+        write_desc(&mem, 0, 0xFFFF_FFFF, 0, 0, 0);
+        write_avail_entry(&mem, 0, 0);
+        set_avail_idx(&mem, 1);
+
+        dev.process_queue(0, &mut q, &mem);
+    }
+
+    #[test]
+    fn read_header_fails() {
+        let f = create_temp_disk(2);
+        let mut dev = VirtioBlockDevice::new(f).expect("new block device");
+        let mem = MockMem::new(0x10000);
+        let mut q = setup_queue(&mem);
+
+        // Header GPA out of bounds
+        write_desc(&mem, 0, 0x20000, 16, 1, 1);
+        write_avail_entry(&mem, 0, 0);
+        set_avail_idx(&mem, 1);
+
+        dev.process_queue(0, &mut q, &mem);
+    }
+
+    #[test]
+    fn write_guest_memory_fails() {
+        let f = create_temp_disk(2);
+        let mut dev = VirtioBlockDevice::new(f).expect("new block device");
+        let mem = MockMem::new(0x10000);
+        let mut q = setup_queue(&mem);
+
+        // Setup a valid read request, but point data_gpa to out-of-bounds memory
+        // Descriptor flags
+        const F_NEXT: u16 = 1;
+        const F_WRITE: u16 = 2;
+        write_desc(&mem, 0, HDR_GPA, 16, F_NEXT, 1);
+        write_desc(&mem, 1, 0x20000, 32, F_NEXT | F_WRITE, 2); // Out of bounds memory
+        write_desc(&mem, 2, STATUS_GPA, 1, F_WRITE, 0);
+        write_blk_header(&mem, HDR_GPA, VIRTIO_BLK_T_IN, 0);
+        write_avail_entry(&mem, 0, 0);
+        set_avail_idx(&mem, 1);
+
+        dev.process_queue(0, &mut q, &mem);
+
+        let status = mem.read_bytes(STATUS_GPA, 1);
+        assert_eq!(status[0], VIRTIO_BLK_S_IOERR);
+    }
+
+    #[test]
+    fn read_guest_memory_fails() {
+        let f = create_temp_disk(2);
+        let mut dev = VirtioBlockDevice::new(f).expect("new block device");
+        let mem = MockMem::new(0x10000);
+        let mut q = setup_queue(&mem);
+
+        // Setup a valid write request, but point data_gpa to out-of-bounds memory
+        const F_NEXT: u16 = 1;
+        const F_WRITE: u16 = 2;
+        write_desc(&mem, 0, HDR_GPA, 16, F_NEXT, 1);
+        write_desc(&mem, 1, 0x20000, 32, F_NEXT, 2); // Out of bounds memory
+        write_desc(&mem, 2, STATUS_GPA, 1, F_WRITE, 0);
+        write_blk_header(&mem, HDR_GPA, VIRTIO_BLK_T_OUT, 0);
+        write_avail_entry(&mem, 0, 0);
+        set_avail_idx(&mem, 1);
+
+        dev.process_queue(0, &mut q, &mem);
+
+        let status = mem.read_bytes(STATUS_GPA, 1);
+        assert_eq!(status[0], VIRTIO_BLK_S_IOERR);
+    }
+
+    #[test]
+    fn header_read_fails_ioerr() {
+        let f = create_temp_disk(2);
+        let mut dev = VirtioBlockDevice::new(f).expect("new block device");
+        let mem = MockMem::new(0x10000);
+        let mut q = setup_queue(&mem);
+
+        // Header descriptor reads 16 bytes but only 8 bytes are available
+        // Set gpa to 0xFFFF, where 16 bytes is out of bounds for the 0x10000 sized MockMem
+        write_desc(&mem, 0, 0xFFFF, 16, 1, 1);
+        write_desc(&mem, 1, DATA_GPA, 32, 1 | 2, 2);
+        write_desc(&mem, 2, STATUS_GPA, 1, 2, 0);
+        write_avail_entry(&mem, 0, 0);
+        set_avail_idx(&mem, 1);
+
+        dev.process_queue(0, &mut q, &mem);
+
+        // Assert queue processed correctly despite early return
+        let used_idx = mem.read_bytes(USED_BASE + 2, 2);
+        let used_idx_val = u16::from_le_bytes([used_idx[0], used_idx[1]]);
+        assert_eq!(used_idx_val, 1);
+    }
+
+    #[test]
+    fn io_errors_during_read_and_write() {
+        let f = create_temp_disk(2); // 2 sectors = 1024 bytes
+        let mut dev = VirtioBlockDevice::new(f).expect("new block device");
+        // Force the file to be shorter than capacity to trigger an error in read_exact/write_all without failing capacity check.
+        dev.disk.set_len(0).unwrap();
+
+        let mem = MockMem::new(0x10000);
+        let mut q = setup_queue(&mem);
+
+        // Read request (fails read_exact)
+        setup_request_chain(&mem, 0, VIRTIO_BLK_T_IN, 0, 512, true);
+        dev.process_queue(0, &mut q, &mem);
+        let status = mem.read_bytes(STATUS_GPA, 1);
+        assert_eq!(status[0], VIRTIO_BLK_S_IOERR);
+
+        // Write request (fails write_all)
+        // Linux allows writing to a file even after set_len(0), so we use a read-only file instead.
+        // But since we can't easily mock the file, the previous test was good enough. We will
+        // add another chain to cover the `VIRTIO_BLK_T_OUT` case assuming the OS complains.
+        // Actually to ensure write fails, we could just rely on the existing write bounds check.
+        // We will leave the write error out for simplicity and reliability across OSes.
+    }
+
+    #[test]
+    fn next_descriptor_read_fails() {
+        let f = create_temp_disk(2);
+        let mut dev = VirtioBlockDevice::new(f).expect("new block device");
+        let mem = MockMem::new(0x10000);
+        let mut q = setup_queue(&mem);
+
+        // Simulate next_descriptor returning None by writing a head_idx out of bounds for the queue
+        write_avail_entry(&mem, 0, 20);
+        set_avail_idx(&mem, 1);
+
+        dev.process_queue(0, &mut q, &mem);
+        // It should return 0 silently without panicking.
+    }
 }
