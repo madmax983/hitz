@@ -333,3 +333,9 @@ pub use fingerprint::*;
 mod imbalance;
 #[cfg(feature = "imbalance")]
 pub use imbalance::*;
+
+#[cfg(feature = "rightsizer")]
+/// Rightsizing module for analyzing metrics and suggesting config changes.
+mod rightsizer;
+#[cfg(feature = "rightsizer")]
+pub use rightsizer::*;
