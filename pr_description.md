@@ -1,6 +1,4 @@
-Title: 🛡️ Sentry: [test coverage improvement]
-
-🎯 Target: `virtio::mmio_transport` module in `hitz-devices`
-💣 Risk: Missing test coverage for edge cases like out-of-bounds writes to MMIO registers, unhandled read/write handling, and proper state transition logic.
-🧪 Strategy: Added 13 new unit tests to cover missing read_reg/write_reg cases, paging logic, queue bounds checks, and unaligned writes/reads.
-🔬 Verification: `cargo test -p hitz-devices --lib --no-default-features --target x86_64-unknown-linux-gnu`
+🎯 Target: hitz-api sub-modules (`config.rs`, `diff.rs`, `imbalance.rs`, `efficiency.rs`, `fingerprint.rs`, `carbon.rs`, `sentinel.rs`, `classifier.rs`).
+💣 Risk: Untested boundary thresholds, missing new device additions logic, untested rule logic evaluation combinations, and possible division by zero / 0-value boundaries.
+🧪 Strategy: Added table-driven test cases to `sentinel.rs` for exhaustive permutations testing, and added boundary validation tests to various metric structures.
+🔬 Verification: `cargo test -p hitz-api --all-features`.

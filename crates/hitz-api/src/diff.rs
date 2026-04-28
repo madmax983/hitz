@@ -287,6 +287,40 @@ mod tests {
     }
 
     #[test]
+    fn should_handle_new_devices_in_snapshot() {
+        // Older snapshot has disks and networks
+        let t1 = dummy_snapshot(1000, 10, 10);
+
+        // Newer snapshot has same devices plus new ones
+        let mut t2 = dummy_snapshot(2000, 20, 20);
+        t2.disks.push(DiskMetrics {
+            name: "vdb".to_string(),
+            reads_total: 50,
+            writes_total: 50,
+            read_bytes: 50 * 1024,
+            write_bytes: 50 * 1024,
+        });
+        t2.networks.push(NetMetrics {
+            interface: "eth1".to_string(),
+            rx_bytes: 50 * 1024,
+            tx_bytes: 50 * 1024,
+            rx_packets: 50,
+            tx_packets: 50,
+            rx_errors: 0,
+            tx_errors: 0,
+        });
+
+        let diff = t2.diff(&t1).expect("Diff should be Some");
+        assert_eq!(diff.elapsed_secs, 1.0);
+
+        // Diff should only include devices present in both
+        assert_eq!(diff.disks.len(), 1);
+        assert_eq!(diff.disks[0].name, "vda");
+        assert_eq!(diff.networks.len(), 1);
+        assert_eq!(diff.networks[0].interface, "eth0");
+    }
+
+    #[test]
     fn should_handle_missing_devices_in_diff() {
         // Older snapshot has no disks and no networks
         let mut t1 = dummy_snapshot(1000, 0, 0);
