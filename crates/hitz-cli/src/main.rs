@@ -211,12 +211,14 @@ fn install_service(args: &DaemonInstallArgs) -> Result<()> {
 
     let display_name = args
         .display_name
-        .clone()
-        .unwrap_or_else(|| "Hitz micro-VM daemon".to_string());
+        .as_deref()
+        .unwrap_or("Hitz micro-VM daemon")
+        .to_string();
     let description = args
         .description
-        .clone()
-        .unwrap_or_else(|| "Hyper-V micro-VM manager".to_string());
+        .as_deref()
+        .unwrap_or("Hyper-V micro-VM manager")
+        .to_string();
 
     let start_type = if args.auto_start {
         ServiceStartType::AutoStart
