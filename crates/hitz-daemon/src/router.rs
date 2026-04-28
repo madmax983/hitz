@@ -67,21 +67,21 @@ where
     );
 
     let result = async {
-        match (&method, path.as_str()) {
-            (&Method::GET, "/vms") => handle_list(manager),
-            _ if path.starts_with("/vms/") => {
-                let mut segments = path.splitn(4, '/');
-                // segments: ["", "vms", "{id}", "action"?]
-                match segments.nth(2) {
-                    Some(id) if !id.is_empty() => {
-                        let suffix = segments.next();
-                        route_vm(req, &method, id, suffix, manager).await
-                    }
-                    _ => Ok(error_response(StatusCode::BAD_REQUEST, "missing VM ID")),
-                }
-            }
-            _ => Ok(error_response(StatusCode::NOT_FOUND, "not found")),
+        if path == "/vms" && method == Method::GET {
+            return handle_list(manager);
         }
+
+        if path.starts_with("/vms/") {
+            let mut segments = path.splitn(4, '/');
+            // segments: ["", "vms", "{id}", "action"?]
+            let Some(id) = segments.nth(2).filter(|id| !id.is_empty()) else {
+                return Ok(error_response(StatusCode::BAD_REQUEST, "missing VM ID"));
+            };
+            let suffix = segments.next();
+            return route_vm(req, &method, id, suffix, manager).await;
+        }
+
+        Ok(error_response(StatusCode::NOT_FOUND, "not found"))
     }
     .instrument(span.clone())
     .await;
@@ -103,14 +103,23 @@ async fn route_vm<H>(
 where
     H: Hypervisor + Send + Sync + 'static,
 {
-    match (method, suffix) {
-        (&Method::PUT, None) => handle_create(req, id, manager).await,
-        (&Method::GET, None) => handle_get(id, manager),
-        (&Method::GET, Some("serial")) => handle_serial(id, manager),
-        (&Method::GET, Some("metrics")) => handle_metrics(id, manager),
-        (&Method::DELETE, None) => handle_delete(id, manager),
-        (&Method::POST, Some("action")) => handle_action(req, id, manager).await,
-        (&Method::POST, Some("clone")) => handle_clone(req, id, manager).await,
+    if suffix.is_none() {
+        return match *method {
+            Method::PUT => handle_create(req, id, manager).await,
+            Method::GET => handle_get(id, manager),
+            Method::DELETE => handle_delete(id, manager),
+            _ => Ok(error_response(
+                StatusCode::METHOD_NOT_ALLOWED,
+                "method not allowed",
+            )),
+        };
+    }
+
+    match (*method, suffix.unwrap()) {
+        (Method::GET, "serial") => handle_serial(id, manager),
+        (Method::GET, "metrics") => handle_metrics(id, manager),
+        (Method::POST, "action") => handle_action(req, id, manager).await,
+        (Method::POST, "clone") => handle_clone(req, id, manager).await,
         _ => Ok(error_response(
             StatusCode::METHOD_NOT_ALLOWED,
             "method not allowed",

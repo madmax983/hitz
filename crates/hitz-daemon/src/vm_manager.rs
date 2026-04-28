@@ -457,26 +457,19 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
             // Update state based on result.
             if let Ok(mut vms) = vms.lock() {
                 if let Some(entry) = vms.get_mut(&vm_id) {
-                    match result {
+                    let (state, reason) = match result {
                         Ok(Ok(run_result)) => match run_result.exit_reason {
-                            ExitReason::Halt | ExitReason::Shutdown | ExitReason::Canceled => {
-                                entry.state = VmState::Stopped;
-                                entry.exit_reason = Some(format!("{:?}", run_result.exit_reason));
-                            }
-                            ExitReason::Unexpected(ref reason) => {
-                                entry.state = VmState::Failed;
-                                entry.exit_reason = Some(reason.clone());
-                            }
+                            ExitReason::Halt | ExitReason::Shutdown | ExitReason::Canceled => (
+                                VmState::Stopped,
+                                Some(format!("{:?}", run_result.exit_reason)),
+                            ),
+                            ExitReason::Unexpected(reason) => (VmState::Failed, Some(reason)),
                         },
-                        Ok(Err(e)) => {
-                            entry.state = VmState::Failed;
-                            entry.exit_reason = Some(e.to_string());
-                        }
-                        Err(e) => {
-                            entry.state = VmState::Failed;
-                            entry.exit_reason = Some(format!("task panicked: {e}"));
-                        }
-                    }
+                        Ok(Err(e)) => (VmState::Failed, Some(e.to_string())),
+                        Err(e) => (VmState::Failed, Some(format!("task panicked: {e}"))),
+                    };
+                    entry.state = state;
+                    entry.exit_reason = reason;
                     entry.stop_flag = None;
                     entry.vsock_handle = None;
                     if let Some(ref buf) = entry.serial_buf {

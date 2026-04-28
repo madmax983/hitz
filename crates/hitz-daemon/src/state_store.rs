@@ -59,11 +59,12 @@ impl StateStore {
 
     /// Delete the VM directory for `id`. No-op if directory does not exist.
     pub fn delete(&self, id: &str) -> Result<(), DaemonError> {
-        match std::fs::remove_dir_all(self.vm_dir(id)) {
-            Ok(()) => Ok(()),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
-            Err(e) => Err(DaemonError::Io(e)),
+        if let Err(e) = std::fs::remove_dir_all(self.vm_dir(id)) {
+            if e.kind() != std::io::ErrorKind::NotFound {
+                return Err(DaemonError::Io(e));
+            }
         }
+        Ok(())
     }
 
     /// Load all valid VMs from the state directory.
@@ -74,19 +75,15 @@ impl StateStore {
     /// - `state = Running` → clamped to `Stopped` (daemon restart recovery).
     pub fn load_all(&self) -> Result<Vec<(String, VmConfig, VmState)>, DaemonError> {
         let mut results = Vec::new();
-        let read_dir = match std::fs::read_dir(&self.base_dir) {
-            Ok(rd) => rd,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(results),
-            Err(e) => return Err(DaemonError::Io(e)),
+        let Ok(read_dir) = std::fs::read_dir(&self.base_dir) else {
+            return Ok(results); // Directory missing, no VMs
         };
 
         for entry in read_dir {
-            let entry = match entry {
-                Ok(e) => e,
-                Err(e) => {
-                    tracing::warn!(error = %e, "failed to read state directory entry — skipping");
-                    continue;
-                }
+            let Ok(entry) = entry.inspect_err(|e| {
+                tracing::warn!(error = %e, "failed to read state directory entry — skipping");
+            }) else {
+                continue;
             };
             let path = entry.path();
             if !path.is_dir() {
