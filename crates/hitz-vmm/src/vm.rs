@@ -454,7 +454,7 @@ fn setup_guest_memory(
     ram_bytes: u64,
     gib_count: u32,
 ) -> Result<Gpa, VmError> {
-    guest_mem.add_region(Gpa::new(0), ram_bytes as usize)?;
+    guest_mem.add_region(Gpa::new(0), usize::try_from(ram_bytes).unwrap_or(usize::MAX))?;
 
     let (pml4_gpa, page_table_writes) = build_page_tables(gib_count)?;
     for write in &page_table_writes {
