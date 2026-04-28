@@ -115,13 +115,20 @@ impl VirtioBlockDevice {
                     sector,
                     data_desc.gpa,
                     data_desc.len,
+                    data_desc.is_device_writable,
                     mem,
                     &mut total_written,
                 )
             }
             VIRTIO_BLK_T_OUT => {
                 // Write from guest memory to disk.
-                self.handle_write(sector, data_desc.gpa, data_desc.len, mem)
+                self.handle_write(
+                    sector,
+                    data_desc.gpa,
+                    data_desc.len,
+                    data_desc.is_device_writable,
+                    mem,
+                )
             }
             _ => {
                 tracing::warn!(req_type, "unknown virtio-blk request type");
@@ -131,7 +138,11 @@ impl VirtioBlockDevice {
 
         // 3. Write the status byte to the third descriptor.
         if let Some(status_desc) = chain.next_descriptor(mem) {
-            let _ = mem.write_guest(status_desc.gpa, &[status]);
+            if status_desc.is_device_writable {
+                let _ = mem.write_guest(status_desc.gpa, &[status]);
+            } else {
+                tracing::warn!("status descriptor is not device-writable");
+            }
             total_written += 1;
         }
 
@@ -145,9 +156,15 @@ impl VirtioBlockDevice {
         sector: u64,
         gpa: u64,
         len: u32,
+        is_device_writable: bool,
         mem: &dyn GuestMemAccess,
         total_written: &mut u32,
     ) -> u8 {
+        if !is_device_writable {
+            tracing::warn!("read request provided a read-only data descriptor");
+            return VIRTIO_BLK_S_IOERR;
+        }
+
         if len > 16_777_216 {
             // Max 16MB per request to prevent OOM
             return VIRTIO_BLK_S_IOERR;
@@ -188,7 +205,19 @@ impl VirtioBlockDevice {
 
     /// Handle a write request: guest memory -> disk.
     #[allow(clippy::cast_possible_truncation)]
-    fn handle_write(&mut self, sector: u64, gpa: u64, len: u32, mem: &dyn GuestMemAccess) -> u8 {
+    fn handle_write(
+        &mut self,
+        sector: u64,
+        gpa: u64,
+        len: u32,
+        is_device_writable: bool,
+        mem: &dyn GuestMemAccess,
+    ) -> u8 {
+        if is_device_writable {
+            tracing::warn!("write request provided a writable data descriptor");
+            return VIRTIO_BLK_S_IOERR;
+        }
+
         if len > 16_777_216 {
             // Max 16MB per request to prevent OOM
             return VIRTIO_BLK_S_IOERR;
@@ -603,6 +632,46 @@ mod tests {
 
         // Create a massive desc length
         setup_request_chain(&mem, 0, VIRTIO_BLK_T_OUT, 0, u32::MAX, false);
+
+        dev.process_queue(0, &mut q, &mem);
+
+        let status = mem.read_bytes(STATUS_GPA, 1);
+        assert_eq!(status[0], VIRTIO_BLK_S_IOERR);
+    }
+
+    #[test]
+    fn havoc_blk_read_readonly_desc_returns_ioerr() {
+        let mut f = create_temp_disk(2);
+        let test_data = b"Hello, virtio block device!!!!!!"; // 32 bytes
+        let _ = f.seek(SeekFrom::Start(0)).expect("seek");
+        f.write_all(test_data).expect("write test data");
+        let _ = f.seek(SeekFrom::Start(0)).expect("seek back");
+
+        let mut dev = VirtioBlockDevice::new(f).expect("new block device");
+        let mem = MockMem::new(0x10000);
+        let mut q = setup_queue(&mem);
+
+        // Set up a read request: type=IN, sector=0, data_len=32, but data desc is NOT writable (false)
+        setup_request_chain(&mem, 0, VIRTIO_BLK_T_IN, 0, 32, false);
+
+        dev.process_queue(0, &mut q, &mem);
+
+        let status = mem.read_bytes(STATUS_GPA, 1);
+        assert_eq!(status[0], VIRTIO_BLK_S_IOERR);
+    }
+
+    #[test]
+    fn havoc_blk_write_writable_desc_returns_ioerr() {
+        let f = create_temp_disk(2);
+        let mut dev = VirtioBlockDevice::new(f).expect("new block device");
+        let mem = MockMem::new(0x10000);
+        let mut q = setup_queue(&mem);
+
+        let write_data = b"Written via virtio!_padding_he!!"; // 32 bytes
+        mem.write_bytes(DATA_GPA, write_data);
+
+        // Set up a write request: type=OUT, sector=0, data_len=32, but data desc IS writable (true)
+        setup_request_chain(&mem, 0, VIRTIO_BLK_T_OUT, 0, 32, true);
 
         dev.process_queue(0, &mut q, &mem);
 
