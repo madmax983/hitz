@@ -147,6 +147,14 @@ mod tests {
     }
 
     #[test]
+    fn test_zero_sum_mean() {
+        let snap = dummy_snapshot(0.0, vec![0.0, 0.0, 0.0]);
+        let result = snap.analyze_imbalance();
+        assert_eq!(result.std_dev, 0.0);
+        assert_eq!(result.imbalance_score, 0.0);
+        assert!(!result.is_imbalanced);
+    }
+    #[test]
     fn test_highly_imbalanced() {
         // One core at 100%, three at 0%
         let snap = dummy_snapshot(25.0, vec![100.0, 0.0, 0.0, 0.0]);

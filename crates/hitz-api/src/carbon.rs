@@ -205,6 +205,23 @@ mod tests {
     }
 
     #[test]
+    fn test_carbon_estimator_clamped_utilization() {
+        let factors = EmissionFactors::new(400.0);
+        let snap_high = base_snapshot(150.0, 2 * 1024 * 1024 * 1024);
+        let snap_low = base_snapshot(-10.0, 2 * 1024 * 1024 * 1024);
+        let snap_max = base_snapshot(100.0, 2 * 1024 * 1024 * 1024);
+        let snap_idle = base_snapshot(0.0, 2 * 1024 * 1024 * 1024);
+
+        let emissions_high = snap_high.estimate_carbon(&factors, 4);
+        let emissions_low = snap_low.estimate_carbon(&factors, 4);
+        let emissions_max = snap_max.estimate_carbon(&factors, 4);
+        let emissions_idle = snap_idle.estimate_carbon(&factors, 4);
+
+        assert!((emissions_high - emissions_max).abs() < f64::EPSILON);
+        assert!((emissions_low - emissions_idle).abs() < f64::EPSILON);
+    }
+
+    #[test]
     fn test_carbon_estimator_idle() {
         let factors = EmissionFactors::new(400.0);
         let snap = base_snapshot(0.0, 2 * 1024 * 1024 * 1024); // 0% CPU, 2GB RAM
