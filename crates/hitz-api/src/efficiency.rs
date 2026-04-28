@@ -37,6 +37,23 @@ use crate::MetricsSnapshot;
 use serde::{Deserialize, Serialize};
 
 /// The computed resource efficiency score.
+///
+/// # Abstract
+/// Represents the result of evaluating a system's resource usage, containing both a
+/// numerical score and actionable insights.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::EfficiencyScore;
+///
+/// let result = EfficiencyScore {
+///     score: 85.0,
+///     insights: vec!["CPU is well utilized.".to_string()],
+/// };
+///
+/// assert_eq!(result.score, 85.0);
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EfficiencyScore {
     /// Overall score from 0.0 to 100.0.
@@ -48,6 +65,27 @@ pub struct EfficiencyScore {
 /// Trait to calculate efficiency.
 pub trait EfficiencyScorer {
     /// Calculates efficiency from metrics.
+    ///
+    /// # Abstract
+    /// Evaluates the current resource usage and returns an [`EfficiencyScore`].
+    ///
+    /// ## Examples
+    ///
+    /// ```rust
+    /// use hitz_api::{EfficiencyScorer, MetricsSnapshot, CpuMetrics, MemoryMetrics};
+    ///
+    /// let snap = MetricsSnapshot {
+    ///     timestamp_ms: 1000,
+    ///     cpu: CpuMetrics { total_pct: 10.0, per_core: vec![10.0], load_avg: [0.1, 0.1, 0.1] },
+    ///     memory: MemoryMetrics { total_bytes: 1024, used_bytes: 512, free_bytes: 512, buffers_bytes: 0, cached_bytes: 0, swap_total: 0, swap_used: 0 },
+    ///     disks: vec![],
+    ///     networks: vec![],
+    ///     processes: vec![],
+    /// };
+    ///
+    /// let score = snap.calculate_efficiency();
+    /// assert!(score.score < 100.0);
+    /// ```
     fn calculate_efficiency(&self) -> EfficiencyScore;
 }
 
