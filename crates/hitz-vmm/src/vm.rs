@@ -431,10 +431,11 @@ pub fn boot_and_run<H: Hypervisor, W: Write + Send + 'static>(
 
     // ── 14. Run vCPU threads ──
     let exit_reason = if vcpus.len() == 1 {
+        // ⚡ Bolt Optimization: Eliminated `.to_string()` allocation on error path.
         let single_vcpu = vcpus.pop().ok_or_else(|| {
             std::io::Error::new(
                 std::io::ErrorKind::Other,
-                "vcpus array is unexpectedly empty when it should have 1 element".to_string(),
+                "vcpus array is unexpectedly empty when it should have 1 element",
             )
         })?;
         run_single_vcpu::<H>(single_vcpu, devices, guest_mem_arc, stop_flag)?
