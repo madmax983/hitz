@@ -1,6 +1,13 @@
-Title: 🛡️ Sentry: [test coverage improvement]
+Title: 🔭 Vantage: Spec for Windows-Native Guest Memory Allocator
 
-🎯 Target: `virtio::mmio_transport` module in `hitz-devices`
-💣 Risk: Missing test coverage for edge cases like out-of-bounds writes to MMIO registers, unhandled read/write handling, and proper state transition logic.
-🧪 Strategy: Added 13 new unit tests to cover missing read_reg/write_reg cases, paging logic, queue bounds checks, and unaligned writes/reads.
-🔬 Verification: `cargo test -p hitz-devices --lib --no-default-features --target x86_64-unknown-linux-gnu`
+👤 **User Story:** As a Core VMM Developer, I want a Windows-native guest memory abstraction, so that I can reliably map RAM into the microVM partition without compilation errors or POSIX compatibility issues.
+
+✅ **Acceptance Criteria:**
+- Must remove dependency on Linux-centric `vm-memory` crate.
+- Must allocate memory using native Windows capabilities.
+- Must map memory to the guest using native Windows Hypervisor Platform APIs.
+- Must provide standard read/write accessors for guest memory.
+
+🚫 **Out of Scope:** Memory Ballooning and NUMA awareness.
+
+**Note:** Tested `hitz-api` individually on Linux since the workspace fails on Linux due to Windows-specific dependencies (e.g. `wintun`). This PR only introduces a documentation specification and doesn't modify application code.
