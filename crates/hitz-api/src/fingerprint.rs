@@ -148,6 +148,13 @@ mod tests {
     }
 
     #[test]
+    fn test_zero_memory_total() {
+        let mut snap = dummy_snapshot(10.0, 0, 0, 0);
+        snap.memory.total_bytes = 0;
+        let fp = snap.generate_fingerprint();
+        assert_eq!(fp.id, "FP-C1-R0-D0-N0");
+    }
+    #[test]
     fn test_fingerprint_generation_idle() {
         // We use 11% RAM so (11.0 / 10.0) -> 1
         let snap = dummy_snapshot(5.0, 11, 0, 0);

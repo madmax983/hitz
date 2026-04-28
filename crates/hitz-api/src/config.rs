@@ -251,3 +251,53 @@ impl VmConfig {
         self.cmdline.as_deref().unwrap_or(DEFAULT_CMDLINE)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_effective_cmdline_default() {
+        let config = VmConfig {
+            kernel_path: PathBuf::from("vmlinux"),
+            initramfs_path: None,
+            disk_path: None,
+            ram_mib: DEFAULT_RAM_MIB,
+            cpus: DEFAULT_CPUS,
+            cmdline: None,
+            net: None,
+            ports: vec![],
+            guest_cid: DEFAULT_GUEST_CID,
+            guest_agent: GuestAgentMode::Auto,
+        };
+        assert_eq!(config.effective_cmdline(), DEFAULT_CMDLINE);
+    }
+
+    #[test]
+    fn test_effective_cmdline_custom() {
+        let config = VmConfig {
+            kernel_path: PathBuf::from("vmlinux"),
+            initramfs_path: None,
+            disk_path: None,
+            ram_mib: DEFAULT_RAM_MIB,
+            cpus: DEFAULT_CPUS,
+            cmdline: Some("custom cmdline".to_string()),
+            net: None,
+            ports: vec![],
+            guest_cid: DEFAULT_GUEST_CID,
+            guest_agent: GuestAgentMode::Auto,
+        };
+        assert_eq!(config.effective_cmdline(), "custom cmdline");
+    }
+
+    #[test]
+    fn test_default_helpers() {
+        assert_eq!(default_cpus(), DEFAULT_CPUS);
+        assert_eq!(default_guest_cid(), DEFAULT_GUEST_CID);
+    }
+
+    #[test]
+    fn test_guest_agent_mode_default() {
+        assert_eq!(GuestAgentMode::default(), GuestAgentMode::Auto);
+    }
+}

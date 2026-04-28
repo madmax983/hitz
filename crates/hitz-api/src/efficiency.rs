@@ -121,6 +121,14 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::float_cmp)]
+    fn test_zero_memory_total() {
+        let snap = dummy_snapshot(90.0, 0, 0);
+        let score = snap.calculate_efficiency();
+        assert_eq!(score.score, 100.0);
+        assert!(score.insights.is_empty());
+    }
+    #[test]
     fn test_highly_efficient() {
         // High CPU, High Memory usage
         let snap = dummy_snapshot(90.0, 1024 * 1024 * 1024, 900 * 1024 * 1024);

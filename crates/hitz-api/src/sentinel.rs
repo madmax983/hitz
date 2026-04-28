@@ -193,6 +193,149 @@ mod tests {
     use crate::{CpuMetrics, MemoryMetrics};
 
     #[test]
+    #[allow(clippy::too_many_lines)]
+    fn test_sentinel_rule_evaluate_table_driven() {
+        struct TestCase {
+            target: MetricTarget,
+            operator: ConditionOperator,
+            threshold: f32,
+            cpu_pct: f32,
+            mem_used: u64,
+            expected: bool,
+        }
+
+        let test_cases = vec![
+            // GreaterThan
+            TestCase {
+                target: MetricTarget::CpuTotalPct,
+                operator: ConditionOperator::GreaterThan,
+                threshold: 80.0,
+                cpu_pct: 85.0,
+                mem_used: 0,
+                expected: true,
+            },
+            TestCase {
+                target: MetricTarget::CpuTotalPct,
+                operator: ConditionOperator::GreaterThan,
+                threshold: 80.0,
+                cpu_pct: 70.0,
+                mem_used: 0,
+                expected: false,
+            },
+            // LessThan
+            TestCase {
+                target: MetricTarget::CpuTotalPct,
+                operator: ConditionOperator::LessThan,
+                threshold: 80.0,
+                cpu_pct: 70.0,
+                mem_used: 0,
+                expected: true,
+            },
+            TestCase {
+                target: MetricTarget::CpuTotalPct,
+                operator: ConditionOperator::LessThan,
+                threshold: 80.0,
+                cpu_pct: 85.0,
+                mem_used: 0,
+                expected: false,
+            },
+            // Equals
+            TestCase {
+                target: MetricTarget::CpuTotalPct,
+                operator: ConditionOperator::Equals,
+                threshold: 80.0,
+                cpu_pct: 80.0,
+                mem_used: 0,
+                expected: true,
+            },
+            TestCase {
+                target: MetricTarget::CpuTotalPct,
+                operator: ConditionOperator::Equals,
+                threshold: 80.0,
+                cpu_pct: 85.0,
+                mem_used: 0,
+                expected: false,
+            },
+            // MemoryTarget GreaterThan
+            TestCase {
+                target: MetricTarget::MemoryUsedBytes,
+                operator: ConditionOperator::GreaterThan,
+                threshold: 1000.0,
+                cpu_pct: 0.0,
+                mem_used: 1500,
+                expected: true,
+            },
+            TestCase {
+                target: MetricTarget::MemoryUsedBytes,
+                operator: ConditionOperator::GreaterThan,
+                threshold: 1000.0,
+                cpu_pct: 0.0,
+                mem_used: 500,
+                expected: false,
+            },
+            // MemoryTarget LessThan
+            TestCase {
+                target: MetricTarget::MemoryUsedBytes,
+                operator: ConditionOperator::LessThan,
+                threshold: 1000.0,
+                cpu_pct: 0.0,
+                mem_used: 500,
+                expected: true,
+            },
+            // MemoryTarget Equals
+            TestCase {
+                target: MetricTarget::MemoryUsedBytes,
+                operator: ConditionOperator::Equals,
+                threshold: 1000.0,
+                cpu_pct: 0.0,
+                mem_used: 1000,
+                expected: true,
+            },
+        ];
+
+        for (i, case) in test_cases.iter().enumerate() {
+            let rule = SentinelRule {
+                name: format!("test_case_{i}"),
+                condition: SentinelCondition {
+                    target: case.target.clone(),
+                    operator: case.operator.clone(),
+                    threshold: case.threshold,
+                },
+            };
+
+            let snap = MetricsSnapshot {
+                timestamp_ms: 0,
+                cpu: CpuMetrics {
+                    total_pct: case.cpu_pct,
+                    per_core: vec![],
+                    load_avg: [0.0, 0.0, 0.0],
+                },
+                memory: MemoryMetrics {
+                    total_bytes: 0,
+                    used_bytes: case.mem_used,
+                    free_bytes: 0,
+                    buffers_bytes: 0,
+                    cached_bytes: 0,
+                    swap_total: 0,
+                    swap_used: 0,
+                },
+                disks: vec![],
+                networks: vec![],
+                processes: vec![],
+            };
+
+            assert_eq!(
+                rule.evaluate(&snap),
+                case.expected,
+                "Failed test case {}: {:?} {:?}",
+                i,
+                case.target,
+                case.operator
+            );
+        }
+    }
+
+    #[test]
     fn test_sentinel_rule_evaluate() {
         let rule = SentinelRule {
             name: "High CPU".to_string(),

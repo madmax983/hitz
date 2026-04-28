@@ -158,6 +158,23 @@ mod tests {
     }
 
     #[test]
+    fn test_io_heavy_disk_writes() {
+        let snap = base_snapshot();
+        let mut diff = base_diff();
+        diff.disks[0].writes_per_sec = 600.0; // High disk IO writes
+
+        assert_eq!(snap.classify_workload(&diff), WorkloadClass::IoHeavy);
+    }
+
+    #[test]
+    fn test_io_heavy_net_tx() {
+        let snap = base_snapshot();
+        let mut diff = base_diff();
+        diff.networks[0].tx_bytes_per_sec = 50_000_000.0; // High net IO tx
+
+        assert_eq!(snap.classify_workload(&diff), WorkloadClass::IoHeavy);
+    }
+    #[test]
     fn test_io_heavy_disk() {
         let snap = base_snapshot();
         let mut diff = base_diff();
