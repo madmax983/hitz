@@ -1,3 +1,16 @@
+Title: 🔭 Vantage: Spec for Windows-Native Guest Memory Allocator
+
+👤 **User Story:** As a Core VMM Developer, I want a Windows-native guest memory abstraction, so that I can reliably map RAM into the microVM partition without compilation errors or POSIX compatibility issues.
+
+✅ **Acceptance Criteria:**
+- Must remove dependency on Linux-centric `vm-memory` crate.
+- Must allocate memory using native Windows capabilities.
+- Must map memory to the guest using native Windows Hypervisor Platform APIs.
+- Must provide standard read/write accessors for guest memory.
+
+🚫 **Out of Scope:** Memory Ballooning and NUMA awareness.
+
+**Note:** Tested `hitz-api` individually on Linux since the workspace fails on Linux due to Windows-specific dependencies (e.g. `wintun`). This PR only introduces a documentation specification and doesn't modify application code.
 💡 **The Spark:** "I noticed we collect detailed metrics and know the VM's configured size, but we don't use this combined knowledge to suggest actionable changes."
 🚀 **The Feature:** "Implemented a `RightSizer` trait that analyzes `MetricsSnapshot` against `VmConfig` to emit `ResizeRecommendation` variants (scale CPU/RAM up or down)."
 🔭 **The Potential:** "Could be used by the CLI to provide an `optimize` or `advise` command, or by a Kubernetes operator to autoscale micro-VMs."
