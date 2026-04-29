@@ -351,7 +351,7 @@ mod tests {
             }
         }
         fn write_bytes(&self, offset: u64, data: &[u8]) {
-            let mut mem = self.inner.lock().unwrap();
+            let mut mem = self.inner.lock().expect("Mutex poisoned");
             let start = offset as usize;
             if start + data.len() <= mem.len() {
                 mem[start..start + data.len()].copy_from_slice(data);
@@ -361,7 +361,7 @@ mod tests {
     impl GuestMemAccess for MockMem {
         #[allow(clippy::significant_drop_tightening)]
         fn read_guest(&self, gpa: u64, buf: &mut [u8]) -> Result<(), hitz_hal::HalError> {
-            let mem = self.inner.lock().unwrap();
+            let mem = self.inner.lock().expect("Mutex poisoned");
             let start = gpa as usize;
             if start + buf.len() > mem.len() {
                 return Err(hitz_hal::HalError::MapMemory {
@@ -375,7 +375,7 @@ mod tests {
         }
         #[allow(clippy::significant_drop_tightening)]
         fn write_guest(&self, gpa: u64, data: &[u8]) -> Result<(), hitz_hal::HalError> {
-            let mut mem = self.inner.lock().unwrap();
+            let mut mem = self.inner.lock().expect("Mutex poisoned");
             let start = gpa as usize;
             if start + data.len() > mem.len() {
                 return Err(hitz_hal::HalError::MapMemory {

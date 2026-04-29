@@ -1,3 +1,4 @@
+#![allow(clippy::items_after_statements)]
 //! Virtio block device backend.
 //!
 //! Implements [`VirtioBackend`] for disk I/O. Reads and writes go through
@@ -289,14 +290,14 @@ mod tests {
         }
 
         fn write_bytes(&self, offset: u64, data: &[u8]) {
-            let mut mem = self.inner.lock().unwrap();
+            let mut mem = self.inner.lock().expect("Mutex poisoned");
             let start = offset as usize;
             mem[start..start + data.len()].copy_from_slice(data);
             drop(mem);
         }
 
         fn read_bytes(&self, offset: u64, len: usize) -> Vec<u8> {
-            let mem = self.inner.lock().unwrap();
+            let mem = self.inner.lock().expect("Mutex poisoned");
             let start = offset as usize;
             mem[start..start + len].to_vec()
         }
@@ -304,7 +305,7 @@ mod tests {
 
     impl GuestMemAccess for MockMem {
         fn read_guest(&self, gpa: u64, buf: &mut [u8]) -> Result<(), hitz_hal::HalError> {
-            let mem = self.inner.lock().unwrap();
+            let mem = self.inner.lock().expect("Mutex poisoned");
             let start = gpa as usize;
             if start + buf.len() > mem.len() {
                 return Err(hitz_hal::HalError::MapMemory {
@@ -319,7 +320,7 @@ mod tests {
         }
 
         fn write_guest(&self, gpa: u64, data: &[u8]) -> Result<(), hitz_hal::HalError> {
-            let mut mem = self.inner.lock().unwrap();
+            let mut mem = self.inner.lock().expect("Mutex poisoned");
             let start = gpa as usize;
             if start + data.len() > mem.len() {
                 return Err(hitz_hal::HalError::MapMemory {
@@ -581,7 +582,7 @@ mod tests {
     #[test]
     fn havoc_blk_read_oom() {
         let f = create_temp_disk(1);
-        let mut dev = VirtioBlockDevice::new(f).unwrap();
+        let mut dev = VirtioBlockDevice::new(f).expect("Mutex poisoned");
         let mem = MockMem::new(0x10000);
         let mut q = setup_queue(&mem);
 
@@ -597,7 +598,7 @@ mod tests {
     #[test]
     fn havoc_blk_write_oom() {
         let f = create_temp_disk(1);
-        let mut dev = VirtioBlockDevice::new(f).unwrap();
+        let mut dev = VirtioBlockDevice::new(f).expect("Mutex poisoned");
         let mem = MockMem::new(0x10000);
         let mut q = setup_queue(&mem);
 
@@ -786,7 +787,7 @@ mod tests {
         let f = create_temp_disk(2); // 2 sectors = 1024 bytes
         let mut dev = VirtioBlockDevice::new(f).expect("new block device");
         // Force the file to be shorter than capacity to trigger an error in read_exact/write_all without failing capacity check.
-        dev.disk.set_len(0).unwrap();
+        dev.disk.set_len(0).expect("Mutex poisoned");
 
         let mem = MockMem::new(0x10000);
         let mut q = setup_queue(&mem);

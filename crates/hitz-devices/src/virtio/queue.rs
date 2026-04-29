@@ -353,7 +353,7 @@ mod tests {
         }
 
         fn write_bytes(&self, offset: u64, data: &[u8]) {
-            let mut mem = self.inner.lock().unwrap();
+            let mut mem = self.inner.lock().expect("device lock poisoned");
             #[allow(clippy::cast_possible_truncation)]
             let start = offset as usize;
             mem[start..start + data.len()].copy_from_slice(data);
@@ -362,7 +362,7 @@ mod tests {
 
     impl GuestMemAccess for MockMem {
         fn read_guest(&self, gpa: u64, buf: &mut [u8]) -> Result<(), hitz_hal::HalError> {
-            let mem = self.inner.lock().unwrap();
+            let mem = self.inner.lock().expect("device lock poisoned");
             #[allow(clippy::cast_possible_truncation)]
             let start = gpa as usize;
             if start + buf.len() > mem.len() {
@@ -378,7 +378,7 @@ mod tests {
         }
 
         fn write_guest(&self, gpa: u64, data: &[u8]) -> Result<(), hitz_hal::HalError> {
-            let mut mem = self.inner.lock().unwrap();
+            let mut mem = self.inner.lock().expect("device lock poisoned");
             #[allow(clippy::cast_possible_truncation)]
             let start = gpa as usize;
             if start + data.len() > mem.len() {
@@ -422,7 +422,8 @@ mod tests {
     /// Read used.idx.
     fn read_used_idx(mem: &MockMem) -> u16 {
         let mut buf = [0u8; 2];
-        mem.read_guest(USED_BASE + 2, &mut buf).unwrap();
+        mem.read_guest(USED_BASE + 2, &mut buf)
+            .expect("device lock poisoned");
         u16::from_le_bytes(buf)
     }
 
@@ -431,8 +432,10 @@ mod tests {
         let offset = USED_BASE + 4 + u64::from(ring_idx) * 8;
         let mut id_buf = [0u8; 4];
         let mut len_buf = [0u8; 4];
-        mem.read_guest(offset, &mut id_buf).unwrap();
-        mem.read_guest(offset + 4, &mut len_buf).unwrap();
+        mem.read_guest(offset, &mut id_buf)
+            .expect("device lock poisoned");
+        mem.read_guest(offset + 4, &mut len_buf)
+            .expect("device lock poisoned");
         (u32::from_le_bytes(id_buf), u32::from_le_bytes(len_buf))
     }
 
@@ -652,7 +655,8 @@ mod tests {
         q.configure(DESC_BASE, AVAIL_BASE, USED_BASE);
         q.set_ready(true);
         // We write directly to the buffer because set_avail_idx expects mem to be big enough
-        mem.inner.lock().unwrap()[0x1002..0x1004].copy_from_slice(&1u16.to_le_bytes());
+        mem.inner.lock().expect("device lock poisoned")[0x1002..0x1004]
+            .copy_from_slice(&1u16.to_le_bytes());
 
         assert!(q.pop_chain(&mem).is_none());
     }
@@ -663,10 +667,16 @@ mod tests {
         // but its backing memory is intentionally unreadable or partially mapped
         // Here we just make memory small.
         let small_mem = MockMem::new(0x1004); // Can read avail index but not descriptor base
-        small_mem.inner.lock().unwrap()[0x1002..0x1004].copy_from_slice(&1u16.to_le_bytes());
+        small_mem.inner.lock().expect("device lock poisoned")[0x1002..0x1004]
+            .copy_from_slice(&1u16.to_le_bytes());
         // Head index 0 at offset + 4
-        small_mem.inner.lock().unwrap().resize(0x1006, 0); // Need to read head index 0 at 0x1004
-        small_mem.inner.lock().unwrap()[0x1004..0x1006].copy_from_slice(&0u16.to_le_bytes());
+        small_mem
+            .inner
+            .lock()
+            .expect("device lock poisoned")
+            .resize(0x1006, 0); // Need to read head index 0 at 0x1004
+        small_mem.inner.lock().expect("device lock poisoned")[0x1004..0x1006]
+            .copy_from_slice(&0u16.to_le_bytes());
 
         let mut q2 = VirtQueue::new(16);
         q2.configure(0x2000, AVAIL_BASE, USED_BASE); // DESC_BASE is 0x2000, beyond memory size
