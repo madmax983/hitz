@@ -110,18 +110,28 @@ impl VirtioBlockDevice {
         let mut total_written: u32 = 0;
         let status = match req_type {
             VIRTIO_BLK_T_IN => {
-                // Read from disk into guest memory.
-                self.handle_read(
-                    sector,
-                    data_desc.gpa,
-                    data_desc.len,
-                    mem,
-                    &mut total_written,
-                )
+                if data_desc.is_device_writable {
+                    // Read from disk into guest memory.
+                    self.handle_read(
+                        sector,
+                        data_desc.gpa,
+                        data_desc.len,
+                        mem,
+                        &mut total_written,
+                    )
+                } else {
+                    tracing::warn!("VIRTIO_BLK_T_IN requires a device-writable data descriptor");
+                    VIRTIO_BLK_S_IOERR
+                }
             }
             VIRTIO_BLK_T_OUT => {
-                // Write from guest memory to disk.
-                self.handle_write(sector, data_desc.gpa, data_desc.len, mem)
+                if data_desc.is_device_writable {
+                    tracing::warn!("VIRTIO_BLK_T_OUT requires a device-readable data descriptor");
+                    VIRTIO_BLK_S_IOERR
+                } else {
+                    // Write from guest memory to disk.
+                    self.handle_write(sector, data_desc.gpa, data_desc.len, mem)
+                }
             }
             _ => {
                 tracing::warn!(req_type, "unknown virtio-blk request type");
@@ -131,8 +141,12 @@ impl VirtioBlockDevice {
 
         // 3. Write the status byte to the third descriptor.
         if let Some(status_desc) = chain.next_descriptor(mem) {
-            let _ = mem.write_guest(status_desc.gpa, &[status]);
-            total_written += 1;
+            if status_desc.is_device_writable {
+                let _ = mem.write_guest(status_desc.gpa, &[status]);
+                total_written += 1;
+            } else {
+                tracing::warn!("virtio-blk status descriptor must be device-writable");
+            }
         }
 
         total_written
@@ -779,6 +793,80 @@ mod tests {
         let used_idx = mem.read_bytes(USED_BASE + 2, 2);
         let used_idx_val = u16::from_le_bytes([used_idx[0], used_idx[1]]);
         assert_eq!(used_idx_val, 1);
+    }
+
+    #[test]
+    fn havoc_permissions_check_read() {
+        let f = create_temp_disk(2);
+        let mut dev = VirtioBlockDevice::new(f).unwrap();
+        let mem = MockMem::new(0x10000);
+        let mut q = setup_queue(&mem);
+
+        write_desc(&mem, 0, HDR_GPA, 16, 1, 1);
+        write_desc(&mem, 1, DATA_GPA, 512, 1, 2); // NOT device-writable
+        write_desc(&mem, 2, STATUS_GPA, 1, 2, 0);
+
+        write_blk_header(&mem, HDR_GPA, VIRTIO_BLK_T_IN, 0);
+        write_avail_entry(&mem, 0, 0);
+        set_avail_idx(&mem, 1);
+
+        dev.process_queue(0, &mut q, &mem);
+
+        let status = mem.read_bytes(STATUS_GPA, 1);
+        assert_eq!(
+            status[0], VIRTIO_BLK_S_IOERR,
+            "Failed to enforce writable descriptor on IN request"
+        );
+    }
+
+    #[test]
+    fn havoc_permissions_check_write() {
+        let f = create_temp_disk(2);
+        let mut dev = VirtioBlockDevice::new(f).unwrap();
+        let mem = MockMem::new(0x10000);
+        let mut q = setup_queue(&mem);
+
+        write_desc(&mem, 0, HDR_GPA, 16, 1, 1);
+        write_desc(&mem, 1, DATA_GPA, 512, 1 | 2, 2); // Writable, which is invalid for OUT
+        write_desc(&mem, 2, STATUS_GPA, 1, 2, 0);
+
+        write_blk_header(&mem, HDR_GPA, VIRTIO_BLK_T_OUT, 0);
+        write_avail_entry(&mem, 0, 0);
+        set_avail_idx(&mem, 1);
+
+        dev.process_queue(0, &mut q, &mem);
+
+        let status = mem.read_bytes(STATUS_GPA, 1);
+        assert_eq!(
+            status[0], VIRTIO_BLK_S_IOERR,
+            "Failed to enforce read-only descriptor on OUT request"
+        );
+    }
+
+    #[test]
+    fn havoc_permissions_check_status_descriptor() {
+        let f = create_temp_disk(2);
+        let mut dev = VirtioBlockDevice::new(f).unwrap();
+        let mem = MockMem::new(0x10000);
+        let mut q = setup_queue(&mem);
+
+        write_desc(&mem, 0, HDR_GPA, 16, 1, 1);
+        write_desc(&mem, 1, DATA_GPA, 512, 1 | 2, 2);
+        write_desc(&mem, 2, STATUS_GPA, 1, 0, 0); // NOT device-writable status descriptor
+
+        write_blk_header(&mem, HDR_GPA, VIRTIO_BLK_T_IN, 0);
+        write_avail_entry(&mem, 0, 0);
+        set_avail_idx(&mem, 1);
+
+        mem.write_bytes(STATUS_GPA, &[0xFF]);
+
+        dev.process_queue(0, &mut q, &mem);
+
+        let status = mem.read_bytes(STATUS_GPA, 1);
+        assert_eq!(
+            status[0], 0xFF,
+            "Failed to enforce writable status descriptor"
+        );
     }
 
     #[test]
