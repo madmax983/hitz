@@ -1,8 +1,7 @@
-🎨 **Before:**
-Running `hitz run --verbose` dumps a list of unstructured variables, using standard unformatted `eprintln!` commands that look like raw debugging statements.
+🚮 Smell: The `WorkloadProfile` enum was exported from the `classifier` module in `crates/hitz-api/src/lib.rs`, but it is actually defined in the `simulator` module, causing a broken build (`unresolved import classifier::WorkloadProfile`).
 
-✨ **After:**
-The `hitz run` command with `--verbose` now uses `comfy_table` to output a well-structured layout showing the exact configuration parameters that the micro-VM will boot with. A nice cyan banner `🚀 Booting standalone micro-VM` was also added to clearly signal action, aligning with the Mosaic design philosophy.
+✨ Solution: Updated the exports in `crates/hitz-api/src/lib.rs`. Moved `WorkloadProfile` out of the `classifier` block and added it to the `simulator` block.
 
-🖼️ **Visuals:**
-We replaced a stream of debug text with a clearly-formatted `Table` output matching `hitz vm status` formats and utilizing cyan/bold styles to structure data.
+🧼 Benefit: Fixes the broken build and ensures types are exported from their correct origin module, improving code organization and readability.
+
+🛡️ Verification: Tests passed. No logic changed. Build is clean without warnings.
