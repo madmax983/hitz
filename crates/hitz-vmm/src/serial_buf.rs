@@ -39,6 +39,7 @@ use loom::sync::{Arc, Mutex};
 use std::sync::{Arc, Mutex};
 
 use tokio::sync::Notify;
+use tokio::sync::watch;
 
 /// Default ring buffer capacity (64 KiB).
 const DEFAULT_CAPACITY: usize = 64 * 1024;
@@ -63,7 +64,8 @@ struct Inner {
 #[derive(Clone)]
 pub struct SerialBuf {
     inner: Arc<Mutex<Inner>>,
-    notify: Arc<Notify>,
+    notify_tx: tokio::sync::watch::Sender<()>,
+    notify_rx: tokio::sync::watch::Receiver<()>,
 }
 
 impl SerialBuf {
@@ -117,7 +119,7 @@ impl SerialBuf {
         let read_pos = self.inner.lock().total_written;
         SerialReader {
             inner: self.inner.clone(),
-            notify: self.notify.clone(),
+            notify_rx: self.notify_rx.clone(),
             read_pos,
         }
     }
@@ -136,7 +138,7 @@ impl SerialBuf {
             let mut inner = self.inner.lock();
             inner.closed = true;
         }
-        self.notify.notify_waiters();
+        let _ = self.notify_tx.send(());
     }
 }
 
@@ -189,7 +191,7 @@ impl Write for SerialBuf {
         }
         inner.total_written += len as u64;
         drop(inner);
-        self.notify.notify_waiters();
+        let _ = self.notify_tx.send(());
         Ok(len)
     }
 
@@ -204,7 +206,7 @@ impl Write for SerialBuf {
 /// the reader skips ahead to the oldest available data.
 pub struct SerialReader {
     inner: Arc<Mutex<Inner>>,
-    notify: Arc<Notify>,
+    notify_rx: tokio::sync::watch::Receiver<()>,
     /// Monotonic byte offset this reader has consumed up to.
     read_pos: u64,
 }
@@ -216,7 +218,7 @@ impl SerialReader {
     /// and all remaining data has been drained.
     pub async fn read_chunk(&mut self) -> Option<Vec<u8>> {
         loop {
-            let notified = self.notify.notified();
+            let mut rx = self.notify_rx.clone();
             {
                 #[cfg(not(loom))]
                 let Ok(inner) = self.inner.lock() else {
@@ -262,7 +264,7 @@ impl SerialReader {
                 }
             }
             // Park until the writer pushes more data or closes.
-            notified.await;
+            let _ = rx.changed().await;
         }
     }
 }
