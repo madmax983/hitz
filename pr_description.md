@@ -1,8 +1,4 @@
-🎨 **Before:**
-Running `hitz run --verbose` dumps a list of unstructured variables, using standard unformatted `eprintln!` commands that look like raw debugging statements.
-
-✨ **After:**
-The `hitz run` command with `--verbose` now uses `comfy_table` to output a well-structured layout showing the exact configuration parameters that the micro-VM will boot with. A nice cyan banner `🚀 Booting standalone micro-VM` was also added to clearly signal action, aligning with the Mosaic design philosophy.
-
-🖼️ **Visuals:**
-We replaced a stream of debug text with a clearly-formatted `Table` output matching `hitz vm status` formats and utilizing cyan/bold styles to structure data.
+💡 What: Replaced `Vec::new()` with `Vec::with_capacity(2)` in `hitz-api/src/rightsizer.rs`.
+🎯 Why: The `recommend_sizing` function generates at most 2 recommendations (one for CPU, one for RAM). Using `Vec::new()` meant the vector had to allocate memory dynamically when items were pushed.
+📊 Impact: Eliminates up to two heap allocations per sizing recommendation run.
+🔬 Measurement: Run `cargo bench -p hitz-api` (if available) or verify with `cargo test -p hitz-api --lib --no-default-features --target x86_64-unknown-linux-gnu`.
