@@ -339,3 +339,9 @@ pub use imbalance::*;
 mod rightsizer;
 #[cfg(feature = "rightsizer")]
 pub use rightsizer::*;
+
+#[cfg(feature = "audit")]
+/// Security auditing module for evaluating configuration risks.
+mod audit;
+#[cfg(feature = "audit")]
+pub use audit::*;
