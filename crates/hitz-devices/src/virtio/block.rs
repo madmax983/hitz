@@ -111,18 +111,30 @@ impl VirtioBlockDevice {
         let mut total_written: u32 = 0;
         let status = match req_type {
             VIRTIO_BLK_T_IN => {
-                // Read from disk into guest memory.
-                self.handle_read(
-                    sector,
-                    data_desc.gpa,
-                    data_desc.len,
-                    mem,
-                    &mut total_written,
-                )
+                if data_desc.is_device_writable {
+                    // Read from disk into guest memory.
+                    self.handle_read(
+                        sector,
+                        data_desc.gpa,
+                        data_desc.len,
+                        mem,
+                        &mut total_written,
+                    )
+                } else {
+                    tracing::warn!("IN request requires device-writable data descriptor");
+                    VIRTIO_BLK_S_IOERR
+                }
             }
             VIRTIO_BLK_T_OUT => {
-                // Write from guest memory to disk.
-                self.handle_write(sector, data_desc.gpa, data_desc.len, mem)
+                if data_desc.is_device_writable {
+                    tracing::warn!(
+                        "OUT request requires device-readable (read-only) data descriptor"
+                    );
+                    VIRTIO_BLK_S_IOERR
+                } else {
+                    // Write from guest memory to disk.
+                    self.handle_write(sector, data_desc.gpa, data_desc.len, mem)
+                }
             }
             _ => {
                 tracing::warn!(req_type, "unknown virtio-blk request type");
@@ -819,5 +831,41 @@ mod tests {
 
         dev.process_queue(0, &mut q, &mem);
         // It should return 0 silently without panicking.
+    }
+
+    #[test]
+    fn havoc_blk_read_readonly_desc() {
+        let f = create_temp_disk(1);
+        let mut dev = VirtioBlockDevice::new(f).unwrap();
+        let mem = MockMem::new(0x10000);
+        let mut q = setup_queue(&mem);
+
+        // Virtio spec requires that the data descriptor for a read request (VIRTIO_BLK_T_IN)
+        // is device-writable. If the guest provides a device-readable (read-only) descriptor,
+        // the device must reject it.
+        setup_request_chain(&mem, 0, VIRTIO_BLK_T_IN, 0, 512, false);
+
+        dev.process_queue(0, &mut q, &mem);
+
+        let status = mem.read_bytes(STATUS_GPA, 1);
+        assert_eq!(status[0], VIRTIO_BLK_S_IOERR);
+    }
+
+    #[test]
+    fn havoc_blk_write_writable_desc() {
+        let f = create_temp_disk(1);
+        let mut dev = VirtioBlockDevice::new(f).unwrap();
+        let mem = MockMem::new(0x10000);
+        let mut q = setup_queue(&mem);
+
+        // Virtio spec requires that the data descriptor for a write request (VIRTIO_BLK_T_OUT)
+        // is device-readable (read-only from device's perspective).
+        // If the guest provides a device-writable descriptor, it is invalid and should be rejected.
+        setup_request_chain(&mem, 0, VIRTIO_BLK_T_OUT, 0, 512, true);
+
+        dev.process_queue(0, &mut q, &mem);
+
+        let status = mem.read_bytes(STATUS_GPA, 1);
+        assert_eq!(status[0], VIRTIO_BLK_S_IOERR);
     }
 }
