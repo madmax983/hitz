@@ -110,18 +110,28 @@ impl VirtioBlockDevice {
         let mut total_written: u32 = 0;
         let status = match req_type {
             VIRTIO_BLK_T_IN => {
-                // Read from disk into guest memory.
-                self.handle_read(
-                    sector,
-                    data_desc.gpa,
-                    data_desc.len,
-                    mem,
-                    &mut total_written,
-                )
+                if data_desc.is_device_writable {
+                    // Read from disk into guest memory.
+                    self.handle_read(
+                        sector,
+                        data_desc.gpa,
+                        data_desc.len,
+                        mem,
+                        &mut total_written,
+                    )
+                } else {
+                    tracing::warn!("virtio-blk IN request data descriptor must be device-writable");
+                    VIRTIO_BLK_S_IOERR
+                }
             }
             VIRTIO_BLK_T_OUT => {
-                // Write from guest memory to disk.
-                self.handle_write(sector, data_desc.gpa, data_desc.len, mem)
+                if data_desc.is_device_writable {
+                    tracing::warn!("virtio-blk OUT request data descriptor must not be device-writable");
+                    VIRTIO_BLK_S_IOERR
+                } else {
+                    // Write from guest memory to disk.
+                    self.handle_write(sector, data_desc.gpa, data_desc.len, mem)
+                }
             }
             _ => {
                 tracing::warn!(req_type, "unknown virtio-blk request type");
@@ -131,8 +141,13 @@ impl VirtioBlockDevice {
 
         // 3. Write the status byte to the third descriptor.
         if let Some(status_desc) = chain.next_descriptor(mem) {
-            let _ = mem.write_guest(status_desc.gpa, &[status]);
-            total_written += 1;
+            if status_desc.is_device_writable {
+                let _ = mem.write_guest(status_desc.gpa, &[status]);
+                total_written += 1;
+            } else {
+                tracing::warn!("virtio-blk status descriptor must be device-writable");
+                // We cannot safely write the status.
+            }
         }
 
         total_written
@@ -272,6 +287,67 @@ impl VirtioBackend for VirtioBlockDevice {
     clippy::significant_drop_tightening
 )]
 mod tests {
+
+    #[test]
+    fn test_read_rejects_read_only_data_descriptor() {
+        let f = create_temp_disk(2);
+        let mut dev = VirtioBlockDevice::new(f).expect("new block device");
+        let mem = MockMem::new(0x10000);
+        let mut q = setup_queue(&mem);
+
+        // setup_request_chain(&mem, head_idx, req_type, sector, data_len, data_is_writable)
+        // For a read (VIRTIO_BLK_T_IN), data_is_writable must be true. We pass false to simulate malicious guest.
+        setup_request_chain(&mem, 0, VIRTIO_BLK_T_IN, 0, 512, false);
+        dev.process_queue(0, &mut q, &mem);
+
+        let status = mem.read_bytes(STATUS_GPA, 1);
+        assert_eq!(status[0], VIRTIO_BLK_S_IOERR, "Read should fail if data descriptor is read-only");
+    }
+
+    #[test]
+    fn test_write_rejects_writable_data_descriptor() {
+        let f = create_temp_disk(2);
+        let mut dev = VirtioBlockDevice::new(f).expect("new block device");
+        let mem = MockMem::new(0x10000);
+        let mut q = setup_queue(&mem);
+
+        // For a write (VIRTIO_BLK_T_OUT), data_is_writable must be false. We pass true.
+        setup_request_chain(&mem, 0, VIRTIO_BLK_T_OUT, 0, 512, true);
+        dev.process_queue(0, &mut q, &mem);
+
+        let status = mem.read_bytes(STATUS_GPA, 1);
+        assert_eq!(status[0], VIRTIO_BLK_S_IOERR, "Write should fail if data descriptor is device-writable");
+    }
+
+    #[test]
+    fn test_rejects_read_only_status_descriptor() {
+        const VIRTQ_DESC_F_NEXT: u16 = 1;
+        const VIRTQ_DESC_F_WRITE: u16 = 2;
+        let f = create_temp_disk(2);
+        let mut dev = VirtioBlockDevice::new(f).expect("new block device");
+        let mem = MockMem::new(0x10000);
+        let mut q = setup_queue(&mem);
+
+        // Setup chain manually because `setup_request_chain` makes status writable by default.
+        write_desc(&mem, 0, HDR_GPA, 16, VIRTQ_DESC_F_NEXT, 1);
+        write_blk_header(&mem, HDR_GPA, VIRTIO_BLK_T_IN, 0);
+
+        // Data (idx 1)
+        write_desc(&mem, 1, DATA_GPA, 512, VIRTQ_DESC_F_NEXT | VIRTQ_DESC_F_WRITE, 2);
+
+        // Status (idx 2) - Missing VIRTQ_DESC_F_WRITE
+        write_desc(&mem, 2, STATUS_GPA, 1, 0, 0);
+
+        write_avail_entry(&mem, 0, 0);
+        set_avail_idx(&mem, 1);
+
+        dev.process_queue(0, &mut q, &mem);
+
+        let used_len = mem.read_bytes(USED_BASE + 4, 4); // The `len` field of the first used element
+        let written = u32::from_le_bytes(used_len.try_into().unwrap());
+        assert_eq!(written, 0, "Should not write anything if status desc is read-only");
+    }
+
     use super::*;
     use std::io::{Seek, Write as IoWrite};
     use std::sync::Mutex;
@@ -333,6 +409,12 @@ mod tests {
             Ok(())
         }
     }
+
+    // Descriptor flags.
+
+    // Descriptor flags.
+    const F_NEXT: u16 = 1;
+    const F_WRITE: u16 = 2;
 
     // Memory layout for test virtqueue.
     const DESC_BASE: u64 = 0x0000;
@@ -396,8 +478,6 @@ mod tests {
         data_writable: bool,
     ) {
         // Descriptor flags.
-        const F_NEXT: u16 = 1;
-        const F_WRITE: u16 = 2;
 
         let base_desc = avail_idx * 3;
 
@@ -719,9 +799,6 @@ mod tests {
         let mut q = setup_queue(&mem);
 
         // Setup a valid read request, but point data_gpa to out-of-bounds memory
-        // Descriptor flags
-        const F_NEXT: u16 = 1;
-        const F_WRITE: u16 = 2;
         write_desc(&mem, 0, HDR_GPA, 16, F_NEXT, 1);
         write_desc(&mem, 1, 0x20000, 32, F_NEXT | F_WRITE, 2); // Out of bounds memory
         write_desc(&mem, 2, STATUS_GPA, 1, F_WRITE, 0);
@@ -743,10 +820,8 @@ mod tests {
         let mut q = setup_queue(&mem);
 
         // Setup a valid write request, but point data_gpa to out-of-bounds memory
-        const F_NEXT: u16 = 1;
-        const F_WRITE: u16 = 2;
         write_desc(&mem, 0, HDR_GPA, 16, F_NEXT, 1);
-        write_desc(&mem, 1, 0x20000, 32, F_NEXT, 2); // Out of bounds memory
+        write_desc(&mem, 1, 0x20000, 32, 1, 2); // Out of bounds memory
         write_desc(&mem, 2, STATUS_GPA, 1, F_WRITE, 0);
         write_blk_header(&mem, HDR_GPA, VIRTIO_BLK_T_OUT, 0);
         write_avail_entry(&mem, 0, 0);
@@ -768,8 +843,8 @@ mod tests {
         // Header descriptor reads 16 bytes but only 8 bytes are available
         // Set gpa to 0xFFFF, where 16 bytes is out of bounds for the 0x10000 sized MockMem
         write_desc(&mem, 0, 0xFFFF, 16, 1, 1);
-        write_desc(&mem, 1, DATA_GPA, 32, 1 | 2, 2);
-        write_desc(&mem, 2, STATUS_GPA, 1, 2, 0);
+        write_desc(&mem, 1, DATA_GPA, 32, F_NEXT | F_WRITE, 2);
+        write_desc(&mem, 2, STATUS_GPA, 1, F_WRITE, 0);
         write_avail_entry(&mem, 0, 0);
         set_avail_idx(&mem, 1);
 
