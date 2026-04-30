@@ -8,8 +8,9 @@ mod tests {
     #[test]
     fn should_serialize_and_deserialize_metrics_request() {
         let req = MetricsRequest::Snapshot;
-        let json = serde_json::to_string(&req).unwrap();
-        let deserialized: MetricsRequest = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_string(&req).expect("serialize/deserialize failed");
+        let deserialized: MetricsRequest =
+            serde_json::from_str(&json).expect("serialize/deserialize failed");
         assert_eq!(req, deserialized);
     }
 
@@ -20,8 +21,9 @@ mod tests {
             per_core: vec![],
             load_avg: [0.0, 0.0, 0.0],
         };
-        let json = serde_json::to_string(&cpu).unwrap();
-        let decoded: CpuMetrics = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_string(&cpu).expect("serialize/deserialize failed");
+        let decoded: CpuMetrics =
+            serde_json::from_str(&json).expect("serialize/deserialize failed");
         assert_eq!(cpu, decoded);
     }
 
@@ -36,8 +38,9 @@ mod tests {
             swap_total: 0,
             swap_used: 0,
         };
-        let json = serde_json::to_string(&mem).unwrap();
-        let decoded: MemoryMetrics = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_string(&mem).expect("serialize/deserialize failed");
+        let decoded: MemoryMetrics =
+            serde_json::from_str(&json).expect("serialize/deserialize failed");
         assert_eq!(mem, decoded);
     }
 
@@ -50,8 +53,9 @@ mod tests {
             reads_total: 10,
             writes_total: 20,
         };
-        let json = serde_json::to_string(&disk).unwrap();
-        let decoded: DiskMetrics = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_string(&disk).expect("serialize/deserialize failed");
+        let decoded: DiskMetrics =
+            serde_json::from_str(&json).expect("serialize/deserialize failed");
         assert_eq!(disk, decoded);
     }
 
@@ -66,8 +70,9 @@ mod tests {
             rx_errors: 0,
             tx_errors: 0,
         };
-        let json = serde_json::to_string(&net).unwrap();
-        let decoded: NetMetrics = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_string(&net).expect("serialize/deserialize failed");
+        let decoded: NetMetrics =
+            serde_json::from_str(&json).expect("serialize/deserialize failed");
         assert_eq!(net, decoded);
     }
 
@@ -80,8 +85,9 @@ mod tests {
             rss_bytes: 4096,
             state: 'S',
         };
-        let json = serde_json::to_string(&proc).unwrap();
-        let decoded: ProcMetrics = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_string(&proc).expect("serialize/deserialize failed");
+        let decoded: ProcMetrics =
+            serde_json::from_str(&json).expect("serialize/deserialize failed");
         assert_eq!(proc, decoded);
     }
 
@@ -129,13 +135,15 @@ mod tests {
         };
 
         // MsgPack roundtrip
-        let encoded_msgpack = rmp_serde::to_vec(&snap).unwrap();
-        let decoded_msgpack: MetricsSnapshot = rmp_serde::from_slice(&encoded_msgpack).unwrap();
+        let encoded_msgpack = rmp_serde::to_vec(&snap).expect("serialize/deserialize failed");
+        let decoded_msgpack: MetricsSnapshot =
+            rmp_serde::from_slice(&encoded_msgpack).expect("serialize/deserialize failed");
         assert_eq!(snap, decoded_msgpack);
 
         // JSON roundtrip
-        let encoded_json = serde_json::to_string(&snap).unwrap();
-        let decoded_json: MetricsSnapshot = serde_json::from_str(&encoded_json).unwrap();
+        let encoded_json = serde_json::to_string(&snap).expect("serialize/deserialize failed");
+        let decoded_json: MetricsSnapshot =
+            serde_json::from_str(&encoded_json).expect("serialize/deserialize failed");
         assert_eq!(snap, decoded_json);
     }
 }

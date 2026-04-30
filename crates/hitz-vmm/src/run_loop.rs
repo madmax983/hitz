@@ -397,8 +397,8 @@ fn handle_io_port<V: Vcpu, W: Write>(
 /// # }
 /// # let mut vcpu = DummyVcpu { regs: StandardRegs { rip: 0x1000, ..Default::default() } };
 /// // Assuming an instruction of length 2 caused an exit:
-/// advance_rip(&mut vcpu, 2).unwrap();
-/// assert_eq!(vcpu.get_regs().unwrap().rip, 0x1002);
+/// advance_rip(&mut vcpu, 2).expect("device lock poisoned");
+/// assert_eq!(vcpu.get_regs().expect("device lock poisoned").rip, 0x1002);
 /// ```
 #[allow(clippy::redundant_pub_crate)]
 pub(crate) fn advance_rip<V: Vcpu>(vcpu: &mut V, instruction_len: u8) -> Result<(), HalError> {
@@ -435,8 +435,8 @@ pub(crate) fn advance_rip<V: Vcpu>(vcpu: &mut V, instruction_len: u8) -> Result<
 /// # }
 /// # let mut vcpu = DummyVcpu { regs: StandardRegs { rip: 0x1000, rax: 0, ..Default::default() } };
 /// // Instruction length 1, and we want to set RAX to 0x42:
-/// advance_rip_with_rax(&mut vcpu, 1, 0x42).unwrap();
-/// let regs = vcpu.get_regs().unwrap();
+/// advance_rip_with_rax(&mut vcpu, 1, 0x42).expect("device lock poisoned");
+/// let regs = vcpu.get_regs().expect("device lock poisoned");
 /// assert_eq!(regs.rip, 0x1001);
 /// assert_eq!(regs.rax, 0x42);
 /// ```
@@ -1204,7 +1204,7 @@ mod tests {
         });
 
         let _ = std::panic::catch_unwind(|| {
-            let _guard = devices.lock().unwrap();
+            let _guard = devices.lock().expect("device lock poisoned");
             panic!("poisoning");
         });
 
@@ -1226,7 +1226,7 @@ mod tests {
         });
 
         let _ = std::panic::catch_unwind(|| {
-            let _guard = devices.lock().unwrap();
+            let _guard = devices.lock().expect("device lock poisoned");
             panic!("poisoning");
         });
 
@@ -1267,7 +1267,7 @@ mod tests {
         });
 
         let _ = std::panic::catch_unwind(|| {
-            let _guard = devices.lock().unwrap();
+            let _guard = devices.lock().expect("device lock poisoned");
             panic!("poisoning");
         });
 
@@ -1313,7 +1313,7 @@ mod tests {
         });
 
         let _ = std::panic::catch_unwind(|| {
-            let _guard = devices.lock().unwrap();
+            let _guard = devices.lock().expect("device lock poisoned");
             panic!("poisoning");
         });
 
@@ -1359,7 +1359,7 @@ mod tests {
         });
 
         let _ = std::panic::catch_unwind(|| {
-            let _guard = devices.lock().unwrap();
+            let _guard = devices.lock().expect("device lock poisoned");
             panic!("poisoning");
         });
 
@@ -1381,7 +1381,7 @@ mod tests {
         });
 
         let _ = std::panic::catch_unwind(|| {
-            let _guard = devices.lock().unwrap();
+            let _guard = devices.lock().expect("device lock poisoned");
             panic!("poisoning");
         });
 
@@ -1422,7 +1422,7 @@ mod tests {
         });
 
         let _ = std::panic::catch_unwind(|| {
-            let _guard = devices.lock().unwrap();
+            let _guard = devices.lock().expect("device lock poisoned");
             panic!("poisoning");
         });
 
@@ -1468,7 +1468,7 @@ mod tests {
         });
 
         let _ = std::panic::catch_unwind(|| {
-            let _guard = devices.lock().unwrap();
+            let _guard = devices.lock().expect("device lock poisoned");
             panic!("poisoning");
         });
 
@@ -1514,7 +1514,7 @@ mod tests {
         });
 
         let _ = std::panic::catch_unwind(|| {
-            let _guard = devices.lock().unwrap();
+            let _guard = devices.lock().expect("device lock poisoned");
             panic!("poisoning");
         });
 
@@ -1537,7 +1537,7 @@ mod tests {
         });
 
         let _ = std::panic::catch_unwind(|| {
-            let _guard = devices.lock().unwrap();
+            let _guard = devices.lock().expect("device lock poisoned");
             panic!("poisoning");
         });
 
@@ -1559,7 +1559,7 @@ mod tests {
         });
 
         let _ = std::panic::catch_unwind(|| {
-            let _guard = devices.lock().unwrap();
+            let _guard = devices.lock().expect("device lock poisoned");
             panic!("poisoning");
         });
 

@@ -179,10 +179,7 @@ mod tests {
     struct FailingSink;
     impl std::io::Write for FailingSink {
         fn write(&mut self, _buf: &[u8]) -> std::io::Result<usize> {
-            Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "failing sink",
-            ))
+            Err(std::io::Error::other("failing sink"))
         }
         fn flush(&mut self) -> std::io::Result<()> {
             Ok(())

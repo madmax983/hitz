@@ -549,7 +549,7 @@ mod tests {
 
     impl GuestMemAccess for MockMem {
         fn read_guest(&self, gpa: u64, buf: &mut [u8]) -> Result<(), hitz_hal::HalError> {
-            let mem = self.inner.lock().unwrap();
+            let mem = self.inner.lock().expect("Mutex poisoned");
             #[allow(clippy::cast_possible_truncation)]
             let start = gpa as usize;
             if start + buf.len() > mem.len() {
@@ -565,7 +565,7 @@ mod tests {
         }
 
         fn write_guest(&self, gpa: u64, data: &[u8]) -> Result<(), hitz_hal::HalError> {
-            let mut mem = self.inner.lock().unwrap();
+            let mut mem = self.inner.lock().expect("Mutex poisoned");
             #[allow(clippy::cast_possible_truncation)]
             let start = gpa as usize;
             if start + data.len() > mem.len() {
