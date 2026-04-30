@@ -58,7 +58,9 @@ pub use diff::{CalculateDiff, DiskRate, MetricsDiff, NetRate};
 /// Classifier module for determining workload type.
 mod classifier;
 #[cfg(feature = "classifier")]
-pub use classifier::{WorkloadClass, WorkloadClassifier, WorkloadProfile};
+pub use classifier::{WorkloadClass, WorkloadClassifier};
+#[cfg(feature = "simulator")]
+pub use simulator::WorkloadProfile;
 
 #[cfg(feature = "prometheus")]
 /// Prometheus module for converting metrics to Prometheus text format.
@@ -348,3 +350,9 @@ pub use imbalance::{CoreImbalanceAnalyzer, ImbalanceResult};
 mod rightsizer;
 #[cfg(feature = "rightsizer")]
 pub use rightsizer::{ResizeRecommendation, RightSizer};
+
+#[cfg(feature = "runway")]
+/// Runway module for estimating time until resource exhaustion.
+mod runway;
+#[cfg(feature = "runway")]
+pub use runway::{RunwayEstimator, RunwayResult};
