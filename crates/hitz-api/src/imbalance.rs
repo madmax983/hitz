@@ -94,11 +94,7 @@ impl CoreImbalanceAnalyzer for MetricsSnapshot {
         // max_std_dev = 100.0 * sqrt((n-1)/n)
         let max_std_dev = 100.0 * ((n_f64 - 1.0) / (n_f64 * n_f64)).sqrt();
 
-        let imbalance_score = if max_std_dev > 0.0 {
-            (std_dev / max_std_dev).clamp(0.0, 1.0)
-        } else {
-            0.0
-        };
+        let imbalance_score = (std_dev / max_std_dev).clamp(0.0, 1.0);
 
         ImbalanceResult {
             std_dev,
