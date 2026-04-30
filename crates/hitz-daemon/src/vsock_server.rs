@@ -271,7 +271,7 @@ mod tests {
             let mut fwd_cnt = 0;
             // Create a default header using from_bytes
             #[allow(clippy::unwrap_used)]
-            let mut hdr = VsockHdr::from_bytes(&[0; 44]).unwrap();
+            let mut hdr = VsockHdr::from_bytes(&[0; 44]).expect("vsock read failed");
             hdr.op = case.op;
             hdr.dst_port = case.dst_port;
             hdr.len = u32::try_from(case.payload.len()).unwrap_or(0);

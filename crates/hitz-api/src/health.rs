@@ -401,4 +401,12 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn should_handle_empty_networks_without_panic() {
+        let mut metrics = safe_metrics();
+        metrics.networks.clear(); // Empty networks array
+        let health = metrics.assess_health();
+        assert_eq!(health.status, HealthStatus::Healthy);
+    }
 }

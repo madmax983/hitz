@@ -992,22 +992,42 @@ fn run_daemon(args: &DaemonStartArgs) -> Result<()> {
 
 /// Format a [`hitz_api::MetricsSnapshot`] into a human-readable string for CLI display.
 #[allow(clippy::too_many_lines)]
+fn color_for_pct(pct: f64) -> comfy_table::Color {
+    if pct > 90.0 {
+        comfy_table::Color::Red
+    } else if pct > 75.0 {
+        comfy_table::Color::Yellow
+    } else {
+        comfy_table::Color::Green
+    }
+}
+
+fn make_bar(pct: f64, width: usize) -> String {
+    let filled_chars = ((pct / 100.0) * width as f64).round() as usize;
+    let filled_chars = filled_chars.min(width);
+    let empty_chars = width - filled_chars;
+    let filled = "█".repeat(filled_chars);
+    let empty = "░".repeat(empty_chars);
+    format!("[{}{}]", filled, empty)
+}
+
 fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
-    use comfy_table::presets::UTF8_FULL_CONDENSED;
+    use comfy_table::presets::UTF8_BORDERS_ONLY;
     use comfy_table::{Attribute, Cell, Color, Table};
+    use crossterm::style::Stylize;
     use std::fmt::Write as _;
 
     let mut out = String::new();
+    let _ = writeln!(
+        out,
+        "\n{}",
+        " 📊 Metrics Snapshot ".bold().on_blue().white()
+    );
 
     // ── System ──
     let mut sys_table = Table::new();
-    let _ = sys_table.load_preset(UTF8_FULL_CONDENSED);
+    let _ = sys_table.load_preset(UTF8_BORDERS_ONLY);
 
-    // Pre-allocating a single `String` buffer with estimated capacity
-    // and using `write!` macro directly removes the intermediate heap
-    // allocations for formatting strings into a `Vec` and then calling
-    // `.join()`. This eliminates unnecessary allocations on the hot path
-    // when formatting CLI output.
     let mut cores_str = String::with_capacity(snap.cpu.per_core.len() * 8);
     for (i, p) in snap.cpu.per_core.iter().enumerate() {
         if i > 0 {
@@ -1023,13 +1043,26 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
 
     let used_mib = snap.memory.used_bytes / (1024 * 1024);
     let total_mib = snap.memory.total_bytes / (1024 * 1024);
+    #[allow(clippy::cast_precision_loss)]
+    let mem_pct = if total_mib > 0 {
+        (used_mib as f64 / total_mib as f64) * 100.0
+    } else {
+        0.0
+    };
     let mem_str = format!("{used_mib} MiB / {total_mib} MiB");
+
+    let cpu_bar = format!(
+        "{} {:.1}%",
+        make_bar(snap.cpu.total_pct, 15),
+        snap.cpu.total_pct
+    );
+    let mem_bar = format!("{} {}", make_bar(mem_pct, 15), mem_str);
 
     let _ = sys_table.add_row([
         Cell::new("CPU Total")
             .add_attribute(Attribute::Bold)
             .fg(Color::Cyan),
-        Cell::new(format!("{:.1}%", snap.cpu.total_pct)),
+        Cell::new(cpu_bar).fg(color_for_pct(snap.cpu.total_pct)),
         Cell::new("Cores")
             .add_attribute(Attribute::Bold)
             .fg(Color::Cyan),
@@ -1043,16 +1076,16 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
         Cell::new("Memory")
             .add_attribute(Attribute::Bold)
             .fg(Color::Cyan),
-        Cell::new(mem_str),
+        Cell::new(mem_bar).fg(color_for_pct(mem_pct)),
     ]);
 
-    let _ = writeln!(out, "System:\n{sys_table}");
+    let _ = writeln!(out, "\n{}", sys_table);
 
     // ── Disks ──
     if !snap.disks.is_empty() {
         let _ = writeln!(out);
         let mut disk_table = Table::new();
-        let _ = disk_table.load_preset(UTF8_FULL_CONDENSED);
+        let _ = disk_table.load_preset(UTF8_BORDERS_ONLY);
         let _ = disk_table.set_header([
             Cell::new("Disk")
                 .add_attribute(Attribute::Bold)
@@ -1082,14 +1115,14 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
                 write_kb.to_string(),
             ]);
         }
-        let _ = writeln!(out, "Disks:\n{disk_table}");
+        let _ = writeln!(out, "{}", disk_table);
     }
 
     // ── Networks ──
     if !snap.networks.is_empty() {
         let _ = writeln!(out);
         let mut net_table = Table::new();
-        let _ = net_table.load_preset(UTF8_FULL_CONDENSED);
+        let _ = net_table.load_preset(UTF8_BORDERS_ONLY);
         let _ = net_table.set_header([
             Cell::new("Interface")
                 .add_attribute(Attribute::Bold)
@@ -1119,14 +1152,14 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
                 net.tx_packets.to_string(),
             ]);
         }
-        let _ = writeln!(out, "Networks:\n{net_table}");
+        let _ = writeln!(out, "{}", net_table);
     }
 
     // ── Processes ──
     if !snap.processes.is_empty() {
         let _ = writeln!(out);
         let mut proc_table = Table::new();
-        let _ = proc_table.load_preset(UTF8_FULL_CONDENSED);
+        let _ = proc_table.load_preset(UTF8_BORDERS_ONLY);
         let _ = proc_table.set_header([
             Cell::new("PID")
                 .add_attribute(Attribute::Bold)
@@ -1144,14 +1177,17 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
 
         for proc in &snap.processes {
             let rss_mb = proc.rss_bytes / (1024 * 1024);
+            let cpu_cell =
+                Cell::new(format!("{:.1}%", proc.cpu_pct)).fg(color_for_pct(proc.cpu_pct));
             let _ = proc_table.add_row([
-                proc.pid.to_string(),
-                proc.name.clone(),
-                format!("{:.1}%", proc.cpu_pct),
-                rss_mb.to_string(),
+                Cell::new(proc.pid.to_string()),
+                Cell::new(proc.name.clone()),
+                cpu_cell,
+                Cell::new(rss_mb.to_string()),
             ]);
         }
-        let _ = writeln!(out, "Top Processes:\n{proc_table}");
+        let _ = writeln!(out, "\n{}", "Top Processes".bold());
+        let _ = writeln!(out, "{}", proc_table);
     }
 
     out

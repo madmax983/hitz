@@ -145,15 +145,22 @@ mod tests {
 
     /// Helper: find a free port by binding to :0 then releasing.
     async fn free_port() -> u16 {
-        let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        l.local_addr().unwrap().port()
+        let l = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("port forward setup failed");
+        l.local_addr().expect("port forward setup failed").port()
     }
 
     #[tokio::test]
     async fn forwards_tcp_data() {
         // Start an echo server on a free port.
-        let echo_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let echo_port = echo_listener.local_addr().unwrap().port();
+        let echo_listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("port forward setup failed");
+        let echo_port = echo_listener
+            .local_addr()
+            .expect("port forward setup failed")
+            .port();
 
         // Echo server: read N bytes, write them back, close.
         let _echo_handle = tokio::spawn(async move {
@@ -193,8 +200,13 @@ mod tests {
         // Bind on the same wildcard address the manager uses so the port is
         // truly blocked.  On Windows, binding 127.0.0.1 does not conflict with
         // 0.0.0.0, so we must use 0.0.0.0 here.
-        let blocker = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
-        let blocked_port = blocker.local_addr().unwrap().port();
+        let blocker = tokio::net::TcpListener::bind("0.0.0.0:0")
+            .await
+            .expect("port forward setup failed");
+        let blocked_port = blocker
+            .local_addr()
+            .expect("port forward setup failed")
+            .port();
 
         // PortForwardManager should start without panicking, skipping the bad rule.
         let rule = PortForward {

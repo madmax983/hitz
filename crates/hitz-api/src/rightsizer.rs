@@ -102,7 +102,9 @@ pub trait RightSizer {
 
 impl RightSizer for MetricsSnapshot {
     fn recommend_sizing(&self, config: &VmConfig) -> Vec<ResizeRecommendation> {
-        let mut recs = Vec::new();
+        // ⚡ Bolt Optimization: Pre-allocate capacity for exactly 2 recommendations
+        // (CPU and RAM) to avoid dynamic heap reallocations during assessment.
+        let mut recs = Vec::with_capacity(2);
 
         // CPU Analysis
         if self.cpu.total_pct > 90.0 {
