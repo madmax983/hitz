@@ -44,7 +44,7 @@ pub use health::{HealthCheck, HealthStatus, SystemHealth};
 
 #[cfg(feature = "simulator")]
 /// Simulator module for generating synthetic telemetry streams.
-mod simulator;
+pub mod simulator;
 #[cfg(feature = "simulator")]
 pub use simulator::VmSimulator;
 
@@ -58,7 +58,7 @@ pub use diff::{CalculateDiff, DiskRate, MetricsDiff, NetRate};
 /// Classifier module for determining workload type.
 mod classifier;
 #[cfg(feature = "classifier")]
-pub use classifier::{WorkloadClass, WorkloadClassifier, WorkloadProfile};
+pub use classifier::{WorkloadClass, WorkloadClassifier};
 
 #[cfg(feature = "prometheus")]
 /// Prometheus module for converting metrics to Prometheus text format.

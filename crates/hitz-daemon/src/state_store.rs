@@ -168,11 +168,13 @@ mod tests {
 
     #[test]
     fn save_and_load_config_roundtrip() {
-        let dir = tempfile::tempdir().unwrap();
-        let store = StateStore::new(dir.path().to_path_buf()).unwrap();
+        let dir = tempfile::tempdir().expect("state store IO failed");
+        let store = StateStore::new(dir.path().to_path_buf()).expect("state store IO failed");
         let config = make_config();
-        store.save_config("vm1", &config).unwrap();
-        let results = store.load_all().unwrap();
+        store
+            .save_config("vm1", &config)
+            .expect("state store IO failed");
+        let results = store.load_all().expect("state store IO failed");
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].0, "vm1");
         assert_eq!(results[0].1, config);
@@ -180,55 +182,74 @@ mod tests {
 
     #[test]
     fn missing_state_json_defaults_to_created() {
-        let dir = tempfile::tempdir().unwrap();
-        let store = StateStore::new(dir.path().to_path_buf()).unwrap();
-        store.save_config("vm1", &make_config()).unwrap();
+        let dir = tempfile::tempdir().expect("state store IO failed");
+        let store = StateStore::new(dir.path().to_path_buf()).expect("state store IO failed");
+        store
+            .save_config("vm1", &make_config())
+            .expect("state store IO failed");
         // No save_state call — state.json absent
-        let results = store.load_all().unwrap();
+        let results = store.load_all().expect("state store IO failed");
         assert_eq!(results[0].2, VmState::Created);
     }
 
     #[test]
     fn running_clamped_to_stopped_on_load() {
-        let dir = tempfile::tempdir().unwrap();
-        let store = StateStore::new(dir.path().to_path_buf()).unwrap();
-        store.save_config("vm1", &make_config()).unwrap();
-        store.save_state("vm1", VmState::Running).unwrap();
-        let results = store.load_all().unwrap();
+        let dir = tempfile::tempdir().expect("state store IO failed");
+        let store = StateStore::new(dir.path().to_path_buf()).expect("state store IO failed");
+        store
+            .save_config("vm1", &make_config())
+            .expect("state store IO failed");
+        store
+            .save_state("vm1", VmState::Running)
+            .expect("state store IO failed");
+        let results = store.load_all().expect("state store IO failed");
         assert_eq!(results[0].2, VmState::Stopped);
     }
 
     #[test]
     fn corrupt_config_json_is_skipped() {
-        let dir = tempfile::tempdir().unwrap();
-        let store = StateStore::new(dir.path().to_path_buf()).unwrap();
+        let dir = tempfile::tempdir().expect("state store IO failed");
+        let store = StateStore::new(dir.path().to_path_buf()).expect("state store IO failed");
         let vm_dir = dir.path().join("bad-vm");
-        std::fs::create_dir_all(&vm_dir).unwrap();
-        std::fs::write(vm_dir.join("config.json"), b"not json at all").unwrap();
-        let results = store.load_all().unwrap();
+        std::fs::create_dir_all(&vm_dir).expect("state store IO failed");
+        std::fs::write(vm_dir.join("config.json"), b"not json at all")
+            .expect("state store IO failed");
+        let results = store.load_all().expect("state store IO failed");
         assert!(results.is_empty());
     }
 
     #[test]
     fn delete_removes_vm_directory() {
-        let dir = tempfile::tempdir().unwrap();
-        let store = StateStore::new(dir.path().to_path_buf()).unwrap();
-        store.save_config("vm1", &make_config()).unwrap();
-        store.save_state("vm1", VmState::Created).unwrap();
-        store.delete("vm1").unwrap();
-        let results = store.load_all().unwrap();
+        let dir = tempfile::tempdir().expect("state store IO failed");
+        let store = StateStore::new(dir.path().to_path_buf()).expect("state store IO failed");
+        store
+            .save_config("vm1", &make_config())
+            .expect("state store IO failed");
+        store
+            .save_state("vm1", VmState::Created)
+            .expect("state store IO failed");
+        store.delete("vm1").expect("state store IO failed");
+        let results = store.load_all().expect("state store IO failed");
         assert!(results.is_empty());
     }
 
     #[test]
     fn stopped_and_failed_states_preserved() {
-        let dir = tempfile::tempdir().unwrap();
-        let store = StateStore::new(dir.path().to_path_buf()).unwrap();
-        store.save_config("a", &make_config()).unwrap();
-        store.save_state("a", VmState::Stopped).unwrap();
-        store.save_config("b", &make_config()).unwrap();
-        store.save_state("b", VmState::Failed).unwrap();
-        let mut results = store.load_all().unwrap();
+        let dir = tempfile::tempdir().expect("state store IO failed");
+        let store = StateStore::new(dir.path().to_path_buf()).expect("state store IO failed");
+        store
+            .save_config("a", &make_config())
+            .expect("state store IO failed");
+        store
+            .save_state("a", VmState::Stopped)
+            .expect("state store IO failed");
+        store
+            .save_config("b", &make_config())
+            .expect("state store IO failed");
+        store
+            .save_state("b", VmState::Failed)
+            .expect("state store IO failed");
+        let mut results = store.load_all().expect("state store IO failed");
         results.sort_by(|x, y| x.0.cmp(&y.0));
         assert_eq!(results[0].2, VmState::Stopped);
         assert_eq!(results[1].2, VmState::Failed);
@@ -236,31 +257,39 @@ mod tests {
 
     #[test]
     fn created_at_preserved_across_state_updates() {
-        let dir = tempfile::tempdir().unwrap();
-        let store = StateStore::new(dir.path().to_path_buf()).unwrap();
-        store.save_config("vm1", &make_config()).unwrap();
-        store.save_state("vm1", VmState::Created).unwrap();
+        let dir = tempfile::tempdir().expect("state store IO failed");
+        let store = StateStore::new(dir.path().to_path_buf()).expect("state store IO failed");
+        store
+            .save_config("vm1", &make_config())
+            .expect("state store IO failed");
+        store
+            .save_state("vm1", VmState::Created)
+            .expect("state store IO failed");
         // Read created_at before update
-        let raw_before = store.load_raw_state("vm1").unwrap();
+        let raw_before = store.load_raw_state("vm1").expect("state store IO failed");
         // Update state
-        store.save_state("vm1", VmState::Stopped).unwrap();
-        let raw_after = store.load_raw_state("vm1").unwrap();
+        store
+            .save_state("vm1", VmState::Stopped)
+            .expect("state store IO failed");
+        let raw_after = store.load_raw_state("vm1").expect("state store IO failed");
         assert_eq!(raw_before.created_at, raw_after.created_at);
     }
 
     #[test]
     fn load_all_skips_non_directories() {
-        let dir = tempfile::tempdir().unwrap();
-        let store = StateStore::new(dir.path().to_path_buf()).unwrap();
+        let dir = tempfile::tempdir().expect("state store IO failed");
+        let store = StateStore::new(dir.path().to_path_buf()).expect("state store IO failed");
 
         // Add a valid VM
-        store.save_config("valid_vm", &make_config()).unwrap();
+        store
+            .save_config("valid_vm", &make_config())
+            .expect("state store IO failed");
 
         // Add a file in the base directory
         let file_path = dir.path().join("some_file.txt");
-        std::fs::write(file_path, b"not a directory").unwrap();
+        std::fs::write(file_path, b"not a directory").expect("state store IO failed");
 
-        let results = store.load_all().unwrap();
+        let results = store.load_all().expect("state store IO failed");
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].0, "valid_vm");
     }
