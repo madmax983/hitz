@@ -439,7 +439,7 @@ mod tests {
             }
         }
         fn write_bytes(&self, offset: u64, data: &[u8]) {
-            let mut mem = self.inner.lock().unwrap();
+            let mut mem = self.inner.lock().expect("Mutex poisoned");
             let start = offset as usize;
             mem[start..start + data.len()].copy_from_slice(data);
         }
@@ -447,7 +447,7 @@ mod tests {
     impl GuestMemAccess for MockMem {
         #[allow(clippy::significant_drop_tightening)]
         fn read_guest(&self, gpa: u64, buf: &mut [u8]) -> Result<(), HalError> {
-            let mem = self.inner.lock().unwrap();
+            let mem = self.inner.lock().expect("Mutex poisoned");
             let start = gpa as usize;
             if start
                 .checked_add(buf.len())
@@ -464,7 +464,7 @@ mod tests {
         }
         #[allow(clippy::significant_drop_tightening)]
         fn write_guest(&self, gpa: u64, data: &[u8]) -> Result<(), HalError> {
-            let mut mem = self.inner.lock().unwrap();
+            let mut mem = self.inner.lock().expect("Mutex poisoned");
             let start = gpa as usize;
             if start
                 .checked_add(data.len())
@@ -530,7 +530,9 @@ mod tests {
             buf_alloc: 1024,
             fwd_cnt: 0,
         };
-        tx_send.send((hdr, vec![1, 2, 3, 4])).unwrap();
+        tx_send
+            .send((hdr, vec![1, 2, 3, 4]))
+            .expect("Mutex poisoned");
 
         // One writable descriptor
         write_desc(&mem, 0, 0x3000, 1024, 2, 0); // 2 = F_WRITE
@@ -542,16 +544,17 @@ mod tests {
 
         // Check if data is at 0x3000
         let mut out = vec![0u8; VSOCK_HDR_SIZE + 4];
-        mem.read_guest(0x3000, &mut out).unwrap();
+        mem.read_guest(0x3000, &mut out).expect("Mutex poisoned");
 
-        let out_hdr = VsockHdr::from_bytes(&out[..VSOCK_HDR_SIZE]).unwrap();
+        let out_hdr = VsockHdr::from_bytes(&out[..VSOCK_HDR_SIZE]).expect("Mutex poisoned");
         assert_eq!(out_hdr.src_cid, 2);
         assert_eq!(out_hdr.len, 4);
         assert_eq!(&out[VSOCK_HDR_SIZE..], &[1, 2, 3, 4]);
 
         // Used index should be 1
         let mut used_idx_buf = [0u8; 2];
-        mem.read_guest(USED_BASE + 2, &mut used_idx_buf).unwrap();
+        mem.read_guest(USED_BASE + 2, &mut used_idx_buf)
+            .expect("Mutex poisoned");
         assert_eq!(u16::from_le_bytes(used_idx_buf), 1);
     }
 
@@ -585,7 +588,7 @@ mod tests {
         device.process_queue(1, &mut q, &mem);
 
         // Receiver should get packet
-        let (out_hdr, out_payload) = rx_recv.try_recv().unwrap();
+        let (out_hdr, out_payload) = rx_recv.try_recv().expect("Mutex poisoned");
         assert_eq!(out_hdr.len, 5);
         assert_eq!(out_hdr.dst_cid, 2);
         assert_eq!(out_payload, vec![10, 20, 30, 40, 50]);

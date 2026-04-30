@@ -9,7 +9,7 @@
 //! # The Hero's Journey
 //!
 //! ```rust
-//! use hitz_api::{VmSimulator, WorkloadProfile};
+//! use hitz_api::simulator::{VmSimulator, WorkloadProfile};
 //!
 //! // 1. Create a new simulator designed to trigger a CPU alert
 //! let mut simulator = VmSimulator::new(WorkloadProfile::CpuSpike);
@@ -65,7 +65,7 @@ impl VmSimulator {
     /// # Examples
     ///
     /// ```rust
-    /// use hitz_api::{VmSimulator, WorkloadProfile};
+    /// use hitz_api::simulator::{VmSimulator, WorkloadProfile};
     ///
     /// let sim = VmSimulator::new(WorkloadProfile::MemoryLeak);
     /// ```
@@ -190,13 +190,13 @@ mod tests {
         let mut sim = VmSimulator::new(WorkloadProfile::CpuSpike);
 
         // Iteration 0: Idle baseline (cpu ~0)
-        let metrics_0 = sim.next().unwrap();
+        let metrics_0 = sim.next().expect("simulator iteration failed");
         assert_eq!(metrics_0.assess_health().status, HealthStatus::Healthy);
 
         // Advance to a point where CPU spikes over 90%
         let mut critical_found = false;
         for _ in 0..10 {
-            let metrics = sim.next().unwrap();
+            let metrics = sim.next().expect("simulator iteration failed");
             if metrics.assess_health().status == HealthStatus::Critical {
                 critical_found = true;
                 break;
