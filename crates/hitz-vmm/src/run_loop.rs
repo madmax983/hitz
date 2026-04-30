@@ -9,6 +9,7 @@ use std::io::Write;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use hitz_api::ExitReason;
 use hitz_devices::MmioBus;
 use hitz_devices::SerialDevice;
 use hitz_hal::{GuestMemAccess, HalError, IoPortExit, Vcpu, VcpuExit};
@@ -21,19 +22,6 @@ use crate::mmio_decode;
 /// no PIC is present. Absorb writes and return 0x00 for reads (no IRQs
 /// pending) to prevent the kernel from entering spurious-IRQ error paths.
 const PIC_PORTS: [u16; 4] = [0x20, 0x21, 0xA0, 0xA1];
-
-/// Reason the run loop terminated.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ExitReason {
-    /// Guest executed HLT.
-    Halt,
-    /// Guest initiated shutdown (triple fault, etc.).
-    Shutdown,
-    /// VM was stopped via the stop flag (user-initiated cancel).
-    Canceled,
-    /// Unexpected exit that the run loop doesn't know how to handle.
-    Unexpected(String),
-}
 
 /// Devices shared across all vCPU threads.
 ///

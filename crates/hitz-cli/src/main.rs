@@ -21,12 +21,12 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use anyhow::{Context, Result};
 use clap::{Args, Parser, Subcommand};
+use hitz_api::ExitReason;
 use hitz_api::{
     ActionVmRequest, CloneVmRequest, CreateVmRequest, DEFAULT_CMDLINE, DEFAULT_CPUS,
     DEFAULT_GUEST_CID, DEFAULT_RAM_MIB, GuestAgentMode, VmAction, VmConfig,
 };
 use hitz_daemon::TelemetryGuard;
-use hitz_vmm::ExitReason;
 use hitz_whp::WhpHypervisor;
 use hyper::Method;
 
@@ -1579,13 +1579,16 @@ async fn handle_vm_list(args: &VmListArgs) -> Result<()> {
                 };
                 // ⚡ Bolt Optimization: Replace `.unwrap_or_else(|| "-".to_string())` with `.as_deref().unwrap_or("-")`
                 // This eliminates an unnecessary `String` allocation on the hot path of formatting CLI output.
-                let exit_reason = info.exit_reason.as_deref().unwrap_or("-");
+                let exit_reason = info
+                    .exit_reason
+                    .as_ref()
+                    .map_or("-".to_string(), |r| format!("{:?}", r));
                 let _ = table.add_row([
                     Cell::new(&info.id),
                     state_cell,
                     Cell::new(info.config.ram_mib.to_string()),
                     Cell::new(info.config.cpus.to_string()),
-                    Cell::new(exit_reason),
+                    Cell::new(&exit_reason),
                 ]);
             }
             println!("{table}");
@@ -2516,7 +2519,10 @@ async fn handle_vm_dashboard(args: &VmListArgs) -> Result<()> {
                         hitz_api::VmState::Failed => Color::Red,
                         hitz_api::VmState::Created => Color::Cyan,
                     };
-                    let exit_reason = vm.exit_reason.as_deref().unwrap_or("-");
+                    let exit_reason = vm
+                        .exit_reason
+                        .as_ref()
+                        .map_or("-".to_string(), |r| format!("{:?}", r));
 
                     // ⚡ Bolt Optimization:
                     // Replaced `vm.id.clone()` with `vm.id.as_str()` when creating `Cell`s.
@@ -2528,7 +2534,7 @@ async fn handle_vm_dashboard(args: &VmListArgs) -> Result<()> {
                         Cell::from(state_str).style(Style::default().fg(state_color)),
                         Cell::from(vm.config.ram_mib.to_string()),
                         Cell::from(vm.config.cpus.to_string()),
-                        Cell::from(exit_reason),
+                        Cell::new(&exit_reason),
                     ])
                 });
 

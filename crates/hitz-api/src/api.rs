@@ -224,6 +224,20 @@ pub struct CloneVmRequest {
 /// assert_eq!(info.id, "my-vm");
 /// assert_eq!(info.state, VmState::Running);
 /// ```
+/// Exit reasons for VM
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ExitReason {
+    /// Guest executed HLT.
+    Halt,
+    /// Guest initiated shutdown (triple fault, etc.).
+    Shutdown,
+    /// VM was stopped via the stop flag (user-initiated cancel).
+    Canceled,
+    /// Unexpected exit that the run loop doesn't know how to handle.
+    Unexpected(String),
+}
+
+/// Information about a VM instance returned by the API.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VmInfo {
     /// The unique identifier assigned to this VM.
@@ -233,7 +247,7 @@ pub struct VmInfo {
     /// The exact configuration the VM was created with.
     pub config: VmConfig,
     /// If the VM exited or failed, a human-readable explanation of why.
-    pub exit_reason: Option<String>,
+    pub exit_reason: Option<ExitReason>,
 }
 
 /// Error response from the API.

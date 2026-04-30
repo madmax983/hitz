@@ -27,7 +27,7 @@ use crate::state_store::StateStore;
 struct VmEntry {
     config: VmConfig,
     state: VmState,
-    exit_reason: Option<String>,
+    exit_reason: Option<ExitReason>,
     stop_flag: Option<Arc<AtomicBool>>,
     serial_buf: Option<SerialBuf>,
     /// Vsock I/O handle kept alive for the duration of the VM run.
@@ -461,20 +461,21 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
                         Ok(Ok(run_result)) => match run_result.exit_reason {
                             ExitReason::Halt | ExitReason::Shutdown | ExitReason::Canceled => {
                                 entry.state = VmState::Stopped;
-                                entry.exit_reason = Some(format!("{:?}", run_result.exit_reason));
+                                entry.exit_reason = Some(run_result.exit_reason);
                             }
                             ExitReason::Unexpected(ref reason) => {
                                 entry.state = VmState::Failed;
-                                entry.exit_reason = Some(reason.clone());
+                                entry.exit_reason = Some(ExitReason::Unexpected(reason.clone()));
                             }
                         },
                         Ok(Err(e)) => {
                             entry.state = VmState::Failed;
-                            entry.exit_reason = Some(e.to_string());
+                            entry.exit_reason = Some(ExitReason::Unexpected(e.to_string()));
                         }
                         Err(e) => {
                             entry.state = VmState::Failed;
-                            entry.exit_reason = Some(format!("task panicked: {e}"));
+                            entry.exit_reason =
+                                Some(ExitReason::Unexpected(format!("task panicked: {e}")));
                         }
                     }
                     entry.stop_flag = None;
