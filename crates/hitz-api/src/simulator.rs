@@ -60,9 +60,14 @@ pub struct VmSimulator {
 }
 
 impl VmSimulator {
-    /// Creates a new `VmSimulator` with the specified profile.
+    /// Instantiates a new fake workload generator.
     ///
-    /// # Examples
+    /// # Abstract
+    /// Rather than booting a real micro-VM to test alerting infrastructure, this
+    /// factory initializes a predictable state machine that will emit synthetic
+    /// metrics according to the chosen `WorkloadProfile`.
+    ///
+    /// ## Examples
     ///
     /// ```rust
     /// use hitz_api::simulator::{VmSimulator, WorkloadProfile};

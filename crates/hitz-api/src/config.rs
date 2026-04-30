@@ -220,9 +220,14 @@ pub struct VmConfig {
 }
 
 impl VmConfig {
-    /// Returns the effective command line: custom if set, otherwise the default.
+    /// Determines the final kernel boot parameters.
     ///
-    /// # Examples
+    /// # Abstract
+    /// Evaluates whether the user supplied a custom kernel command line. If they
+    /// did not, it falls back to the system's `DEFAULT_CMDLINE` to ensure the
+    /// micro-VM always has a valid boot string (e.g., configuring the serial console).
+    ///
+    /// ## Examples
     ///
     /// ```rust
     /// use hitz_api::{VmConfig, DEFAULT_CMDLINE, DEFAULT_RAM_MIB, DEFAULT_CPUS, DEFAULT_GUEST_CID, GuestAgentMode};
