@@ -44,7 +44,7 @@ pub use health::{HealthCheck, HealthStatus, SystemHealth};
 
 #[cfg(feature = "simulator")]
 /// Simulator module for generating synthetic telemetry streams.
-mod simulator;
+pub mod simulator;
 #[cfg(feature = "simulator")]
 pub use simulator::{VmSimulator, WorkloadProfile};
 
