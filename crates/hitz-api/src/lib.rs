@@ -46,7 +46,7 @@ pub use health::{HealthCheck, HealthStatus, SystemHealth};
 /// Simulator module for generating synthetic telemetry streams.
 pub mod simulator;
 #[cfg(feature = "simulator")]
-pub use simulator::VmSimulator;
+pub use simulator::{VmSimulator, WorkloadProfile};
 
 #[cfg(feature = "diff")]
 /// Diff module for calculating rates of change between telemetry snapshots.
