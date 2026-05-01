@@ -144,8 +144,12 @@ impl VirtioBlockDevice {
 
         // 3. Write the status byte to the third descriptor.
         if let Some(status_desc) = chain.next_descriptor(mem) {
-            let _ = mem.write_guest(status_desc.gpa, &[status]);
-            total_written += 1;
+            if status_desc.is_device_writable {
+                let _ = mem.write_guest(status_desc.gpa, &[status]);
+                total_written += 1;
+            } else {
+                tracing::warn!("Status descriptor must be device-writable");
+            }
         }
 
         total_written
@@ -867,5 +871,54 @@ mod tests {
 
         let status = mem.read_bytes(STATUS_GPA, 1);
         assert_eq!(status[0], VIRTIO_BLK_S_IOERR);
+    }
+
+    #[test]
+    fn warden_exploit_status_desc_must_be_writable() {
+        let f = create_temp_disk(1);
+        let mut dev = VirtioBlockDevice::new(f).expect("new block device");
+        let mem = MockMem::new(0x10000);
+        let mut q = setup_queue(&mem);
+
+        // Pre-fill status byte area with 0xFF to detect writes.
+        mem.write_bytes(STATUS_GPA, &[0xFF]);
+
+        // Setup chain manually because we want the status desc to be NON-writable.
+        let avail_idx = 0;
+        let base_desc = 0;
+        const F_NEXT: u16 = 1;
+        const F_WRITE: u16 = 2;
+
+        // Descriptor 0: header (device-readable, chains to 1).
+        write_desc(&mem, base_desc, HDR_GPA, 16, F_NEXT, base_desc + 1);
+
+        // Descriptor 1: data buffer (writable).
+        write_desc(
+            &mem,
+            base_desc + 1,
+            DATA_GPA,
+            512,
+            F_NEXT | F_WRITE,
+            base_desc + 2,
+        );
+
+        // Descriptor 2: status byte - EXPLOIT: NOT writable. (No F_WRITE)
+        write_desc(&mem, base_desc + 2, STATUS_GPA, 1, 0, 0);
+
+        // Write the header for IN request.
+        write_blk_header(&mem, HDR_GPA, VIRTIO_BLK_T_IN, 0);
+
+        // Available ring entry.
+        write_avail_entry(&mem, avail_idx, base_desc);
+        set_avail_idx(&mem, avail_idx + 1);
+
+        dev.process_queue(0, &mut q, &mem);
+
+        // The status byte should remain 0xFF (untouched).
+        let status = mem.read_bytes(STATUS_GPA, 1);
+        assert_eq!(
+            status[0], 0xFF,
+            "Status byte should not have been overwritten by a non-writable descriptor"
+        );
     }
 }
