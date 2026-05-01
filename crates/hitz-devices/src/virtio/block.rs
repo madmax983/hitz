@@ -143,10 +143,18 @@ impl VirtioBlockDevice {
         };
 
         // 3. Write the status byte to the third descriptor.
-        if let Some(status_desc) = chain.next_descriptor(mem) {
-            let _ = mem.write_guest(status_desc.gpa, &[status]);
-            total_written += 1;
+        let Some(status_desc) = chain.next_descriptor(mem) else {
+            tracing::warn!("blk request missing status descriptor");
+            return total_written;
+        };
+
+        if !status_desc.is_device_writable {
+            tracing::warn!("blk request status descriptor must be writable");
+            return total_written;
         }
+
+        let _ = mem.write_guest(status_desc.gpa, &[status]);
+        total_written += 1;
 
         total_written
     }
@@ -867,5 +875,46 @@ mod tests {
 
         let status = mem.read_bytes(STATUS_GPA, 1);
         assert_eq!(status[0], VIRTIO_BLK_S_IOERR);
+    }
+
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn havoc_fuzz_block_process_queue(
+            desc_len in 0u32..=100_000,
+            sector in 0u64..100,
+            req_type in prop::sample::select(vec![VIRTIO_BLK_T_IN, VIRTIO_BLK_T_OUT, 99]),
+            is_writable in any::<bool>(),
+            status_writable in any::<bool>(),
+        ) {
+            let f = create_temp_disk(2);
+            let mut dev = VirtioBlockDevice::new(f).unwrap();
+            let mem = MockMem::new(0x20000);
+            let mut q = setup_queue(&mem);
+
+            let base_desc = 0;
+            const F_NEXT: u16 = 1;
+            const F_WRITE: u16 = 2;
+
+            write_desc(&mem, base_desc, HDR_GPA, 16, F_NEXT, base_desc + 1);
+            write_blk_header(&mem, HDR_GPA, req_type, sector);
+
+            let data_flags = if is_writable {
+                F_NEXT | F_WRITE
+            } else {
+                F_NEXT
+            };
+            write_desc(&mem, base_desc + 1, DATA_GPA, desc_len, data_flags, base_desc + 2);
+
+            let status_flags = if status_writable { F_WRITE } else { 0 };
+            write_desc(&mem, base_desc + 2, STATUS_GPA, 1, status_flags, 0);
+
+            write_avail_entry(&mem, 0, base_desc);
+            set_avail_idx(&mem, 1);
+
+            // This should not panic under any combination of inputs.
+            dev.process_queue(0, &mut q, &mem);
+        }
     }
 }
