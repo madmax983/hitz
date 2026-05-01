@@ -1012,21 +1012,27 @@ fn make_bar(pct: f64, width: usize) -> String {
 }
 
 fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
-    use comfy_table::presets::UTF8_BORDERS_ONLY;
+    use comfy_table::presets::UTF8_FULL_CONDENSED;
     use comfy_table::{Attribute, Cell, Color, Table};
     use crossterm::style::Stylize;
     use std::fmt::Write as _;
 
     let mut out = String::new();
+    let _ = writeln!(out);
     let _ = writeln!(
         out,
-        "\n{}",
-        " 📊 Metrics Snapshot ".bold().on_blue().white()
+        "  {}  ",
+        " 📊 Hitz Metrics Dashboard ".bold().on_blue().white()
     );
 
     // ── System ──
     let mut sys_table = Table::new();
-    let _ = sys_table.load_preset(UTF8_BORDERS_ONLY);
+    let _ = sys_table.load_preset(UTF8_FULL_CONDENSED);
+    let _ = sys_table.set_header([
+        Cell::new("Resource").add_attribute(Attribute::Bold).fg(Color::Cyan),
+        Cell::new("Utilization").add_attribute(Attribute::Bold).fg(Color::Cyan),
+        Cell::new("Details").add_attribute(Attribute::Bold).fg(Color::Cyan),
+    ]);
 
     let mut cores_str = String::with_capacity(snap.cpu.per_core.len() * 8);
     for (i, p) in snap.cpu.per_core.iter().enumerate() {
@@ -1037,7 +1043,7 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
     }
 
     let cpu_load = format!(
-        "{:.2} / {:.2} / {:.2}",
+        "Load Avg: {:.2} / {:.2} / {:.2}",
         snap.cpu.load_avg[0], snap.cpu.load_avg[1], snap.cpu.load_avg[2]
     );
 
@@ -1053,141 +1059,98 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
 
     let cpu_bar = format!(
         "{} {:.1}%",
-        make_bar(snap.cpu.total_pct, 15),
+        make_bar(snap.cpu.total_pct.into(), 20),
         snap.cpu.total_pct
     );
-    let mem_bar = format!("{} {}", make_bar(mem_pct, 15), mem_str);
+    let mem_bar = format!("{} {:.1}%", make_bar(mem_pct, 20), mem_pct);
 
     let _ = sys_table.add_row([
-        Cell::new("CPU Total")
-            .add_attribute(Attribute::Bold)
-            .fg(Color::Cyan),
-        Cell::new(cpu_bar).fg(color_for_pct(snap.cpu.total_pct)),
-        Cell::new("Cores")
-            .add_attribute(Attribute::Bold)
-            .fg(Color::Cyan),
-        Cell::new(cores_str),
+        Cell::new("System CPU"),
+        Cell::new(cpu_bar).fg(color_for_pct(snap.cpu.total_pct.into())),
+        Cell::new(format!("Cores: {cores_str}
+{cpu_load}")),
     ]);
     let _ = sys_table.add_row([
-        Cell::new("CPU Load")
-            .add_attribute(Attribute::Bold)
-            .fg(Color::Cyan),
-        Cell::new(cpu_load),
-        Cell::new("Memory")
-            .add_attribute(Attribute::Bold)
-            .fg(Color::Cyan),
+        Cell::new("System Memory"),
         Cell::new(mem_bar).fg(color_for_pct(mem_pct)),
+        Cell::new(mem_str),
     ]);
-
-    let _ = writeln!(out, "\n{}", sys_table);
+    let _ = writeln!(out, "
+{sys_table}");
 
     // ── Disks ──
     if !snap.disks.is_empty() {
-        let _ = writeln!(out);
         let mut disk_table = Table::new();
-        let _ = disk_table.load_preset(UTF8_BORDERS_ONLY);
+        let _ = disk_table.load_preset(UTF8_FULL_CONDENSED);
         let _ = disk_table.set_header([
-            Cell::new("Disk")
-                .add_attribute(Attribute::Bold)
-                .fg(Color::Cyan),
-            Cell::new("Reads")
-                .add_attribute(Attribute::Bold)
-                .fg(Color::Cyan),
-            Cell::new("Writes")
-                .add_attribute(Attribute::Bold)
-                .fg(Color::Cyan),
-            Cell::new("Read KB")
-                .add_attribute(Attribute::Bold)
-                .fg(Color::Cyan),
-            Cell::new("Write KB")
-                .add_attribute(Attribute::Bold)
-                .fg(Color::Cyan),
+            Cell::new("Disk Device").add_attribute(Attribute::Bold).fg(Color::Cyan),
+            Cell::new("Read I/O (Total / KB)").add_attribute(Attribute::Bold).fg(Color::Cyan),
+            Cell::new("Write I/O (Total / KB)").add_attribute(Attribute::Bold).fg(Color::Cyan),
         ]);
 
         for disk in &snap.disks {
             let read_kb = disk.read_bytes / 1024;
             let write_kb = disk.write_bytes / 1024;
             let _ = disk_table.add_row([
-                disk.name.clone(),
-                disk.reads_total.to_string(),
-                disk.writes_total.to_string(),
-                read_kb.to_string(),
-                write_kb.to_string(),
+                Cell::new(disk.name.as_str()),
+                Cell::new(format!("{} ops / {} KB", disk.reads_total, read_kb)),
+                Cell::new(format!("{} ops / {} KB", disk.writes_total, write_kb)),
             ]);
         }
-        let _ = writeln!(out, "{}", disk_table);
+        let _ = writeln!(out, "
+{}", " 💾 Disks ".bold().on_dark_grey().white());
+        let _ = writeln!(out, "{disk_table}");
     }
 
     // ── Networks ──
     if !snap.networks.is_empty() {
-        let _ = writeln!(out);
         let mut net_table = Table::new();
-        let _ = net_table.load_preset(UTF8_BORDERS_ONLY);
+        let _ = net_table.load_preset(UTF8_FULL_CONDENSED);
         let _ = net_table.set_header([
-            Cell::new("Interface")
-                .add_attribute(Attribute::Bold)
-                .fg(Color::Cyan),
-            Cell::new("RX KB")
-                .add_attribute(Attribute::Bold)
-                .fg(Color::Cyan),
-            Cell::new("TX KB")
-                .add_attribute(Attribute::Bold)
-                .fg(Color::Cyan),
-            Cell::new("RX Pkts")
-                .add_attribute(Attribute::Bold)
-                .fg(Color::Cyan),
-            Cell::new("TX Pkts")
-                .add_attribute(Attribute::Bold)
-                .fg(Color::Cyan),
+            Cell::new("Interface").add_attribute(Attribute::Bold).fg(Color::Cyan),
+            Cell::new("RX (Pkts / KB)").add_attribute(Attribute::Bold).fg(Color::Cyan),
+            Cell::new("TX (Pkts / KB)").add_attribute(Attribute::Bold).fg(Color::Cyan),
         ]);
 
         for net in &snap.networks {
             let rx_kb = net.rx_bytes / 1024;
             let tx_kb = net.tx_bytes / 1024;
             let _ = net_table.add_row([
-                net.interface.clone(),
-                rx_kb.to_string(),
-                tx_kb.to_string(),
-                net.rx_packets.to_string(),
-                net.tx_packets.to_string(),
+                Cell::new(net.interface.as_str()),
+                Cell::new(format!("{} pkts / {} KB", net.rx_packets, rx_kb)),
+                Cell::new(format!("{} pkts / {} KB", net.tx_packets, tx_kb)),
             ]);
         }
-        let _ = writeln!(out, "{}", net_table);
+        let _ = writeln!(out, "
+{}", " 🌐 Networks ".bold().on_dark_grey().white());
+        let _ = writeln!(out, "{net_table}");
     }
 
     // ── Processes ──
     if !snap.processes.is_empty() {
-        let _ = writeln!(out);
         let mut proc_table = Table::new();
-        let _ = proc_table.load_preset(UTF8_BORDERS_ONLY);
+        let _ = proc_table.load_preset(UTF8_FULL_CONDENSED);
         let _ = proc_table.set_header([
-            Cell::new("PID")
-                .add_attribute(Attribute::Bold)
-                .fg(Color::Cyan),
-            Cell::new("Name")
-                .add_attribute(Attribute::Bold)
-                .fg(Color::Cyan),
-            Cell::new("CPU %")
-                .add_attribute(Attribute::Bold)
-                .fg(Color::Cyan),
-            Cell::new("RSS MB")
-                .add_attribute(Attribute::Bold)
-                .fg(Color::Cyan),
+            Cell::new("PID").add_attribute(Attribute::Bold).fg(Color::Cyan),
+            Cell::new("Command").add_attribute(Attribute::Bold).fg(Color::Cyan),
+            Cell::new("CPU %").add_attribute(Attribute::Bold).fg(Color::Cyan),
+            Cell::new("Memory (RSS)").add_attribute(Attribute::Bold).fg(Color::Cyan),
         ]);
 
         for proc in &snap.processes {
             let rss_mb = proc.rss_bytes / (1024 * 1024);
             let cpu_cell =
-                Cell::new(format!("{:.1}%", proc.cpu_pct)).fg(color_for_pct(proc.cpu_pct));
+                Cell::new(format!("{:.1}%", proc.cpu_pct)).fg(color_for_pct(proc.cpu_pct.into()));
             let _ = proc_table.add_row([
                 Cell::new(proc.pid.to_string()),
-                Cell::new(proc.name.clone()),
+                Cell::new(proc.name.as_str()),
                 cpu_cell,
-                Cell::new(rss_mb.to_string()),
+                Cell::new(format!("{rss_mb} MB")),
             ]);
         }
-        let _ = writeln!(out, "\n{}", "Top Processes".bold());
-        let _ = writeln!(out, "{}", proc_table);
+        let _ = writeln!(out, "
+{}", " ⚙️ Top Processes ".bold().on_dark_grey().white());
+        let _ = writeln!(out, "{proc_table}");
     }
 
     out
