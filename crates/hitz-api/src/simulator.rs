@@ -190,13 +190,13 @@ mod tests {
         let mut sim = VmSimulator::new(WorkloadProfile::CpuSpike);
 
         // Iteration 0: Idle baseline (cpu ~0)
-        let metrics_0 = sim.next().expect("simulator iteration failed");
+        let metrics_0 = sim.next().unwrap();
         assert_eq!(metrics_0.assess_health().status, HealthStatus::Healthy);
 
         // Advance to a point where CPU spikes over 90%
         let mut critical_found = false;
         for _ in 0..10 {
-            let metrics = sim.next().expect("simulator iteration failed");
+            let metrics = sim.next().unwrap();
             if metrics.assess_health().status == HealthStatus::Critical {
                 critical_found = true;
                 break;
