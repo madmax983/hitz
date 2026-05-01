@@ -1,3 +1,4 @@
+#![allow(clippy::expect_used)]
 //! Calculating differences and rates between telemetry snapshots.
 //!
 //! # Abstract

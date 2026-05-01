@@ -1,3 +1,4 @@
+#![allow(clippy::expect_used)]
 //! Simulator module for generating synthetic telemetry streams.
 //!
 //! # Abstract

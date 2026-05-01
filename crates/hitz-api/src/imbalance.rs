@@ -85,14 +85,24 @@ impl CoreImbalanceAnalyzer for MetricsSnapshot {
 
         let std_dev = variance.sqrt();
 
-        // Max possible std dev occurs when one core is at 100% and the rest are 0% (or vice versa).
-        // Let's compute a simple theoretical max for normalization depending on the mean.
-        // If sum = 100 and n cores, mean = 100/n.
-        // Variance = [ (100 - 100/n)^2 + (n-1)*(-100/n)^2 ] / n
-        //          = [ 10000*(n-1)^2/n^2 + (n-1)*10000/n^2 ] / n
-        //          = 10000 * (n-1)/n
-        // max_std_dev = 100.0 * sqrt((n-1)/n)
-        let max_std_dev = 100.0 * ((n_f64 - 1.0) / (n_f64 * n_f64)).sqrt();
+        // Let's compute a theoretical max for normalization depending on the mean.
+        let sum_vals = mean * n_f64;
+        let num_max = (sum_vals / 100.0).floor();
+        let remainder = sum_vals % 100.0;
+        let num_zeros = if remainder > 0.0 {
+            n_f64 - num_max - 1.0
+        } else {
+            n_f64 - num_max
+        };
+
+        let mut max_variance = num_max * (100.0 - mean) * (100.0 - mean);
+        if remainder > 0.0 {
+            max_variance += (remainder - mean) * (remainder - mean);
+        }
+        max_variance += num_zeros * mean * mean;
+        max_variance /= n_f64;
+
+        let max_std_dev = max_variance.sqrt();
 
         let imbalance_score = if max_std_dev > 0.0 {
             (std_dev / max_std_dev).clamp(0.0, 1.0)
@@ -154,6 +164,7 @@ mod tests {
         assert_eq!(result.imbalance_score, 0.0);
         assert!(!result.is_imbalanced);
     }
+
     #[test]
     fn test_highly_imbalanced() {
         // One core at 100%, three at 0%
@@ -162,6 +173,13 @@ mod tests {
         assert!(result.std_dev > 40.0); // should be around 43.3
         assert!(result.imbalance_score > 0.8);
         assert!(result.is_imbalanced);
+    }
+
+    #[test]
+    fn test_intermediate_imbalance() {
+        let snap = dummy_snapshot(37.5, vec![70.0, 50.0, 20.0, 10.0]);
+        let result = snap.analyze_imbalance();
+        assert!(result.imbalance_score > 0.0 && result.imbalance_score < 1.0);
     }
 
     #[test]

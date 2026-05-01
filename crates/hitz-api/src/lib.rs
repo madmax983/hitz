@@ -1,3 +1,4 @@
+#![allow(clippy::expect_used)]
 //! REST API types for Hitz.
 //!
 //! This crate serves as the central vocabulary for the Hitz micro-VM manager.
