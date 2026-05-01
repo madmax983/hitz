@@ -1265,6 +1265,44 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn restart_vm_fails_if_timeout() {
+        let (mgr, _dir) = make_manager();
+        let (config, _tmp) = make_config();
+
+        mgr.create_vm("vm1".into(), &config).expect("create");
+        mgr.start_vm("vm1").expect("start");
+
+        let err = mgr
+            .restart_vm("vm1")
+            .await
+            .expect_err("should timeout and fail");
+        assert!(
+            err.to_string().contains("failed to stop within 5 seconds"),
+            "got: {}",
+            err
+        );
+    }
+
+    #[tokio::test]
+    async fn restart_vm_success() {
+        let (mgr, _dir) = make_manager();
+        let (config, _tmp) = make_config();
+
+        mgr.create_vm("vm2".into(), &config).expect("create");
+        mgr.start_vm("vm2").expect("start");
+
+        // Force the state to stopped so `restart_vm` succeeds.
+        // In real execution, a background task will handle the stop_flag and change the state.
+        {
+            let mut vms = mgr.vms.lock().unwrap();
+            let entry = vms.get_mut("vm2").unwrap();
+            entry.state = VmState::Stopped;
+        }
+
+        let info = mgr.restart_vm("vm2").await.expect("restart should succeed");
+        assert_eq!(info.state, VmState::Running);
+    }
+
     async fn stop_all_and_wait_completes() {
         let (mgr, _dir) = make_manager();
         let (config, _tmp) = make_config();

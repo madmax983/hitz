@@ -481,6 +481,17 @@ mod tests {
     use std::sync::Mutex;
 
     /// Minimal backend for testing the transport layer.
+
+    struct DummyGuestMem;
+    impl GuestMemAccess for DummyGuestMem {
+        fn read_guest(&self, _gpa: u64, _buf: &mut [u8]) -> Result<(), hitz_hal::HalError> {
+            Ok(())
+        }
+        fn write_guest(&self, _gpa: u64, _buf: &[u8]) -> Result<(), hitz_hal::HalError> {
+            Ok(())
+        }
+    }
+
     struct DummyBackend {
         features: u64,
         config: Vec<u8>,
@@ -674,6 +685,41 @@ mod tests {
             read_u32(&mut t, MMIO_STATUS),
             u32::from(STATUS_ACKNOWLEDGE | STATUS_DRIVER | STATUS_FEATURES_OK | STATUS_DRIVER_OK)
         );
+    }
+
+    #[test]
+    fn check_reset_clears_fields() {
+        let mut transport =
+            VirtioMmioTransport::new(DummyBackend::new(), Arc::new(DummyGuestMem), 1);
+        transport.status = 1;
+        transport.interrupt_status = 1;
+        transport.driver_features = 1;
+        transport.driver_features_sel = 1;
+        transport.device_features_sel = 1;
+        transport.queue_sel = 1;
+        transport.queues[0].desc_low = 1;
+        transport.queues[0].desc_high = 1;
+        transport.queues[0].avail_low = 1;
+        transport.queues[0].avail_high = 1;
+        transport.queues[0].used_low = 1;
+        transport.queues[0].used_high = 1;
+        transport.queues[0].num = 1;
+
+        transport.reset();
+
+        assert_eq!(transport.status, 0);
+        assert_eq!(transport.interrupt_status, 0);
+        assert_eq!(transport.driver_features, 0);
+        assert_eq!(transport.driver_features_sel, 0);
+        assert_eq!(transport.device_features_sel, 0);
+        assert_eq!(transport.queue_sel, 0);
+        assert_eq!(transport.queues[0].desc_low, 0);
+        assert_eq!(transport.queues[0].desc_high, 0);
+        assert_eq!(transport.queues[0].avail_low, 0);
+        assert_eq!(transport.queues[0].avail_high, 0);
+        assert_eq!(transport.queues[0].used_low, 0);
+        assert_eq!(transport.queues[0].used_high, 0);
+        assert_eq!(transport.queues[0].num, QUEUE_NUM_MAX);
     }
 
     #[test]

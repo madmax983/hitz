@@ -633,6 +633,118 @@ mod tests {
     }
 
     #[test]
+    fn test_handle_mmio_read_updates_regs() {
+        let mut vcpu = DummyVcpu {
+            regs: hitz_hal::StandardRegs::default(),
+            exit: hitz_hal::VcpuExit::Halt,
+        };
+        let devices = std::sync::Mutex::new(crate::vm::SharedDevices {
+            serial: hitz_devices::SerialDevice::new(std::io::sink()),
+            mmio_bus: hitz_devices::MmioBus::new(),
+        });
+
+        let mmio = hitz_hal::MmioExit {
+            gpa: hitz_hal::Gpa::new(0x1000),
+            instruction_bytes: [0; 15],
+            instruction_length: 2,
+        };
+
+        let decoded = crate::mmio_decode::DecodedMmio {
+            size: 4,
+            is_write: false,
+            register: 0, // RAX
+        };
+
+        handle_mmio_read(&mut vcpu, &devices, &mmio, &decoded, 2).expect("success");
+
+        assert_eq!(
+            vcpu.regs.rax, 0xffffffff,
+            "unmapped read should return all 1s"
+        );
+        assert_eq!(vcpu.regs.rip, 2, "rip should advance by instruction length");
+    }
+
+    #[test]
+    fn test_handle_mmio_write_advances_rip() {
+        let mut vcpu = DummyVcpu {
+            regs: hitz_hal::StandardRegs::default(),
+            exit: hitz_hal::VcpuExit::Halt,
+        };
+        let devices = std::sync::Mutex::new(crate::vm::SharedDevices {
+            serial: hitz_devices::SerialDevice::new(std::io::sink()),
+            mmio_bus: hitz_devices::MmioBus::new(),
+        });
+        let mem = DummyMem;
+
+        let mmio = hitz_hal::MmioExit {
+            gpa: hitz_hal::Gpa::new(0x1000),
+            instruction_bytes: [0; 15],
+            instruction_length: 3,
+        };
+
+        let decoded = crate::mmio_decode::DecodedMmio {
+            size: 4,
+            is_write: true,
+            register: 0, // RAX
+        };
+
+        let mut pending_irq = None;
+
+        handle_mmio_write(
+            &mut vcpu,
+            &devices,
+            &mem,
+            &mmio,
+            &mut pending_irq,
+            &decoded,
+            3,
+        )
+        .expect("success");
+
+        assert_eq!(vcpu.regs.rip, 3, "rip should advance by instruction length");
+    }
+
+    #[test]
+    fn test_handle_mmio_write_unhandled_advances_rip() {
+        let mut vcpu = DummyVcpu {
+            regs: hitz_hal::StandardRegs::default(),
+            exit: hitz_hal::VcpuExit::Halt,
+        };
+        let devices = std::sync::Mutex::new(crate::vm::SharedDevices {
+            serial: hitz_devices::SerialDevice::new(std::io::sink()),
+            mmio_bus: hitz_devices::MmioBus::new(),
+        });
+        let mem = DummyMem;
+
+        let mmio = hitz_hal::MmioExit {
+            gpa: hitz_hal::Gpa::new(0x2000), // unmapped address
+            instruction_bytes: [0; 15],
+            instruction_length: 3,
+        };
+
+        let decoded = crate::mmio_decode::DecodedMmio {
+            size: 4,
+            is_write: true,
+            register: 0,
+        };
+
+        let mut pending_irq = None;
+
+        handle_mmio_write(
+            &mut vcpu,
+            &devices,
+            &mem,
+            &mmio,
+            &mut pending_irq,
+            &decoded,
+            3,
+        )
+        .expect("success");
+
+        assert_eq!(vcpu.regs.rip, 3, "rip should advance by instruction length");
+    }
+
+    #[test]
     fn test_advance_rip() {
         let mut vcpu = DummyVcpu {
             regs: hitz_hal::StandardRegs {

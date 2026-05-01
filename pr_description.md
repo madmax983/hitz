@@ -1,19 +1,20 @@
-👤 **User Story:** As a Core Engineer, I want the test guest initramfs to run a TCP echo server on boot, so that I can write end-to-end integration tests that send packets from the host and verify the responses.
+🎯 Target:
+`hitz-api`, `hitz-daemon`, `hitz-vmm`, and `hitz-devices` crates.
 
-✅ **Acceptance Criteria:**
-- **Metric Definition:** Success = A new integration test successfully establishes a TCP connection to the host-mapped port, sends a string of bytes, and receives the exact same string of bytes back from the guest without timing out.
-- **So What? (Business Problem):** Testing infrastructure is the bedrock of reliable product delivery. Without end-to-end networking tests, regressions in our virtio-net or host-side port forwarding implementation could slip into production unnoticed, leading to broken network connectivity for users. By implementing a guest-side TCP listener, we can guarantee that port forwarding and network traffic are flowing correctly between the host and the microVM, saving support costs and protecting user trust.
-- **Gap Analysis:** Our `hitz-whp` test suite currently marks the "Full TCP connect + echo assertion" as a TODO. While the host-side VMM and networking logic correctly configure the port bindings, the test stops short of sending actual bytes because there is nothing inside the guest listening on the mapped port. We are missing a minimal, purpose-built initramfs containing a lightweight TCP server.
-- **Functional Requirements:**
-  - Build or provide a reproducible script to generate a minimal Linux initramfs.
-  - The initramfs must start a TCP service (like `nc -l -p 9999 -e cat` or a custom lightweight Rust binary) immediately after network interface initialization.
-  - The test suite must be updated to boot this specific initramfs and assert full TCP connectivity.
+💥 Risk:
+Without these tests, core VM management operations (like restarting VMs, or config validation) could panic or silently fail without detection. Device and run-loop edge cases (like MMIO unmapped writes, or MMIO reset) lacked verification of behavior. The lack of `ProcRate` diffing meant process metrics wouldn't translate appropriately across snapshots.
 
-🚫 **Out of Scope:**
-- **Production Initramfs:** This is strictly for integration testing. We are not building a production-ready OS image.
-- **Complex Application Protocols:** We only need to verify basic TCP byte-streaming (echo), not HTTP, TLS, or other higher-level protocols.
-- **UDP Testing:** For Phase 21, the focus is strictly on TCP. UDP will be handled in a separate phase if necessary.
-🎯 Target: `hitz-api::health` module, specifically `assess_health` handling of empty arrays.
-💥 Risk: If the metrics struct is initialized with an empty `networks` array and iterated via iterators without bounds/zero checks, it avoids crashing here, but this test ensures we don't accidentally introduce panics via direct slice access or division by zero in the network summation logic during future refactoring.
-🧪 Strategy: Added a new unit test `should_handle_empty_networks_without_panic` inside `crates/hitz-api/src/health.rs` to explicitly verify that assessing the health of a snapshot with no network interfaces successfully evaluates to `HealthStatus::Healthy` instead of panicking.
-🔬 Verification: Run `cargo test -p hitz-api --all-features --target x86_64-unknown-linux-gnu`
+🧪 Strategy:
+- Added unit tests for `restart_vm` timeouts and success flows in `hitz-daemon::vm_manager`.
+- Added unit tests for `handle_mmio_read` and `handle_mmio_write` in `hitz-vmm::run_loop` to ensure instruction pointers advance as expected.
+- Added tests for `validate_config` in `hitz-vmm::vm` for path traversal and missing cmdlines.
+- Added `check_reset_clears_fields` test for `VirtioMmioTransport` in `hitz-devices::virtio::mmio_transport`.
+- Ensured `ProcRate` was accurately tracked in `hitz-api::MetricsDiff` alongside other metrics during diffing, adding a missing logic branch.
+
+🔭 Verification:
+`cargo test --manifest-path crates/hitz-devices/Cargo.toml --lib`
+`cargo test --manifest-path crates/hitz-api/Cargo.toml --lib`
+`cargo test --manifest-path crates/hitz-vmm/Cargo.toml --lib`
+`cargo test --manifest-path crates/hitz-daemon/Cargo.toml --lib`
+
+**Assumptions**: `hitz-daemon`, `hitz-vmm`, and `hitz-cli` fail to build under `cargo test` and `cargo-tarpaulin` due to transitive Windows-specific requirements (like `wintun` missing `IMarshal` or stdcall bindings). Verification of those specific changes relied heavily on isolated testing, local `cargo check`, and code inspection.

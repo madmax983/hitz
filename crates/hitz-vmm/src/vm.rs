@@ -765,6 +765,21 @@ mod tests {
     }
 
     #[test]
+    fn validate_config_invalid_paths() {
+        // Invalid kernel path that definitely does not exist
+        let mut config = valid_config("vmlinux".into());
+        config.kernel_path = std::path::PathBuf::from("/does/not/exist/vmlinux");
+        assert!(validate_config(&config).is_err());
+    }
+
+    #[test]
+    fn test_valid_config_with_empty_cmdline() {
+        let mut config = valid_config("vmlinux".into());
+        config.cmdline = Some("".to_string());
+        assert!(validate_config(&config).is_ok());
+    }
+
+    #[test]
     fn validate_config_path_traversal() {
         let tmp = tempfile::NamedTempFile::new().expect("create temp file");
         let valid_path = tmp.path().to_path_buf();

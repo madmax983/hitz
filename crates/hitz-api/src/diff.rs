@@ -76,6 +76,8 @@ pub struct MetricsDiff {
     pub disks: Vec<DiskRate>,
     /// Network rates of change (per second).
     pub networks: Vec<NetRate>,
+    /// Process rates of change.
+    pub processes: Vec<ProcRate>,
 }
 
 /// Per-disk I/O rates (per second).
@@ -136,6 +138,23 @@ pub struct DiskRate {
 ///
 /// assert_eq!(rate.interface, "eth0");
 /// ```
+
+/// Process rates.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ProcRate {
+    /// Process ID.
+    pub pid: u32,
+    /// Process name.
+    pub name: String,
+    /// CPU percentage.
+    pub cpu_pct: f32,
+    /// RSS in bytes.
+    pub rss_bytes: u64,
+    /// Process state.
+    pub state: char,
+}
+
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct NetRate {
     /// Interface name.
@@ -279,10 +298,24 @@ impl CalculateDiff for MetricsSnapshot {
             })
         }));
 
+        // Pre-allocate to avoid dynamic heap reallocations during iteration
+        let mut processes = Vec::with_capacity(self.processes.len());
+        processes.extend(self.processes.iter().map(|current_proc| {
+            // Process cpu_pct/rss are instantaneous, so we carry them over
+            ProcRate {
+                pid: current_proc.pid,
+                name: current_proc.name.clone(),
+                cpu_pct: current_proc.cpu_pct,
+                rss_bytes: current_proc.rss_bytes,
+                state: current_proc.state,
+            }
+        }));
+
         Some(MetricsDiff {
             elapsed_secs,
             disks,
             networks,
+            processes,
         })
     }
 }
@@ -290,6 +323,37 @@ impl CalculateDiff for MetricsSnapshot {
 #[cfg(test)]
 #[allow(clippy::float_cmp, clippy::unreadable_literal, clippy::expect_used)]
 mod tests {
+
+    #[test]
+    fn test_processes_diff_includes_all() {
+        use super::*;
+        let prev = MetricsSnapshot {
+            timestamp_ms: 1000,
+            disks: vec![],
+            networks: vec![],
+            processes: vec![
+                crate::ProcMetrics { pid: 1, name: "init".into(), cpu_pct: 1.0, rss_bytes: 1024, state: 'S' },
+            ],
+            ..MetricsSnapshot::default()
+        };
+        let curr = MetricsSnapshot {
+            timestamp_ms: 2000,
+            disks: vec![],
+            networks: vec![],
+            processes: vec![
+                crate::ProcMetrics { pid: 1, name: "init".into(), cpu_pct: 1.5, rss_bytes: 1024, state: 'S' },
+                crate::ProcMetrics { pid: 2, name: "bash".into(), cpu_pct: 0.0, rss_bytes: 2048, state: 'R' },
+            ],
+            ..MetricsSnapshot::default()
+        };
+
+        let diff = curr.diff(&prev).unwrap();
+        assert_eq!(diff.processes.len(), 2);
+        assert_eq!(diff.processes[0].pid, 1);
+        assert_eq!(diff.processes[0].cpu_pct, 1.5);
+        assert_eq!(diff.processes[1].pid, 2);
+    }
+
     use super::*;
     use crate::{CpuMetrics, DiskMetrics, MemoryMetrics, NetMetrics};
 
