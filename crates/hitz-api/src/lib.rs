@@ -66,6 +66,13 @@ mod prometheus;
 #[cfg(feature = "prometheus")]
 pub use prometheus::ToPrometheus;
 
+
+#[cfg(feature = "kubernetes")]
+/// Kubernetes exporter module.
+mod kubernetes;
+#[cfg(feature = "kubernetes")]
+pub use kubernetes::ToKubernetes;
+
 #[cfg(feature = "carbon")]
 /// Carbon footprint estimation module.
 mod carbon;
