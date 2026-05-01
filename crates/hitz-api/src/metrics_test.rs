@@ -1,9 +1,16 @@
 use super::*;
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn should_serialize_metrics_request_to_exact_json() {
+        let req = MetricsRequest::Snapshot;
+        let json = serde_json::to_string(&req).expect("serialize failed");
+        assert_eq!(json, "\"Snapshot\"");
+    }
 
     #[test]
     fn should_serialize_and_deserialize_metrics_request() {
