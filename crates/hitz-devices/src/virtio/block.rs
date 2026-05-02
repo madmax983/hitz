@@ -144,8 +144,12 @@ impl VirtioBlockDevice {
 
         // 3. Write the status byte to the third descriptor.
         if let Some(status_desc) = chain.next_descriptor(mem) {
-            let _ = mem.write_guest(status_desc.gpa, &[status]);
-            total_written += 1;
+            if status_desc.is_device_writable {
+                let _ = mem.write_guest(status_desc.gpa, &[status]);
+                total_written += 1;
+            } else {
+                tracing::warn!("status descriptor must be device-writable");
+            }
         }
 
         total_written
@@ -867,5 +871,33 @@ mod tests {
 
         let status = mem.read_bytes(STATUS_GPA, 1);
         assert_eq!(status[0], VIRTIO_BLK_S_IOERR);
+    }
+
+    #[test]
+    fn havoc_blk_status_readonly_desc() {
+        let f = create_temp_disk(1);
+        let mut dev = VirtioBlockDevice::new(f).unwrap();
+        let mem = MockMem::new(0x10000);
+        let mut q = setup_queue(&mem);
+
+        write_desc(&mem, 0, HDR_GPA, 16, 1, 1);
+        write_desc(&mem, 1, DATA_GPA, 512, 1 | 2, 2);
+        write_desc(&mem, 2, STATUS_GPA, 1, 0, 0); // No F_WRITE flag!
+        write_blk_header(&mem, HDR_GPA, VIRTIO_BLK_T_IN, 0);
+        write_avail_entry(&mem, 0, 0);
+        set_avail_idx(&mem, 1);
+
+        dev.process_queue(0, &mut q, &mem);
+
+        // Let's check how many bytes were recorded as written
+        let used_idx_bytes = mem.read_bytes(USED_BASE + 2, 2);
+        let used_idx = u16::from_le_bytes([used_idx_bytes[0], used_idx_bytes[1]]);
+        assert_eq!(used_idx, 1);
+
+        let len_bytes = mem.read_bytes(USED_BASE + 4 + 4, 4); // USED_BASE + 4 is first elem id(4 bytes), then len(4 bytes)
+        let len = u32::from_le_bytes([len_bytes[0], len_bytes[1], len_bytes[2], len_bytes[3]]);
+
+        // It shouldn't write to the status byte if it's read-only.
+        assert_eq!(len, 512, "Length should be exactly 512, without the status byte");
     }
 }
