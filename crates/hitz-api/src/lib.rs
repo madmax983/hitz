@@ -348,3 +348,9 @@ pub use imbalance::{CoreImbalanceAnalyzer, ImbalanceResult};
 mod rightsizer;
 #[cfg(feature = "rightsizer")]
 pub use rightsizer::{ResizeRecommendation, RightSizer};
+
+#[cfg(feature = "eco")]
+/// Eco module for evaluating sustainability.
+mod eco;
+#[cfg(feature = "eco")]
+pub use eco::{EcoScore, EcoScorer};

@@ -125,6 +125,7 @@ impl Iterator for VmSimulator {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used)]
 mod tests {
     use super::*;
 
@@ -147,7 +148,6 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::expect_used)]
     fn test_memory_leak_profile() {
         let mut sim = VmSimulator::new(WorkloadProfile::MemoryLeak);
         let metrics_0 = sim.next().expect("next should return Some");
