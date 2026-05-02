@@ -218,7 +218,6 @@ impl SerialReader {
     /// and all remaining data has been drained.
     pub async fn read_chunk(&mut self) -> Option<Vec<u8>> {
         loop {
-            let mut rx = self.notify_rx.clone();
             {
                 #[cfg(not(loom))]
                 let Ok(inner) = self.inner.lock() else {
@@ -264,7 +263,8 @@ impl SerialReader {
                 }
             }
             // Park until the writer pushes more data or closes.
-            let _ = rx.changed().await;
+            // ⚡ Bolt Optimization: Avoided `notify_rx.clone()` inside the loop to eliminate atomic ref-counting overhead.
+            let _ = self.notify_rx.changed().await;
         }
     }
 }
