@@ -38,7 +38,6 @@ use loom::sync::{Arc, Mutex};
 #[cfg(not(loom))]
 use std::sync::{Arc, Mutex};
 
-use tokio::sync::Notify;
 use tokio::sync::watch;
 
 /// Default ring buffer capacity (64 KiB).
@@ -93,6 +92,7 @@ impl SerialBuf {
     #[must_use]
     pub fn with_capacity(capacity: usize) -> Self {
         assert!(capacity > 0, "capacity must be greater than 0");
+        let (notify_tx, notify_rx) = watch::channel(());
         Self {
             inner: Arc::new(Mutex::new(Inner {
                 buf: vec![0u8; capacity],
@@ -100,7 +100,8 @@ impl SerialBuf {
                 total_written: 0,
                 closed: false,
             })),
-            notify: Arc::new(Notify::new()),
+            notify_tx,
+            notify_rx,
         }
     }
 
