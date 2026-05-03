@@ -183,7 +183,7 @@ mod tests {
 
     #[cfg(feature = "health_check")]
     #[test]
-    #[allow(clippy::unwrap_used)]
+    #[allow(clippy::unwrap_used, clippy::expect_used)]
     fn test_simulator_health_check_integration() {
         use crate::{HealthCheck, HealthStatus};
 

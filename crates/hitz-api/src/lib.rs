@@ -348,3 +348,9 @@ pub use imbalance::{CoreImbalanceAnalyzer, ImbalanceResult};
 mod rightsizer;
 #[cfg(feature = "rightsizer")]
 pub use rightsizer::{ResizeRecommendation, RightSizer};
+
+#[cfg(feature = "oom_predictor")]
+/// Out of memory predictor module.
+mod oom_predictor;
+#[cfg(feature = "oom_predictor")]
+pub use oom_predictor::{OomPrediction, OomPredictor};
