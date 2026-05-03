@@ -282,7 +282,7 @@ fn handle_mmio_read<V: Vcpu, W: Write>(
     instr_len: u8,
 ) -> Result<(), HalError> {
     // Read: lock → device read → unlock, then update registers.
-    let size = usize::from(decoded.size);
+    let size = usize::from(decoded.size).min(8);
     let mut data = [0u8; 8];
     {
         let mut devs = devices.lock().expect("device lock poisoned");
@@ -312,7 +312,7 @@ fn handle_mmio_write<V: Vcpu, W: Write>(
         let regs = vcpu.get_regs()?;
         mmio_decode::register_value(&regs, decoded.register)
     };
-    let size = usize::from(decoded.size);
+    let size = usize::from(decoded.size).min(8);
     data[..size].copy_from_slice(&value.to_le_bytes()[..size]);
 
     // Lock → device write → unlock, then handle IRQ.
