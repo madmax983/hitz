@@ -1367,14 +1367,9 @@ async fn handle_vm_clone(args: &VmCloneArgs) -> Result<()> {
 async fn handle_vm_action(args: &VmIdArgs, action: VmAction) -> Result<()> {
     use crossterm::style::Stylize;
     use std::io::Write;
-    let action_str = match action {
-        VmAction::Start => "Starting",
-        VmAction::Restart => "Restarting",
-        VmAction::Stop => "Stopping",
-    };
     print!(
         "{}",
-        format!("⏳ {} VM '{}'...", action_str, args.id).cyan()
+        format!("⏳ {} VM '{}'...", action.gerund(), args.id).cyan()
     );
     let _ = std::io::stdout().flush();
     let body = serde_json::to_string(&ActionVmRequest { action }).context("serialize request")?;
@@ -1387,17 +1382,11 @@ async fn handle_vm_action(args: &VmIdArgs, action: VmAction) -> Result<()> {
     )
     .await?;
 
-    let (success_verb, error_verb) = match action {
-        VmAction::Start => ("started", "start"),
-        VmAction::Restart => ("restarted", "restart"),
-        VmAction::Stop => ("stopped", "stop"),
-    };
-
     print_action_result(
         status,
         &resp,
-        &format!("✓ Successfully {} VM {}", success_verb, args.id),
-        &format!("Failed to {} VM {}", error_verb, args.id),
+        &format!("✓ Successfully {} VM {}", action.past_tense(), args.id),
+        &format!("Failed to {} VM {}", action, args.id),
     );
     Ok(())
 }
