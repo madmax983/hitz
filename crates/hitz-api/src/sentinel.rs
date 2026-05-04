@@ -169,7 +169,12 @@ pub struct SentinelRule {
 }
 
 impl SentinelRule {
-    /// Evaluates the underlying condition against a live telemetry snapshot.
+    /// Determines if an alarm should trigger based on real-time telemetry.
+    ///
+    /// # Abstract
+    /// Extracts the target metric from the incoming `MetricsSnapshot` and applies
+    /// the rule's defined mathematical operator and threshold. It returns `true` if
+    /// the system is violating the configured bounds.
     #[must_use]
     pub fn evaluate(&self, snapshot: &MetricsSnapshot) -> bool {
         let value = match self.condition.target {
