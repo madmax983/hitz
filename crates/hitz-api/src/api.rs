@@ -64,6 +64,39 @@ pub enum VmAction {
     Restart,
 }
 
+impl std::fmt::Display for VmAction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            Self::Start => "start",
+            Self::Stop => "stop",
+            Self::Restart => "restart",
+        };
+        write!(f, "{s}")
+    }
+}
+
+impl VmAction {
+    /// Returns the gerund form of the action (e.g., "Starting", "Stopping").
+    #[must_use]
+    pub const fn gerund(&self) -> &'static str {
+        match self {
+            Self::Start => "Starting",
+            Self::Stop => "Stopping",
+            Self::Restart => "Restarting",
+        }
+    }
+
+    /// Returns the past tense form of the action (e.g., "started", "stopped").
+    #[must_use]
+    pub const fn past_tense(&self) -> &'static str {
+        match self {
+            Self::Start => "started",
+            Self::Stop => "stopped",
+            Self::Restart => "restarted",
+        }
+    }
+}
+
 /// Current lifecycle state of a VM.
 ///
 /// This tracks the operational status of a micro-VM from its initial
