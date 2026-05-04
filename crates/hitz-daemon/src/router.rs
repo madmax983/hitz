@@ -54,8 +54,9 @@ pub async fn route<H>(
 where
     H: Hypervisor + Send + Sync + 'static,
 {
-    // ⚡ Bolt Optimization: Avoid cloning the HTTP method.
-    // It's cheaper to borrow it or let it remain bound to the request.
+    // ⚡ Bolt Optimization: Avoid allocating a String for the path.
+    // It's cheaper to borrow it or let it remain bound to the request. This eliminates a heap
+    // allocation per request.
     let method = req.method().clone();
     let path = req.uri().path().to_string();
 
