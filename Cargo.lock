@@ -714,6 +714,7 @@ name = "hitz-boot"
 version = "0.1.0"
 dependencies = [
  "hitz-hal",
+ "proptest",
  "thiserror 2.0.18",
  "tracing",
 ]

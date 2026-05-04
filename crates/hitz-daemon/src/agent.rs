@@ -1,7 +1,7 @@
 //! Guest agent embedding and cpio overlay construction.
 
 use hitz_api::GuestAgentMode;
-use hitz_vmm::CpioBuilder;
+use hitz_boot::CpioBuilder;
 
 /// The built-in agent binary, embedded at compile time.
 ///

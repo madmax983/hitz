@@ -19,7 +19,7 @@ use std::io::Write;
 /// # The Hero's Journey
 ///
 /// ```rust
-/// use hitz_vmm::CpioBuilder;
+/// use hitz_boot::CpioBuilder;
 ///
 /// // Create a new archive, add a shell script, and finish it to get the bytes
 /// let archive_bytes = CpioBuilder::new()
