@@ -777,6 +777,7 @@ version = "0.1.0"
 dependencies = [
  "crossbeam-channel",
  "hitz-hal",
+ "proptest",
  "tempfile",
  "thiserror 2.0.18",
  "tracing",
