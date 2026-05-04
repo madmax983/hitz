@@ -152,6 +152,17 @@ pub enum GuestAgentMode {
     Disabled,
 }
 
+impl std::fmt::Display for GuestAgentMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Auto => write!(f, "Auto"),
+            Self::Custom(p) => write!(f, "Custom ({})", p.display()),
+            Self::Disabled => write!(f, "Disabled"),
+        }
+    }
+}
+
+
 // ── VmConfig helpers ──────────────────────────────────────────────────────────
 
 const fn default_cpus() -> u32 {

@@ -128,6 +128,19 @@ pub enum VmState {
     Failed,
 }
 
+impl std::fmt::Display for VmState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            Self::Created => "Created",
+            Self::Running => "Running",
+            Self::Stopped => "Stopped",
+            Self::Failed => "Failed",
+        };
+        write!(f, "{s}")
+    }
+}
+
+
 /// Request to create a new VM with the given configuration.
 ///
 /// # Abstract

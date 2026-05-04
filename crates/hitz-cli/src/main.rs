@@ -1429,12 +1429,12 @@ async fn handle_vm_status(args: &VmIdArgs) -> Result<()> {
             let mut table = Table::new();
             let _ = table.load_preset(UTF8_FULL_CONDENSED);
 
-            let state_cell = match info.state {
-                hitz_api::VmState::Running => Cell::new("Running").fg(Color::Green),
-                hitz_api::VmState::Stopped => Cell::new("Stopped").fg(Color::Yellow),
-                hitz_api::VmState::Failed => Cell::new("Failed").fg(Color::Red),
-                hitz_api::VmState::Created => Cell::new("Created").fg(Color::Cyan),
-            };
+            let state_cell = Cell::new(info.state.to_string()).fg(match info.state {
+                hitz_api::VmState::Running => Color::Green,
+                hitz_api::VmState::Stopped => Color::Yellow,
+                hitz_api::VmState::Failed => Color::Red,
+                hitz_api::VmState::Created => Color::Cyan,
+            });
 
             let _ = table.add_row([
                 Cell::new("ID:").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
@@ -1468,11 +1468,7 @@ async fn handle_vm_status(args: &VmIdArgs) -> Result<()> {
                 Cell::new("CPUs:").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
                 Cell::new(info.config.cpus.to_string()),
             ]);
-            let agent_str = match info.config.guest_agent {
-                hitz_api::GuestAgentMode::Auto => "Auto".to_string(),
-                hitz_api::GuestAgentMode::Custom(ref p) => format!("Custom ({})", p.display()),
-                hitz_api::GuestAgentMode::Disabled => "Disabled".to_string(),
-            };
+            let agent_str = info.config.guest_agent.to_string();
             let _ = table.add_row([
                 Cell::new("Guest Agent:").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
                 Cell::new(agent_str),
@@ -1566,12 +1562,12 @@ async fn handle_vm_list(args: &VmListArgs) -> Result<()> {
             ]);
 
             for info in vms {
-                let state_cell = match info.state {
-                    hitz_api::VmState::Running => Cell::new("Running").fg(Color::Green),
-                    hitz_api::VmState::Stopped => Cell::new("Stopped").fg(Color::Yellow),
-                    hitz_api::VmState::Failed => Cell::new("Failed").fg(Color::Red),
-                    hitz_api::VmState::Created => Cell::new("Created").fg(Color::Cyan),
-                };
+                let state_cell = Cell::new(info.state.to_string()).fg(match info.state {
+                hitz_api::VmState::Running => Color::Green,
+                hitz_api::VmState::Stopped => Color::Yellow,
+                hitz_api::VmState::Failed => Color::Red,
+                hitz_api::VmState::Created => Color::Cyan,
+            });
                 // ⚡ Bolt Optimization: Replace `.unwrap_or_else(|| "-".to_string())` with `.as_deref().unwrap_or("-")`
                 // This eliminates an unnecessary `String` allocation on the hot path of formatting CLI output.
                 let exit_reason = info.exit_reason.as_deref().unwrap_or("-");
@@ -2499,12 +2495,7 @@ async fn handle_vm_dashboard(args: &VmListArgs) -> Result<()> {
                 f.render_widget(no_vms_msg, chunks[1]);
             } else {
                 let rows = vms.iter().map(|vm| {
-                    let state_str = match vm.state {
-                        hitz_api::VmState::Running => "Running",
-                        hitz_api::VmState::Stopped => "Stopped",
-                        hitz_api::VmState::Failed => "Failed",
-                        hitz_api::VmState::Created => "Created",
-                    };
+                    let state_str = vm.state.to_string();
                     let state_color = match vm.state {
                         hitz_api::VmState::Running => Color::Green,
                         hitz_api::VmState::Stopped => Color::Yellow,
