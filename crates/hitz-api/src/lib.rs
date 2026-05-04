@@ -348,3 +348,9 @@ pub use imbalance::{CoreImbalanceAnalyzer, ImbalanceResult};
 mod rightsizer;
 #[cfg(feature = "rightsizer")]
 pub use rightsizer::{ResizeRecommendation, RightSizer};
+
+#[cfg(feature = "terraform")]
+/// Terraform HCL generation module.
+mod terraform;
+#[cfg(feature = "terraform")]
+pub use terraform::ToTerraform;
