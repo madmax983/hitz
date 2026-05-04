@@ -1,0 +1,369 @@
+    Checking hitz-vmm v0.1.0 (/app/crates/hitz-vmm)
+error: unexpected `cfg` condition name: `loom`
+  --> crates/hitz-vmm/src/serial_buf.rs:36:7
+   |
+36 | #[cfg(loom)]
+   |       ^^^^
+   |
+   = help: expected names are: `docsrs`, `feature`, and `test` and 31 more
+   = help: consider using a Cargo feature instead
+   = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+            [lints.rust]
+            unexpected_cfgs = { level = "warn", check-cfg = ['cfg(loom)'] }
+   = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(loom)");` to the top of the `build.rs`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+   = note: `-D unexpected-cfgs` implied by `-D warnings`
+   = help: to override `-D warnings` add `#[allow(unexpected_cfgs)]`
+
+error: unexpected `cfg` condition name: `loom`
+  --> crates/hitz-vmm/src/serial_buf.rs:38:11
+   |
+38 | #[cfg(not(loom))]
+   |           ^^^^
+   |
+   = help: consider using a Cargo feature instead
+   = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+            [lints.rust]
+            unexpected_cfgs = { level = "warn", check-cfg = ['cfg(loom)'] }
+   = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(loom)");` to the top of the `build.rs`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+error: unused import: `tokio::sync::Notify`
+  --> crates/hitz-vmm/src/serial_buf.rs:41:5
+   |
+41 | use tokio::sync::Notify;
+   |     ^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `-D unused-imports` implied by `-D warnings`
+   = help: to override `-D warnings` add `#[allow(unused_imports)]`
+
+error: unused import: `tokio::sync::watch`
+  --> crates/hitz-vmm/src/serial_buf.rs:42:5
+   |
+42 | use tokio::sync::watch;
+   |     ^^^^^^^^^^^^^^^^^^
+
+error: unexpected `cfg` condition name: `loom`
+   --> crates/hitz-vmm/src/serial_buf.rs:118:19
+    |
+118 |         #[cfg(not(loom))]
+    |                   ^^^^
+    |
+    = help: consider using a Cargo feature instead
+    = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+             [lints.rust]
+             unexpected_cfgs = { level = "warn", check-cfg = ['cfg(loom)'] }
+    = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(loom)");` to the top of the `build.rs`
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+error: unexpected `cfg` condition name: `loom`
+   --> crates/hitz-vmm/src/serial_buf.rs:120:15
+    |
+120 |         #[cfg(loom)]
+    |               ^^^^
+    |
+    = help: consider using a Cargo feature instead
+    = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+             [lints.rust]
+             unexpected_cfgs = { level = "warn", check-cfg = ['cfg(loom)'] }
+    = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(loom)");` to the top of the `build.rs`
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+error: unexpected `cfg` condition name: `loom`
+   --> crates/hitz-vmm/src/serial_buf.rs:134:19
+    |
+134 |         #[cfg(not(loom))]
+    |                   ^^^^
+    |
+    = help: consider using a Cargo feature instead
+    = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+             [lints.rust]
+             unexpected_cfgs = { level = "warn", check-cfg = ['cfg(loom)'] }
+    = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(loom)");` to the top of the `build.rs`
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+error: unexpected `cfg` condition name: `loom`
+   --> crates/hitz-vmm/src/serial_buf.rs:138:15
+    |
+138 |         #[cfg(loom)]
+    |               ^^^^
+    |
+    = help: consider using a Cargo feature instead
+    = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+             [lints.rust]
+             unexpected_cfgs = { level = "warn", check-cfg = ['cfg(loom)'] }
+    = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(loom)");` to the top of the `build.rs`
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+error: unexpected `cfg` condition name: `loom`
+   --> crates/hitz-vmm/src/serial_buf.rs:162:19
+    |
+162 |         #[cfg(not(loom))]
+    |                   ^^^^
+    |
+    = help: consider using a Cargo feature instead
+    = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+             [lints.rust]
+             unexpected_cfgs = { level = "warn", check-cfg = ['cfg(loom)'] }
+    = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(loom)");` to the top of the `build.rs`
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+error: unexpected `cfg` condition name: `loom`
+   --> crates/hitz-vmm/src/serial_buf.rs:167:15
+    |
+167 |         #[cfg(loom)]
+    |               ^^^^
+    |
+    = help: consider using a Cargo feature instead
+    = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+             [lints.rust]
+             unexpected_cfgs = { level = "warn", check-cfg = ['cfg(loom)'] }
+    = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(loom)");` to the top of the `build.rs`
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+error: unexpected `cfg` condition name: `loom`
+   --> crates/hitz-vmm/src/serial_buf.rs:225:27
+    |
+225 |                 #[cfg(not(loom))]
+    |                           ^^^^
+    |
+    = help: consider using a Cargo feature instead
+    = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+             [lints.rust]
+             unexpected_cfgs = { level = "warn", check-cfg = ['cfg(loom)'] }
+    = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(loom)");` to the top of the `build.rs`
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+error: unexpected `cfg` condition name: `loom`
+   --> crates/hitz-vmm/src/serial_buf.rs:229:23
+    |
+229 |                 #[cfg(loom)]
+    |                       ^^^^
+    |
+    = help: consider using a Cargo feature instead
+    = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+             [lints.rust]
+             unexpected_cfgs = { level = "warn", check-cfg = ['cfg(loom)'] }
+    = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(loom)");` to the top of the `build.rs`
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+error: temporary with significant `Drop` can be early dropped
+   --> crates/hitz-vmm/src/run_loop.rs:189:21
+    |
+187 |           VcpuExit::IoPort(io) => {
+    |  _________________________________-
+188 | |             record_exit(exit_counter, "IoPort");
+189 | |             let mut devs = devices.lock().expect("device lock poisone...
+    | |                     ^^^^
+190 | |             handle_io_port(vcpu, &mut devs.serial, &io)?;
+191 | |             Ok(None)
+192 | |         }
+    | |_________- temporary `devs` is currently being dropped at the end of its contained scope
+    |
+    = note: this might lead to unnecessary resource contention
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.94.0/index.html#significant_drop_tightening
+    = note: `-D clippy::significant-drop-tightening` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::significant_drop_tightening)]`
+help: merge the temporary construction with its single usage
+    |
+189 ~
+190 +             devices.lock().expect("device lock poisoned").;
+191 ~
+    |
+
+error: used `expect()` on a `Result` value
+   --> crates/hitz-vmm/src/run_loop.rs:286:24
+    |
+286 |         let mut devs = devices.lock().expect("device lock poisoned");
+    |                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: if this value is an `Err`, it will panic
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.94.0/index.html#expect_used
+    = note: `-D clippy::expect-used` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::expect_used)]`
+
+error: used `expect()` on a `Result` value
+   --> crates/hitz-vmm/src/run_loop.rs:318:24
+    |
+318 |         let mut devs = devices.lock().expect("device lock poisoned");
+    |                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: if this value is an `Err`, it will panic
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.94.0/index.html#expect_used
+
+error: this can be `std::io::Error::other(_)`
+   --> crates/hitz-vmm/src/vm.rs:436:13
+    |
+436 | / ...   std::io::Error::new(
+437 | | ...       std::io::ErrorKind::Other,
+438 | | ...       "vcpus array is unexpectedly empty when it should have 1 el...
+439 | | ...   )
+    | |_______^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.94.0/index.html#io_other_error
+    = note: `-D clippy::io-other-error` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::io_other_error)]`
+help: use `std::io::Error::other`
+    |
+436 ~             std::io::Error::other(
+437 ~                 "vcpus array is unexpectedly empty when it should have 1 element",
+    |
+
+error: this argument is passed by value, but not consumed in the function body
+   --> crates/hitz-vmm/src/vm.rs:613:14
+    |
+613 |     devices: Arc<Mutex<SharedDevices<impl Write + Send + 'static>>>,
+    |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.94.0/index.html#needless_pass_by_value
+    = note: `-D clippy::needless-pass-by-value` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::needless_pass_by_value)]`
+help: consider taking a reference instead
+    |
+613 |     devices: &Arc<Mutex<SharedDevices<impl Write + Send + 'static>>>,
+    |              +
+
+error: this argument is passed by value, but not consumed in the function body
+   --> crates/hitz-vmm/src/vm.rs:614:20
+    |
+614 |     guest_mem_arc: Arc<GuestMemory>,
+    |                    ^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.94.0/index.html#needless_pass_by_value
+help: consider taking a reference instead
+    |
+614 |     guest_mem_arc: &Arc<GuestMemory>,
+    |                    +
+
+error: this argument is passed by value, but not consumed in the function body
+   --> crates/hitz-vmm/src/vm.rs:615:16
+    |
+615 |     stop_flag: Arc<AtomicBool>,
+    |                ^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.94.0/index.html#needless_pass_by_value
+help: consider taking a reference instead
+    |
+615 |     stop_flag: &Arc<AtomicBool>,
+    |                +
+
+error: used `expect()` on a `Result` value
+   --> crates/hitz-vmm/src/vm.rs:619:20
+    |
+619 |       let watchdog = std::thread::Builder::new()
+    |  ____________________^
+620 | |         .name("cancel-watchdog".into())
+621 | |         .spawn(move || {
+622 | |             while !stop_clone.load(Ordering::Relaxed) {
+...   |
+626 | |         })
+627 | |         .expect("spawn watchdog thread");
+    | |________________________________________^
+    |
+    = note: if this value is an `Err`, it will panic
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.94.0/index.html#expect_used
+
+error: this argument is passed by value, but not consumed in the function body
+   --> crates/hitz-vmm/src/vm.rs:638:14
+    |
+638 |     devices: Arc<Mutex<SharedDevices<impl Write + Send + 'static>>>,
+    |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.94.0/index.html#needless_pass_by_value
+help: consider taking a reference instead
+    |
+638 |     devices: &Arc<Mutex<SharedDevices<impl Write + Send + 'static>>>,
+    |              +
+
+error: this argument is passed by value, but not consumed in the function body
+   --> crates/hitz-vmm/src/vm.rs:639:20
+    |
+639 |     guest_mem_arc: Arc<GuestMemory>,
+    |                    ^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.94.0/index.html#needless_pass_by_value
+help: consider taking a reference instead
+    |
+639 |     guest_mem_arc: &Arc<GuestMemory>,
+    |                    +
+
+error: this argument is passed by value, but not consumed in the function body
+   --> crates/hitz-vmm/src/vm.rs:640:16
+    |
+640 |     stop_flag: Arc<AtomicBool>,
+    |                ^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.94.0/index.html#needless_pass_by_value
+help: consider taking a reference instead
+    |
+640 |     stop_flag: &Arc<AtomicBool>,
+    |                +
+
+error: this function's return value is unnecessarily wrapped by `Result`
+   --> crates/hitz-vmm/src/vm.rs:636:1
+    |
+636 | / fn run_multi_vcpu<H: Hypervisor>(
+637 | |     vcpus: Vec<<H::Partition as Partition>::Vcpu>,
+638 | |     devices: Arc<Mutex<SharedDevices<impl Write + Send + 'static>>>,
+639 | |     guest_mem_arc: Arc<GuestMemory>,
+640 | |     stop_flag: Arc<AtomicBool>,
+641 | | ) -> Result<ExitReason, VmError> {
+    | |________________________________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.94.0/index.html#unnecessary_wraps
+    = note: `-D clippy::unnecessary-wraps` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::unnecessary_wraps)]`
+help: remove `Result` from the return type...
+    |
+641 - ) -> Result<ExitReason, VmError> {
+641 + ) -> run_loop::ExitReason {
+    |
+help: ...and then remove the surrounding `Ok()` from returning expressions
+    |
+744 -     Ok(final_reason)
+744 +     final_reason
+    |
+
+error: used `expect()` on a `Result` value
+   --> crates/hitz-vmm/src/vm.rs:649:9
+    |
+649 | /         std::thread::Builder::new()
+650 | |             .name("cancel-watchdog".into())
+651 | |             .spawn(move || {
+652 | |                 while !stop_clone.load(Ordering::Relaxed) {
+...   |
+656 | |             })
+657 | |             .expect("spawn watchdog thread")
+    | |____________________________________________^
+    |
+    = note: if this value is an `Err`, it will panic
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.94.0/index.html#expect_used
+
+error: used `expect()` on a `Result` value
+   --> crates/hitz-vmm/src/vm.rs:670:13
+    |
+670 | / ...   std::thread::Builder::new()
+671 | | ...       .name(format!("vcpu-{idx}"))
+672 | | ...       .spawn(move || {
+673 | | ...           let result = std::panic::catch_unwind(std::panic::Asser...
+...   |
+707 | | ...       })
+708 | | ...       .expect("spawn vcpu thread")
+    | |______________________________________^
+    |
+    = note: if this value is an `Err`, it will panic
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.94.0/index.html#expect_used
+
+error: this parameter is a mutable reference but is not used mutably
+   --> crates/hitz-vmm/src/vm.rs:508:16
+    |
+508 |     guest_mem: &mut GuestMemory,
+    |                ^----^^^^^^^^^^^
+    |                 |
+    |                 help: consider removing this `mut`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.94.0/index.html#needless_pass_by_ref_mut
+    = note: `-D clippy::needless-pass-by-ref-mut` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::needless_pass_by_ref_mut)]`
+
+error: could not compile `hitz-vmm` (lib) due to 27 previous errors
