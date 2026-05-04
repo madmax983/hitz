@@ -1340,8 +1340,8 @@ fn phase5_boot_and_run_hello() {
     use std::io::Write;
     use std::sync::{Arc, Mutex};
 
-    use hitz_api::VmConfig;
     use hitz_vmm::ExitReason;
+    use hitz_vmm::config::VmConfig;
 
     // x86-64 machine code that writes "Hello" to COM1 (0x3F8) then halts.
     // Same code as phase2_serial_output_from_elf.
@@ -1374,11 +1374,10 @@ fn phase5_boot_and_run_hello() {
         disk_path: None,
         ram_mib: 128,
         cpus: 1,
-        cmdline: Some("console=ttyS0\0".into()),
+        cmdline: "console=ttyS0\0".to_string(),
         net: None,
-        ports: vec![],
-        guest_cid: hitz_api::DEFAULT_GUEST_CID,
-        guest_agent: hitz_api::GuestAgentMode::Auto,
+        guest_cid: 3,
+        guest_agent: hitz_vmm::config::GuestAgentMode::Auto,
     };
 
     let hv = WhpHypervisor::new().expect("WHP not available");
@@ -1444,8 +1443,8 @@ fn phase8_smp_2vcpu_hello() {
     use std::sync::atomic::AtomicBool;
     use std::sync::{Arc, Mutex};
 
-    use hitz_api::VmConfig;
     use hitz_vmm::ExitReason;
+    use hitz_vmm::config::VmConfig;
 
     // x86-64 machine code: writes "Hello" to COM1 (0x3F8) then halts.
     let code: &[u8] = &[
@@ -1477,11 +1476,10 @@ fn phase8_smp_2vcpu_hello() {
         disk_path: None,
         ram_mib: 128,
         cpus: 2,
-        cmdline: Some("console=ttyS0\0".into()),
+        cmdline: "console=ttyS0\0".to_string(),
         net: None,
-        ports: vec![],
-        guest_cid: hitz_api::DEFAULT_GUEST_CID,
-        guest_agent: hitz_api::GuestAgentMode::Auto,
+        guest_cid: 3,
+        guest_agent: hitz_vmm::config::GuestAgentMode::Auto,
     };
 
     let hv = WhpHypervisor::new().expect("WHP not available");
@@ -1542,17 +1540,16 @@ fn phase8_smp_linux_boot() {
         .ok()
         .map(std::path::PathBuf::from);
 
-    let config = hitz_api::VmConfig {
+    let config = hitz_vmm::config::VmConfig {
         kernel_path,
         initramfs_path,
         disk_path: None,
         ram_mib: 256,
         cpus: 2,
-        cmdline: Some("console=ttyS0 earlyprintk=serial nokaslr\0".into()),
+        cmdline: "console=ttyS0 earlyprintk=serial nokaslr\0".to_string(),
         net: None,
-        ports: vec![],
-        guest_cid: hitz_api::DEFAULT_GUEST_CID,
-        guest_agent: hitz_api::GuestAgentMode::Auto,
+        guest_cid: 3,
+        guest_agent: hitz_vmm::config::GuestAgentMode::Auto,
     };
 
     let hv = WhpHypervisor::new().expect("WHP not available");
@@ -1597,8 +1594,8 @@ fn phase9_cancel_via_stop_flag() {
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::{Arc, Mutex};
 
-    use hitz_api::VmConfig;
     use hitz_vmm::ExitReason;
+    use hitz_vmm::config::VmConfig;
 
     // x86-64: write "Hello" to COM1 (0x3F8) then HLT — same code as Phase 5.
     let code: &[u8] = &[
@@ -1629,11 +1626,10 @@ fn phase9_cancel_via_stop_flag() {
         disk_path: None,
         ram_mib: 128,
         cpus: 1,
-        cmdline: Some("console=ttyS0\0".into()),
+        cmdline: "console=ttyS0\0".to_string(),
         net: None,
-        ports: vec![],
-        guest_cid: hitz_api::DEFAULT_GUEST_CID,
-        guest_agent: hitz_api::GuestAgentMode::Auto,
+        guest_cid: 3,
+        guest_agent: hitz_vmm::config::GuestAgentMode::Auto,
     };
 
     let hv = WhpHypervisor::new().expect("WHP not available");
@@ -1687,8 +1683,8 @@ fn phase9_multi_vcpu_cancel() {
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::{Arc, Mutex};
 
-    use hitz_api::VmConfig;
     use hitz_vmm::ExitReason;
+    use hitz_vmm::config::VmConfig;
 
     let code: &[u8] = &[
         0xBA, 0xF8, 0x03, 0x00, 0x00, // mov edx, 0x3F8
@@ -1712,11 +1708,10 @@ fn phase9_multi_vcpu_cancel() {
         disk_path: None,
         ram_mib: 128,
         cpus: 2,
-        cmdline: Some("console=ttyS0\0".into()),
+        cmdline: "console=ttyS0\0".to_string(),
         net: None,
-        ports: vec![],
-        guest_cid: hitz_api::DEFAULT_GUEST_CID,
-        guest_agent: hitz_api::GuestAgentMode::Auto,
+        guest_cid: 3,
+        guest_agent: hitz_vmm::config::GuestAgentMode::Auto,
     };
 
     let hv = WhpHypervisor::new().expect("WHP not available");
@@ -1786,8 +1781,8 @@ fn phase10_port_forward_tcp() {
     use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, Ordering};
 
-    use hitz_api::{DEFAULT_GUEST_IP, DEFAULT_HOST_IP, NetConfig, PortForward, VmConfig};
     use hitz_vmm::ExitReason;
+    use hitz_vmm::config::{NetConfig, VmConfig};
 
     let hv = WhpHypervisor::new().expect("WHP not available");
     let stop_flag = Arc::new(AtomicBool::new(false));
@@ -1812,16 +1807,12 @@ fn phase10_port_forward_tcp() {
         cmdline: Some("console=ttyS0 init=/init\0".into()),
         net: Some(NetConfig {
             mac: None,
-            host_ip: DEFAULT_HOST_IP.into(),
-            guest_ip: DEFAULT_GUEST_IP.into(),
+            host_ip: "10.0.0.1/24".to_string(),
+            guest_ip: "10.0.0.2/24".to_string(),
             adapter_name: None,
         }),
-        ports: vec![PortForward {
-            host_port: 19999,
-            guest_port: 9999,
-        }],
-        guest_cid: hitz_api::DEFAULT_GUEST_CID,
-        guest_agent: hitz_api::GuestAgentMode::Auto,
+        guest_cid: 3,
+        guest_agent: hitz_vmm::config::GuestAgentMode::Auto,
     };
 
     let writer = SharedWriter(Arc::new(std::sync::Mutex::new(Vec::new())));

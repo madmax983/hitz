@@ -3,6 +3,7 @@
 use hitz_api::GuestAgentMode;
 use hitz_boot::CpioBuilder;
 
+
 /// The built-in agent binary, embedded at compile time.
 ///
 /// Empty slice when cross-compilation is unavailable (the build script writes
@@ -20,7 +21,7 @@ pub fn build_agent_overlay(agent_bytes: &[u8]) -> Vec<u8> {
     // ⚡ Bolt Optimization: Pre-allocate capacity for the CPIO archive.
     // The size is roughly the size of the agent binary + init script + headers.
     let capacity = agent_bytes.len() + INIT_SCRIPT.len() + 1024;
-    CpioBuilder::with_capacity(capacity)
+    hitz_boot::CpioBuilder::with_capacity(capacity)
         .add_file("sbin/hitz-agent", agent_bytes, 0o755)
         .add_file("etc/init.d/S99hitz-agent", INIT_SCRIPT, 0o755)
         .finish()

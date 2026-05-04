@@ -11,7 +11,7 @@ use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use hitz_api::VmConfig;
+use crate::config::VmConfig;
 use hitz_boot::{
     BOOT_PARAMS_GPA, CMDLINE_GPA, RSDP_GPA, build_boot_params, build_madt, build_page_tables,
     build_rsdp, build_xsdt, load_elf, load_initramfs, set_acpi_rsdp, set_initramfs_params,
@@ -178,7 +178,7 @@ pub struct VmRunResult {
 ///
 /// # The Hero's Journey
 /// ```rust
-/// # use hitz_api::VmConfig;
+/// # use crate::config::VmConfig;
 /// # use hitz_vmm::validate_config;
 /// # use std::path::PathBuf;
 /// # use std::fs::File;
@@ -194,11 +194,10 @@ pub struct VmRunResult {
 ///     disk_path: None,
 ///     ram_mib: 256,
 ///     cpus: 1,
-///     cmdline: None,
+///     cmdline: "console=ttyS0".to_string(),
 ///     net: None,
-///     ports: vec![],
 ///     guest_cid: 3,
-///     guest_agent: hitz_api::GuestAgentMode::Disabled,
+///     guest_agent: crate::config::GuestAgentMode::Disabled,
 /// };
 ///
 /// // Verify the configuration is sound before booting!
@@ -302,7 +301,7 @@ fn cancel_all_vcpus<V: Vcpu>(handles: &[V::CancelHandle]) {
 ///
 /// # The Hero's Journey
 /// ```rust
-/// # use hitz_api::VmConfig;
+/// # use crate::config::VmConfig;
 /// # use hitz_vmm::{boot_and_run, BootExtras};
 /// # use hitz_hal::{Hypervisor, Partition, PartitionConfig, Vcpu, VcpuExit, HalError, Gpa, VcpuId};
 /// # use std::sync::{Arc, atomic::AtomicBool};
@@ -351,11 +350,10 @@ fn cancel_all_vcpus<V: Vcpu>(handles: &[V::CancelHandle]) {
 ///     disk_path: None,
 ///     ram_mib: 256,
 ///     cpus: 1,
-///     cmdline: None,
+///     cmdline: "console=ttyS0".to_string(),
 ///     net: None,
-///     ports: vec![],
 ///     guest_cid: 3,
-///     guest_agent: hitz_api::GuestAgentMode::Disabled,
+///     guest_agent: crate::config::GuestAgentMode::Disabled,
 /// };
 ///
 /// let hypervisor = DummyHypervisor;
@@ -433,14 +431,13 @@ pub fn boot_and_run<H: Hypervisor, W: Write + Send + 'static>(
     let exit_reason = if vcpus.len() == 1 {
         // ⚡ Bolt Optimization: Eliminated `.to_string()` allocation on error path.
         let single_vcpu = vcpus.pop().ok_or_else(|| {
-            std::io::Error::new(
-                std::io::ErrorKind::Other,
+            std::io::Error::other(
                 "vcpus array is unexpectedly empty when it should have 1 element",
             )
         })?;
         run_single_vcpu::<H>(single_vcpu, devices, guest_mem_arc, stop_flag)?
     } else {
-        run_multi_vcpu::<H>(vcpus, devices, guest_mem_arc, stop_flag)?
+        run_multi_vcpu::<H>(vcpus, &devices, &guest_mem_arc, &stop_flag)
     };
 
     drop(net_io_handle);
@@ -635,10 +632,10 @@ fn run_single_vcpu<H: Hypervisor>(
 
 fn run_multi_vcpu<H: Hypervisor>(
     vcpus: Vec<<H::Partition as Partition>::Vcpu>,
-    devices: Arc<Mutex<SharedDevices<impl Write + Send + 'static>>>,
-    guest_mem_arc: Arc<GuestMemory>,
-    stop_flag: Arc<AtomicBool>,
-) -> Result<ExitReason, VmError> {
+    devices: &Arc<Mutex<SharedDevices<impl Write + Send + 'static>>>,
+    guest_mem_arc: &Arc<GuestMemory>,
+    stop_flag: &Arc<AtomicBool>,
+) -> ExitReason {
     let shared_handles: Arc<[_]> = vcpus.iter().map(Vcpu::cancel_handle).collect();
     let (exit_tx, exit_rx) = mpsc::channel::<Result<ExitReason, hitz_hal::HalError>>();
     let num_vcpus = vcpus.len();
@@ -741,7 +738,7 @@ fn run_multi_vcpu<H: Hypervisor>(
         let _ = handle.join();
     }
 
-    Ok(final_reason)
+    final_reason
 }
 
 #[cfg(test)]
@@ -756,11 +753,10 @@ mod tests {
             disk_path: None,
             ram_mib: 128,
             cpus: 1,
-            cmdline: None,
+            cmdline: "console=ttyS0".to_string(),
             net: None,
-            ports: vec![],
-            guest_cid: hitz_api::DEFAULT_GUEST_CID,
-            guest_agent: hitz_api::GuestAgentMode::Auto,
+            guest_cid: 3,
+            guest_agent: crate::config::GuestAgentMode::Auto,
         }
     }
 

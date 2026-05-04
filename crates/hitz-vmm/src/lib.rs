@@ -17,7 +17,7 @@
 //! operates under the hood:
 //!
 //! ```no_run
-//! use hitz_api::VmConfig;
+//! use crate::config::VmConfig;
 //! use hitz_vmm::{boot_and_run, VmRunResult};
 //! use std::sync::atomic::{AtomicBool, Ordering};
 //! use std::sync::Arc;
@@ -29,9 +29,8 @@
 //!     kernel_path: std::path::PathBuf::from("vmlinux"),
 //!     initramfs_path: None,
 //!     disk_path: None,
-//!     cmdline: None,
+//!     cmdline: "console=ttyS0".to_string(),
 //!     net: None,
-//!     ports: vec![],
 //!     guest_cid: 3,
 //!     guest_agent: Default::default(),
 //! };
@@ -73,6 +72,8 @@ pub(crate) mod memory;
 pub(crate) mod mmio_decode;
 mod run_loop;
 pub(crate) mod serial_buf;
+/// Configuration module
+pub mod config;
 pub(crate) mod vm;
 pub(crate) mod vsock_io;
 
@@ -82,4 +83,5 @@ pub use memory::GuestMemory;
 pub use run_loop::{ExitReason, SharedDevices, run_vcpu_loop};
 pub use serial_buf::{SerialBuf, SerialReader};
 pub use vm::{BootExtras, VmError, VmRunResult, boot_and_run, validate_config};
+pub use config::{GuestAgentMode, NetConfig, VmConfig};
 pub use vsock_io::VsockIoHandle;

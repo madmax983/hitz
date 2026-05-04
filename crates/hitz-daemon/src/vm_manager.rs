@@ -278,7 +278,6 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
             return Err(DaemonError::Internal("Invalid VM ID".to_string()));
         }
 
-        hitz_vmm::validate_config(config)?;
 
         let info = {
             let mut vms = self
@@ -377,7 +376,36 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
         self.store.save_state(id, VmState::Running)?;
 
         // Inject guest agent overlay into initramfs if agent is enabled.
-        let boot_config = inject_guest_agent(config, id);
+        // Inject guest agent overlay into initramfs if agent is enabled.
+        let config_with_agent = inject_guest_agent(config.clone(), id);
+
+        let boot_net = config_with_agent.net.as_ref().map(|n| hitz_vmm::NetConfig {
+            mac: n.mac.clone(),
+            host_ip: n.host_ip.clone(),
+            guest_ip: n.guest_ip.clone(),
+            adapter_name: n.adapter_name.clone(),
+        });
+
+        let boot_agent = match &config_with_agent.guest_agent {
+            hitz_api::GuestAgentMode::Auto => hitz_vmm::GuestAgentMode::Auto,
+            hitz_api::GuestAgentMode::Custom(p) => hitz_vmm::GuestAgentMode::Custom(p.clone()),
+            hitz_api::GuestAgentMode::Disabled => hitz_vmm::GuestAgentMode::Disabled,
+        };
+
+        let boot_config = hitz_vmm::VmConfig {
+            kernel_path: config_with_agent.kernel_path.clone(),
+            initramfs_path: config_with_agent.initramfs_path.clone(),
+            disk_path: config_with_agent.disk_path.clone(),
+            ram_mib: config_with_agent.ram_mib,
+            cpus: config_with_agent.cpus,
+            cmdline: config_with_agent.effective_cmdline().to_string(),
+            net: boot_net,
+            guest_cid: config_with_agent.guest_cid,
+            guest_agent: boot_agent,
+        };
+
+        hitz_vmm::validate_config(&boot_config)?;
+
 
         // Record guest RAM size as a one-shot gauge.
         {
@@ -407,7 +435,7 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
         // On-demand pull is a future enhancement; only push-to-OTel is wired here.
         let extras = if matches!(
             boot_config.guest_agent,
-            hitz_api::GuestAgentMode::Auto | hitz_api::GuestAgentMode::Custom(_)
+            hitz_vmm::GuestAgentMode::Auto | hitz_vmm::GuestAgentMode::Custom(_)
         ) {
             let (handle, rx_receiver, tx_sender) = hitz_vmm::VsockIoHandle::new_pair();
             // Spawn the async metrics task with the host-facing channel ends.
@@ -442,7 +470,7 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
             let _boot_enter = boot_span.enter();
 
             // Start port forwarders if networking is configured and rules exist.
-            let _port_fwd = start_port_forwarding(&boot_config).await;
+            let _port_fwd = start_port_forwarding(&config).await;
 
             let result = tokio::task::spawn_blocking(move || {
                 hitz_vmm::boot_and_run(&*hv, &boot_config, serial_buf, stop_flag, extras)
