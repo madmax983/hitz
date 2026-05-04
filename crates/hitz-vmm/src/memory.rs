@@ -211,6 +211,11 @@ impl GuestMemory {
     fn find_region(&self, gpa: Gpa, len: usize) -> Result<(*mut u8, usize), MemError> {
         let addr = gpa.as_u64();
 
+        // Prevent overflow of addr + len
+        let _ = addr
+            .checked_add(len as u64)
+            .ok_or(MemError::OutOfBounds { gpa: addr, len })?;
+
         // Binary search for the region whose start is <= gpa.
         let idx = self
             .regions
@@ -712,5 +717,21 @@ mod tests {
         let target_gpa = Gpa::new(u64::MAX - 4000);
         let res = mem.write_zeroes(target_gpa, 2048);
         assert!(res.is_ok());
+    }
+}
+
+#[cfg(test)]
+mod havoc_tests {
+    use super::*;
+
+    #[test]
+    fn havoc_find_region_overflow() {
+        let mut mem = GuestMemory::new();
+        // Add a region at GPA 0x1000 of size 0x1000
+        mem.add_region(Gpa::new(0x1000), 0x1000).unwrap();
+
+        // Let's trigger gpa + len overflow
+        let result = mem.find_region(Gpa::new(0x1000), usize::MAX);
+        assert!(matches!(result, Err(MemError::OutOfBounds { .. })));
     }
 }
