@@ -23,6 +23,7 @@ diff = []
 prometheus = []
 classifier = ["diff"]
 carbon = []
+terraform = []
 
 sentinel = []
 efficiency = []
