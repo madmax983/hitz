@@ -744,6 +744,24 @@ mod tests {
         // It should process exactly 16 descriptors (the queue size) before aborting
         assert_eq!(count, 16);
     }
+
+    #[test]
+    fn should_clamp_virtqueue_size_to_max_when_zero() {
+        let queue = VirtQueue::new(0);
+        assert_eq!(
+            queue.size, MAX_QUEUE_SIZE,
+            "VirtQueue initialized with size 0 must be clamped to MAX_QUEUE_SIZE to prevent modulo-by-zero panics in push_used"
+        );
+    }
+
+    #[test]
+    fn should_clamp_virtqueue_size_to_max_when_exceeding_limit() {
+        let queue = VirtQueue::new(MAX_QUEUE_SIZE + 1);
+        assert_eq!(
+            queue.size, MAX_QUEUE_SIZE,
+            "VirtQueue initialized with size > MAX_QUEUE_SIZE must be clamped"
+        );
+    }
 }
 
 #[cfg(test)]
