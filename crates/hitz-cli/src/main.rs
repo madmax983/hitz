@@ -1053,7 +1053,7 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
 
     let cpu_bar = format!(
         "{} {:.1}%",
-        make_bar(snap.cpu.total_pct, 15),
+        make_bar(snap.cpu.total_pct as f64, 15),
         snap.cpu.total_pct
     );
     let mem_bar = format!("{} {}", make_bar(mem_pct, 15), mem_str);
@@ -1062,7 +1062,7 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
         Cell::new("CPU Total")
             .add_attribute(Attribute::Bold)
             .fg(Color::Cyan),
-        Cell::new(cpu_bar).fg(color_for_pct(snap.cpu.total_pct)),
+        Cell::new(cpu_bar).fg(color_for_pct(snap.cpu.total_pct as f64)),
         Cell::new("Cores")
             .add_attribute(Attribute::Bold)
             .fg(Color::Cyan),
@@ -1178,7 +1178,7 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
         for proc in &snap.processes {
             let rss_mb = proc.rss_bytes / (1024 * 1024);
             let cpu_cell =
-                Cell::new(format!("{:.1}%", proc.cpu_pct)).fg(color_for_pct(proc.cpu_pct));
+                Cell::new(format!("{:.1}%", proc.cpu_pct)).fg(color_for_pct(proc.cpu_pct as f64));
             let _ = proc_table.add_row([
                 Cell::new(proc.pid.to_string()),
                 Cell::new(proc.name.clone()),
@@ -1430,10 +1430,10 @@ async fn handle_vm_status(args: &VmIdArgs) -> Result<()> {
             let _ = table.load_preset(UTF8_FULL_CONDENSED);
 
             let state_cell = match info.state {
-                hitz_api::VmState::Running => Cell::new("Running").fg(Color::Green),
-                hitz_api::VmState::Stopped => Cell::new("Stopped").fg(Color::Yellow),
-                hitz_api::VmState::Failed => Cell::new("Failed").fg(Color::Red),
-                hitz_api::VmState::Created => Cell::new("Created").fg(Color::Cyan),
+                hitz_api::VmState::Running => Cell::new("▶ Running").fg(Color::Green),
+                hitz_api::VmState::Stopped => Cell::new("⏸ Stopped").fg(Color::Yellow),
+                hitz_api::VmState::Failed => Cell::new("❌ Failed").fg(Color::Red),
+                hitz_api::VmState::Created => Cell::new("✨ Created").fg(Color::Cyan),
             };
 
             let _ = table.add_row([
@@ -1567,10 +1567,10 @@ async fn handle_vm_list(args: &VmListArgs) -> Result<()> {
 
             for info in vms {
                 let state_cell = match info.state {
-                    hitz_api::VmState::Running => Cell::new("Running").fg(Color::Green),
-                    hitz_api::VmState::Stopped => Cell::new("Stopped").fg(Color::Yellow),
-                    hitz_api::VmState::Failed => Cell::new("Failed").fg(Color::Red),
-                    hitz_api::VmState::Created => Cell::new("Created").fg(Color::Cyan),
+                    hitz_api::VmState::Running => Cell::new("▶ Running").fg(Color::Green),
+                    hitz_api::VmState::Stopped => Cell::new("⏸ Stopped").fg(Color::Yellow),
+                    hitz_api::VmState::Failed => Cell::new("❌ Failed").fg(Color::Red),
+                    hitz_api::VmState::Created => Cell::new("✨ Created").fg(Color::Cyan),
                 };
                 // ⚡ Bolt Optimization: Replace `.unwrap_or_else(|| "-".to_string())` with `.as_deref().unwrap_or("-")`
                 // This eliminates an unnecessary `String` allocation on the hot path of formatting CLI output.
@@ -1794,7 +1794,7 @@ fn draw_vm_top_ui(
     f.render_widget(header, main_chunks[0]);
 
     if let Some(ref err) = last_err {
-        let err_p = Paragraph::new(err.as_str())
+        let err_p = Paragraph::new(err.to_string())
             .style(Style::default().fg(Color::Red))
             .block(Block::default().borders(Borders::ALL).title("Error"));
         f.render_widget(err_p, main_chunks[1]);
