@@ -255,6 +255,17 @@ impl VmConfig {
     pub fn effective_cmdline(&self) -> &str {
         self.cmdline.as_deref().unwrap_or(DEFAULT_CMDLINE)
     }
+
+    /// Validates the VM configuration to ensure no conflicting or out-of-bounds parameters.
+    pub const fn validate(&self) -> Result<(), &'static str> {
+        if self.ram_mib < 128 {
+            return Err("RAM must be at least 128 MiB");
+        }
+        if self.cpus == 0 {
+            return Err("VM must have at least 1 CPU");
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -304,5 +315,56 @@ mod tests {
     #[test]
     fn test_guest_agent_mode_default() {
         assert_eq!(GuestAgentMode::default(), GuestAgentMode::Auto);
+    }
+
+    #[test]
+    fn should_validate_valid_config() {
+        let config = VmConfig {
+            kernel_path: PathBuf::from("vmlinux"),
+            initramfs_path: None,
+            disk_path: None,
+            ram_mib: 256,
+            cpus: 1,
+            cmdline: None,
+            net: None,
+            ports: vec![],
+            guest_cid: 3,
+            guest_agent: GuestAgentMode::Auto,
+        };
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn should_return_error_when_ram_too_small() {
+        let config = VmConfig {
+            kernel_path: PathBuf::from("vmlinux"),
+            initramfs_path: None,
+            disk_path: None,
+            ram_mib: 64, // Invalid
+            cpus: 1,
+            cmdline: None,
+            net: None,
+            ports: vec![],
+            guest_cid: 3,
+            guest_agent: GuestAgentMode::Auto,
+        };
+        assert_eq!(config.validate(), Err("RAM must be at least 128 MiB"));
+    }
+
+    #[test]
+    fn should_return_error_when_cpus_zero() {
+        let config = VmConfig {
+            kernel_path: PathBuf::from("vmlinux"),
+            initramfs_path: None,
+            disk_path: None,
+            ram_mib: 256,
+            cpus: 0, // Invalid
+            cmdline: None,
+            net: None,
+            ports: vec![],
+            guest_cid: 3,
+            guest_agent: GuestAgentMode::Auto,
+        };
+        assert_eq!(config.validate(), Err("VM must have at least 1 CPU"));
     }
 }

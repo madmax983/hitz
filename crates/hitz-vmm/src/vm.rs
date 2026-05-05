@@ -235,6 +235,13 @@ pub fn validate_config(config: &VmConfig) -> Result<(), VmError> {
     if let Some(ref path) = config.disk_path {
         let _disk_path = SafePath::new(path)?;
     }
+
+    if let Err(e) = config.validate() {
+        return Err(VmError::Config(format!(
+            "Invalid config constraints: {}",
+            e
+        )));
+    }
     if !config.kernel_path.exists() {
         return Err(VmError::Config(format!(
             "kernel not found: {}",
