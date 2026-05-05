@@ -21,6 +21,19 @@ use crate::{MetricsDiff, MetricsSnapshot};
 use serde::{Deserialize, Serialize};
 
 /// The categorized type of workload running on the VM.
+///
+/// # Abstract
+/// Represents the distinct behavioral modes a micro-VM can exhibit, derived from
+/// its current telemetry and its relative rate of change.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::WorkloadClass;
+///
+/// let w = WorkloadClass::ComputeBound;
+/// assert_eq!(w, WorkloadClass::ComputeBound);
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum WorkloadClass {
     /// The VM is heavily utilizing the CPU.
@@ -34,8 +47,55 @@ pub enum WorkloadClass {
 }
 
 /// Trait for objects that can classify their workload.
+///
+/// # Abstract
+/// This trait establishes the ability for a metrics object to categorize the
+/// ongoing behavior of a VM into a distinct `WorkloadClass`.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::{WorkloadClassifier, MetricsSnapshot, MetricsDiff, CpuMetrics, MemoryMetrics};
+///
+/// // A mostly idle VM
+/// let snap = MetricsSnapshot {
+///     timestamp_ms: 1000,
+///     cpu: CpuMetrics { total_pct: 1.0, per_core: vec![1.0], load_avg: [0.1, 0.1, 0.1] },
+///     memory: MemoryMetrics { total_bytes: 1024, used_bytes: 10, free_bytes: 1000, buffers_bytes: 0, cached_bytes: 0, swap_total: 0, swap_used: 0 },
+///     disks: vec![],
+///     networks: vec![],
+///     processes: vec![],
+/// };
+/// let diff = MetricsDiff { elapsed_secs: 1.0, disks: vec![], networks: vec![] };
+///
+/// let class = snap.classify_workload(&diff);
+/// // It should be classified as Idle
+/// ```
 pub trait WorkloadClassifier {
     /// Classifies the workload based on the current state and a rate-of-change diff.
+    ///
+    /// # Abstract
+    /// Using absolute thresholds from the snapshot and throughput rates from the
+    /// diff, this determines the primary bottleneck or behavior.
+    ///
+    /// ## Examples
+    ///
+    /// ```rust
+    /// use hitz_api::{WorkloadClass, WorkloadClassifier, MetricsSnapshot, MetricsDiff, CpuMetrics, MemoryMetrics};
+    ///
+    /// let snap = MetricsSnapshot {
+    ///     timestamp_ms: 1000,
+    ///     cpu: CpuMetrics { total_pct: 99.0, per_core: vec![99.0], load_avg: [0.1, 0.1, 0.1] },
+    ///     memory: MemoryMetrics { total_bytes: 1024, used_bytes: 10, free_bytes: 1000, buffers_bytes: 0, cached_bytes: 0, swap_total: 0, swap_used: 0 },
+    ///     disks: vec![],
+    ///     networks: vec![],
+    ///     processes: vec![],
+    /// };
+    /// let diff = MetricsDiff { elapsed_secs: 1.0, disks: vec![], networks: vec![] };
+    ///
+    /// let class = snap.classify_workload(&diff);
+    /// assert_eq!(class, WorkloadClass::ComputeBound);
+    /// ```
     fn classify_workload(&self, diff: &MetricsDiff) -> WorkloadClass;
 }
 
