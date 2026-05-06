@@ -215,6 +215,12 @@ pub fn validate_config(config: &VmConfig) -> Result<(), VmError> {
 
     impl<'a> SafePath<'a> {
         fn new(path: &'a std::path::Path) -> Result<Self, VmError> {
+            if path.is_absolute() {
+                return Err(VmError::Config(format!(
+                    "absolute paths are not allowed for security reasons: {}",
+                    path.display()
+                )));
+            }
             if path
                 .components()
                 .any(|c| c == std::path::Component::ParentDir)
@@ -234,6 +240,15 @@ pub fn validate_config(config: &VmConfig) -> Result<(), VmError> {
     }
     if let Some(ref path) = config.disk_path {
         let _disk_path = SafePath::new(path)?;
+    }
+    if let hitz_api::GuestAgentMode::Custom(ref path) = config.guest_agent {
+        let _agent_path = SafePath::new(path)?;
+        if !path.exists() {
+            return Err(VmError::Config(format!(
+                "guest agent not found: {}",
+                path.display()
+            )));
+        }
     }
     if !config.kernel_path.exists() {
         return Err(VmError::Config(format!(
@@ -393,7 +408,7 @@ pub fn boot_and_run<H: Hypervisor, W: Write + Send + 'static>(
 
     // ── 2-7. Load Guest Memory ──
     let mut guest_mem = GuestMemory::with_capacity(4); // Pre-allocate typical region count
-    let pml4_gpa = setup_guest_memory(&mut guest_mem, config, ram_bytes, gib_count)?;
+    let (pml4_gpa, load_result) = setup_guest_memory(&mut guest_mem, config, ram_bytes, gib_count)?;
 
     // ── 8. Write command line ──
     build_kernel_cmdline(&mut guest_mem, config, &extras)?;
@@ -410,7 +425,7 @@ pub fn boot_and_run<H: Hypervisor, W: Write + Send + 'static>(
     guest_mem.map_to_partition(&mut partition, MemFlags::READ_WRITE_EXEC)?;
 
     // ── 11. Create vCPUs ──
-    let entry_point = load_elf(&fs::read(&config.kernel_path)?, &guest_mem)?.entry_point;
+    let entry_point = load_result.entry_point;
     let mut vcpus = Vec::with_capacity(config.cpus as usize);
     for i in 0..config.cpus {
         let mut vcpu = partition.create_vcpu(VcpuId::new(i))?;
@@ -433,14 +448,13 @@ pub fn boot_and_run<H: Hypervisor, W: Write + Send + 'static>(
     let exit_reason = if vcpus.len() == 1 {
         // ⚡ Bolt Optimization: Eliminated `.to_string()` allocation on error path.
         let single_vcpu = vcpus.pop().ok_or_else(|| {
-            std::io::Error::new(
-                std::io::ErrorKind::Other,
+            std::io::Error::other(
                 "vcpus array is unexpectedly empty when it should have 1 element",
             )
         })?;
-        run_single_vcpu::<H>(single_vcpu, devices, guest_mem_arc, stop_flag)?
+        run_single_vcpu::<H>(single_vcpu, &devices, &guest_mem_arc, &stop_flag)?
     } else {
-        run_multi_vcpu::<H>(vcpus, devices, guest_mem_arc, stop_flag)?
+        run_multi_vcpu::<H>(vcpus, &devices, &guest_mem_arc, &stop_flag)
     };
 
     drop(net_io_handle);
@@ -449,12 +463,13 @@ pub fn boot_and_run<H: Hypervisor, W: Write + Send + 'static>(
 
 // --- Helper Functions ---
 
+#[allow(clippy::needless_pass_by_ref_mut)]
 fn setup_guest_memory(
     guest_mem: &mut GuestMemory,
     config: &VmConfig,
     ram_bytes: u64,
     gib_count: u32,
-) -> Result<Gpa, VmError> {
+) -> Result<(Gpa, hitz_boot::KernelLoadResult), VmError> {
     guest_mem.add_region(
         Gpa::new(0),
         usize::try_from(ram_bytes).unwrap_or(usize::MAX),
@@ -501,9 +516,10 @@ fn setup_guest_memory(
         guest_mem.write_slice(Gpa::new(BOOT_PARAMS_GPA), boot_params.as_bytes())?;
     }
 
-    Ok(pml4_gpa)
+    Ok((pml4_gpa, load_result))
 }
 
+#[allow(clippy::needless_pass_by_ref_mut)]
 fn build_kernel_cmdline(
     guest_mem: &mut GuestMemory,
     config: &VmConfig,
@@ -608,14 +624,15 @@ fn setup_devices(
     Ok(net_io_handle)
 }
 
+#[allow(clippy::expect_used)]
 fn run_single_vcpu<H: Hypervisor>(
     mut vcpu: <H::Partition as Partition>::Vcpu,
-    devices: Arc<Mutex<SharedDevices<impl Write + Send + 'static>>>,
-    guest_mem_arc: Arc<GuestMemory>,
-    stop_flag: Arc<AtomicBool>,
+    devices: &Arc<Mutex<SharedDevices<impl Write + Send + 'static>>>,
+    guest_mem_arc: &Arc<GuestMemory>,
+    stop_flag: &Arc<AtomicBool>,
 ) -> Result<ExitReason, VmError> {
     let cancel_handle = vcpu.cancel_handle();
-    let stop_clone = Arc::clone(&stop_flag);
+    let stop_clone = Arc::clone(stop_flag);
     let watchdog = std::thread::Builder::new()
         .name("cancel-watchdog".into())
         .spawn(move || {
@@ -626,25 +643,26 @@ fn run_single_vcpu<H: Hypervisor>(
         })
         .expect("spawn watchdog thread");
 
-    let exit_reason = run_loop::run_vcpu_loop(&mut vcpu, &devices, &*guest_mem_arc, &stop_flag)?;
+    let exit_reason = run_loop::run_vcpu_loop(&mut vcpu, devices, &**guest_mem_arc, stop_flag)?;
 
     stop_flag.store(true, Ordering::Relaxed);
     let _ = watchdog.join();
     Ok(exit_reason)
 }
 
+#[allow(clippy::expect_used)]
 fn run_multi_vcpu<H: Hypervisor>(
     vcpus: Vec<<H::Partition as Partition>::Vcpu>,
-    devices: Arc<Mutex<SharedDevices<impl Write + Send + 'static>>>,
-    guest_mem_arc: Arc<GuestMemory>,
-    stop_flag: Arc<AtomicBool>,
-) -> Result<ExitReason, VmError> {
+    devices: &Arc<Mutex<SharedDevices<impl Write + Send + 'static>>>,
+    guest_mem_arc: &Arc<GuestMemory>,
+    stop_flag: &Arc<AtomicBool>,
+) -> ExitReason {
     let shared_handles: Arc<[_]> = vcpus.iter().map(Vcpu::cancel_handle).collect();
     let (exit_tx, exit_rx) = mpsc::channel::<Result<ExitReason, hitz_hal::HalError>>();
     let num_vcpus = vcpus.len();
 
     let watchdog = {
-        let stop_clone = Arc::clone(&stop_flag);
+        let stop_clone = Arc::clone(stop_flag);
         let handles_clone = Arc::clone(&shared_handles);
         std::thread::Builder::new()
             .name("cancel-watchdog".into())
@@ -661,7 +679,7 @@ fn run_multi_vcpu<H: Hypervisor>(
         .into_iter()
         .enumerate()
         .map(|(idx, mut vcpu)| {
-            let devs = Arc::clone(&devices);
+            let devs = Arc::clone(devices);
             let mem = Arc::clone(&guest_mem_arc);
             let stop = Arc::clone(&stop_flag);
             let cancel_handles = Arc::clone(&shared_handles);
@@ -741,7 +759,7 @@ fn run_multi_vcpu<H: Hypervisor>(
         let _ = handle.join();
     }
 
-    Ok(final_reason)
+    final_reason
 }
 
 #[cfg(test)]
@@ -769,7 +787,7 @@ mod tests {
         let tmp = tempfile::NamedTempFile::new().expect("create temp file");
         let valid_path = tmp.path().to_path_buf();
 
-        let mut config = valid_config(valid_path);
+        let mut config = valid_config(valid_path.clone());
         config.kernel_path = std::path::PathBuf::from("/etc/../shadow");
 
         let err = validate_config(&config).expect_err("should reject path traversal");
@@ -782,6 +800,29 @@ mod tests {
         let err2 =
             validate_config(&config2).expect_err("should reject not found but not traversal");
         assert!(!err2.to_string().contains("path traversal detected"));
+    }
+
+    #[test]
+    fn havoc_validate_config_guest_agent_traversal() {
+        let tmp = tempfile::NamedTempFile::new().expect("create temp file");
+        let valid_path = tmp.path().to_path_buf();
+
+        let mut config = valid_config(valid_path.clone());
+        config.guest_agent =
+            hitz_api::GuestAgentMode::Custom(std::path::PathBuf::from("../../etc/passwd"));
+
+        let err =
+            validate_config(&config).expect_err("should reject path traversal in guest agent");
+        assert!(err.to_string().contains("path traversal detected"));
+
+        // Also test absolute path
+        let mut config_abs = valid_config(valid_path);
+        config_abs.guest_agent =
+            hitz_api::GuestAgentMode::Custom(std::path::PathBuf::from("/etc/passwd"));
+
+        let err_abs =
+            validate_config(&config_abs).expect_err("should reject absolute path in guest agent");
+        assert!(err_abs.to_string().contains("absolute paths are not allowed"));
     }
     #[test]
     fn validate_config_table_driven() {
