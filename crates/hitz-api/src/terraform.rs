@@ -31,8 +31,41 @@ use crate::VmConfig;
 use std::fmt::Write as _;
 
 /// Trait to export structures to Terraform HCL representation.
+///
+/// # Abstract
+/// This trait provides a common interface for converting a struct into its
+/// Terraform HCL representation. This is extremely useful for users who want
+/// to generate Infrastructure as Code (`IaC`) templates from existing
+/// live configurations.
+///
+/// # The Hero's Journey
+///
+/// ```rust
+/// use hitz_api::{VmConfig, ToTerraform, GuestAgentMode};
+/// use std::path::PathBuf;
+///
+/// let config = VmConfig {
+///     kernel_path: PathBuf::from("vmlinux"),
+///     initramfs_path: None,
+///     disk_path: None,
+///     ram_mib: 1024,
+///     cpus: 4,
+///     cmdline: None,
+///     net: None,
+///     ports: vec![],
+///     guest_cid: 4,
+///     guest_agent: GuestAgentMode::Auto,
+/// };
+///
+/// let hcl = config.to_terraform("my_vm");
+/// assert!(hcl.contains("cpus = 4"));
+/// ```
 pub trait ToTerraform {
     /// Returns the Terraform HCL representation as a String.
+    ///
+    /// # Abstract
+    /// Takes a resource name and returns a string formatted as a valid
+    /// Terraform resource block.
     fn to_terraform(&self, resource_name: &str) -> String;
 }
 
