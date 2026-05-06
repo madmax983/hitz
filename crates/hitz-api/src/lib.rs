@@ -493,3 +493,9 @@ pub use rightsizer::{ResizeRecommendation, RightSizer};
 mod terraform;
 #[cfg(feature = "terraform")]
 pub use terraform::ToTerraform;
+
+#[cfg(feature = "auto_tune")]
+/// Auto-tuning module for Virtual Machines.
+mod auto_tune;
+#[cfg(feature = "auto_tune")]
+pub use auto_tune::AutoTuner;
