@@ -493,3 +493,9 @@ pub use rightsizer::{ResizeRecommendation, RightSizer};
 mod terraform;
 #[cfg(feature = "terraform")]
 pub use terraform::ToTerraform;
+
+#[cfg(feature = "sustainability")]
+/// Sustainability Advisor Module.
+pub mod sustainability;
+#[cfg(feature = "sustainability")]
+pub use sustainability::{EcoRecommendation, SustainabilityAdvisor};
