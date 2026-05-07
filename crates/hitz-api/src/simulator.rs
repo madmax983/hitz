@@ -116,7 +116,7 @@ impl Iterator for VmSimulator {
             memory: MemoryMetrics {
                 total_bytes: 1024 * 1024 * 1024,
                 used_bytes: mem_used,
-                free_bytes: 1024 * 1024 * 1024 - mem_used,
+                free_bytes: (1024 * 1024 * 1024_u64).saturating_sub(mem_used),
                 buffers_bytes: 0,
                 cached_bytes: 0,
                 swap_total: 0,

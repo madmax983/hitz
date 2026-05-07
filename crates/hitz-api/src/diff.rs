@@ -227,7 +227,7 @@ impl CalculateDiff for MetricsSnapshot {
             return None;
         }
 
-        let elapsed_secs = (self.timestamp_ms - previous.timestamp_ms) as f64 / 1000.0;
+        let elapsed_secs = (self.timestamp_ms.saturating_sub(previous.timestamp_ms)) as f64 / 1000.0;
 
         // Pre-allocate to avoid dynamic heap reallocations during iteration
         let mut disks = Vec::with_capacity(self.disks.len());

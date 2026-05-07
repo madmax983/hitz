@@ -121,7 +121,7 @@ mod tests {
             memory: MemoryMetrics {
                 total_bytes: total_mem,
                 used_bytes: used_mem,
-                free_bytes: total_mem - used_mem,
+                free_bytes: total_mem.saturating_sub(used_mem),
                 buffers_bytes: 0,
                 cached_bytes: 0,
                 swap_total: 0,
