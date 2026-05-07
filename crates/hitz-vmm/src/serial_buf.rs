@@ -92,7 +92,7 @@ impl SerialBuf {
     /// Panics if `capacity` is 0.
     #[must_use]
     pub fn with_capacity(capacity: usize) -> Self {
-        assert!(capacity > 0, "capacity must be greater than 0");
+        let capacity = capacity.max(1);
         let (notify_tx, notify_rx) = tokio::sync::watch::channel(());
         Self {
             inner: Arc::new(Mutex::new(Inner {
