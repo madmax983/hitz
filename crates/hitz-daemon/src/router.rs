@@ -56,31 +56,44 @@ where
 {
     // ⚡ Bolt Optimization: Avoid cloning the HTTP method.
     // It's cheaper to borrow it or let it remain bound to the request.
+    // ⚡ Bolt Optimization: Avoid allocating the path string per request.
+    // We clone the HTTP method (cheap for standard methods) but use the path as a string slice directly.
     let method = req.method().clone();
-    let path = req.uri().path().to_string();
 
     let span = tracing::info_span!(
         "daemon.request",
         http.method = %method,
-        http.route = %path,
+        http.route = %req.uri().path(),
         http.status_code = tracing::field::Empty,
     );
 
+    // We must execute match before `req` is moved into `route_vm`. We do this synchronously.
+    let is_list = method == Method::GET && req.uri().path() == "/vms";
+    let is_vm_route = req.uri().path().starts_with("/vms/");
+
+    let (vm_id_opt, suffix_opt) = if is_vm_route && !is_list {
+        let mut segments = req.uri().path().splitn(4, '/');
+        let id = segments
+            .nth(2)
+            .filter(|s| !s.is_empty())
+            .map(std::string::ToString::to_string);
+        let suffix = segments.next().map(std::string::ToString::to_string);
+        (id, suffix)
+    } else {
+        (None, None)
+    };
+
     let result = async {
-        match (&method, path.as_str()) {
-            (&Method::GET, "/vms") => handle_list(manager),
-            _ if path.starts_with("/vms/") => {
-                let mut segments = path.splitn(4, '/');
-                // segments: ["", "vms", "{id}", "action"?]
-                match segments.nth(2) {
-                    Some(id) if !id.is_empty() => {
-                        let suffix = segments.next();
-                        route_vm(req, &method, id, suffix, manager).await
-                    }
-                    _ => Ok(error_response(StatusCode::BAD_REQUEST, "missing VM ID")),
-                }
+        if is_list {
+            handle_list(manager)
+        } else if is_vm_route {
+            if let Some(id) = vm_id_opt {
+                route_vm(req, &method, &id, suffix_opt.as_deref(), manager).await
+            } else {
+                Ok(error_response(StatusCode::BAD_REQUEST, "missing VM ID"))
             }
-            _ => Ok(error_response(StatusCode::NOT_FOUND, "not found")),
+        } else {
+            Ok(error_response(StatusCode::NOT_FOUND, "not found"))
         }
     }
     .instrument(span.clone())
