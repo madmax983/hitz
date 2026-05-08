@@ -221,6 +221,7 @@ impl SerialReader {
     pub async fn read_chunk(&mut self) -> Option<Vec<u8>> {
         // ⚡ Bolt Optimization: Eliminated tokio::sync::watch::Receiver cloning inside the read loop.
         loop {
+            let _ = self.notify_rx.borrow_and_update();
             {
                 #[cfg(not(loom))]
                 let Ok(inner) = self.inner.lock() else {
@@ -266,7 +267,9 @@ impl SerialReader {
                 }
             }
             // Park until the writer pushes more data or closes.
-            let _ = self.notify_rx.changed().await;
+            if self.notify_rx.changed().await.is_err() {
+                return None;
+            }
         }
     }
 }

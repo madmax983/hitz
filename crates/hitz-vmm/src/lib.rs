@@ -72,7 +72,7 @@ pub(crate) mod error;
 pub(crate) mod memory;
 pub(crate) mod mmio_decode;
 mod run_loop;
-pub(crate) mod serial_buf;
+pub mod serial_buf;
 pub(crate) mod vm;
 pub(crate) mod vsock_io;
 
