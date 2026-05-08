@@ -1028,10 +1028,11 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
     let mut sys_table = Table::new();
     let _ = sys_table.load_preset(UTF8_BORDERS_ONLY);
 
+    use std::fmt::Write as _;
     let mut cores_str = String::with_capacity(snap.cpu.per_core.len() * 8);
     for (i, p) in snap.cpu.per_core.iter().enumerate() {
         if i > 0 {
-            cores_str.push_str(", ");
+            let _ = write!(cores_str, ", ");
         }
         let _ = write!(cores_str, "{p:.1}%");
     }
@@ -1053,7 +1054,7 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
 
     let cpu_bar = format!(
         "{} {:.1}%",
-        make_bar(snap.cpu.total_pct, 15),
+        make_bar(snap.cpu.total_pct.into(), 15),
         snap.cpu.total_pct
     );
     let mem_bar = format!("{} {}", make_bar(mem_pct, 15), mem_str);
@@ -1062,7 +1063,7 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
         Cell::new("CPU Total")
             .add_attribute(Attribute::Bold)
             .fg(Color::Cyan),
-        Cell::new(cpu_bar).fg(color_for_pct(snap.cpu.total_pct)),
+        Cell::new(cpu_bar).fg(color_for_pct(snap.cpu.total_pct.into())),
         Cell::new("Cores")
             .add_attribute(Attribute::Bold)
             .fg(Color::Cyan),
@@ -1178,7 +1179,7 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
         for proc in &snap.processes {
             let rss_mb = proc.rss_bytes / (1024 * 1024);
             let cpu_cell =
-                Cell::new(format!("{:.1}%", proc.cpu_pct)).fg(color_for_pct(proc.cpu_pct));
+                Cell::new(format!("{:.1}%", proc.cpu_pct)).fg(color_for_pct(proc.cpu_pct.into()));
             let _ = proc_table.add_row([
                 Cell::new(proc.pid.to_string()),
                 Cell::new(proc.name.clone()),
@@ -1502,7 +1503,7 @@ async fn handle_vm_status(args: &VmIdArgs) -> Result<()> {
                 let mut ports_str = String::with_capacity(info.config.ports.len() * 24);
                 for (i, p) in info.config.ports.iter().enumerate() {
                     if i > 0 {
-                        ports_str.push_str(", ");
+                        let _ = write!(ports_str, ", ");
                     }
                     let _ = write!(ports_str, "0.0.0.0:{} -> {}", p.host_port, p.guest_port);
                 }
@@ -1794,7 +1795,7 @@ fn draw_vm_top_ui(
     f.render_widget(header, main_chunks[0]);
 
     if let Some(ref err) = last_err {
-        let err_p = Paragraph::new(err.as_str())
+        let err_p = Paragraph::new(err.to_string())
             .style(Style::default().fg(Color::Red))
             .block(Block::default().borders(Borders::ALL).title("Error"));
         f.render_widget(err_p, main_chunks[1]);
@@ -2149,7 +2150,7 @@ fn handle_vm_timeline(args: &VmTimelineArgs) -> Result<()> {
                 .fold(String::new(), |mut acc, reason| {
                     use std::fmt::Write;
                     if !acc.is_empty() {
-                        let _ = write!(acc, "\n");
+                        let _ = writeln!(acc);
                     }
                     let _ = write!(acc, "+ {reason}");
                     acc
@@ -2161,7 +2162,7 @@ fn handle_vm_timeline(args: &VmTimelineArgs) -> Result<()> {
                 .fold(String::new(), |mut acc, reason| {
                     use std::fmt::Write;
                     if !acc.is_empty() {
-                        let _ = write!(acc, "\n");
+                        let _ = writeln!(acc);
                     }
                     let _ = write!(acc, "- {reason}");
                     acc
