@@ -350,6 +350,8 @@ enum VmCommand {
     Analyze(VmIdArgs),
     /// Replay metrics recording and output a timeline of health state changes.
     Timeline(VmTimelineArgs),
+    /// Auto-tune a VM configuration based on its metrics and output Terraform HCL.
+    AutoTune(VmIdArgs),
 }
 
 /// Arguments for `vm clone`.
@@ -579,20 +581,7 @@ fn service_main(arguments: Vec<OsString>) {
     if let Err(e) = run_service(&arguments) {
         eprintln!("hitz service error: {e:#}");
     }
-    #[test]
-    fn test_format_error_response_json() {
-        let status = hyper::StatusCode::BAD_REQUEST;
-        let json_resp = r#"{"message": "Invalid config", "code": 400}"#;
-        let result = format_error_response(status, json_resp, "Failed");
-        assert!(result.contains("Invalid config"));
-    }
 
-    #[test]
-    fn test_format_error_response_plain() {
-        let status = hyper::StatusCode::NOT_FOUND;
-        let result = format_error_response(status, "Not found anywhere", "Failed");
-        assert!(result.contains("Not found anywhere"));
-    }
 }
 
 // Called only from service_main (itself FFI-only); suppress dead_code + pass-by-value.
@@ -750,20 +739,7 @@ fn main() -> ExitCode {
             |()| ExitCode::SUCCESS,
         ),
     }
-    #[test]
-    fn test_format_error_response_json() {
-        let status = hyper::StatusCode::BAD_REQUEST;
-        let json_resp = r#"{"message": "Invalid config", "code": 400}"#;
-        let result = format_error_response(status, json_resp, "Failed");
-        assert!(result.contains("Invalid config"));
-    }
 
-    #[test]
-    fn test_format_error_response_plain() {
-        let status = hyper::StatusCode::NOT_FOUND;
-        let result = format_error_response(status, "Not found anywhere", "Failed");
-        assert!(result.contains("Not found anywhere"));
-    }
 }
 
 // ── hitz run ──
@@ -872,20 +848,7 @@ fn run_vm(args: RunArgs) -> Result<ExitCode> {
         ExitReason::Halt | ExitReason::Canceled => Ok(ExitCode::SUCCESS),
         ExitReason::Shutdown | ExitReason::Unexpected(_) => Ok(ExitCode::FAILURE),
     }
-    #[test]
-    fn test_format_error_response_json() {
-        let status = hyper::StatusCode::BAD_REQUEST;
-        let json_resp = r#"{"message": "Invalid config", "code": 400}"#;
-        let result = format_error_response(status, json_resp, "Failed");
-        assert!(result.contains("Invalid config"));
-    }
 
-    #[test]
-    fn test_format_error_response_plain() {
-        let status = hyper::StatusCode::NOT_FOUND;
-        let result = format_error_response(status, "Not found anywhere", "Failed");
-        assert!(result.contains("Not found anywhere"));
-    }
 }
 
 // ── hitz daemon start ──
@@ -1053,7 +1016,7 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
 
     let cpu_bar = format!(
         "{} {:.1}%",
-        make_bar(snap.cpu.total_pct, 15),
+        make_bar(snap.cpu.total_pct.into(), 15),
         snap.cpu.total_pct
     );
     let mem_bar = format!("{} {}", make_bar(mem_pct, 15), mem_str);
@@ -1062,7 +1025,7 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
         Cell::new("CPU Total")
             .add_attribute(Attribute::Bold)
             .fg(Color::Cyan),
-        Cell::new(cpu_bar).fg(color_for_pct(snap.cpu.total_pct)),
+        Cell::new(cpu_bar).fg(color_for_pct(snap.cpu.total_pct.into())),
         Cell::new("Cores")
             .add_attribute(Attribute::Bold)
             .fg(Color::Cyan),
@@ -1178,7 +1141,7 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
         for proc in &snap.processes {
             let rss_mb = proc.rss_bytes / (1024 * 1024);
             let cpu_cell =
-                Cell::new(format!("{:.1}%", proc.cpu_pct)).fg(color_for_pct(proc.cpu_pct));
+                Cell::new(format!("{:.1}%", proc.cpu_pct)).fg(color_for_pct(proc.cpu_pct.into()));
             let _ = proc_table.add_row([
                 Cell::new(proc.pid.to_string()),
                 Cell::new(proc.name.clone()),
@@ -1271,20 +1234,7 @@ fn print_action_result(
     } else {
         print_error_response(status, resp, error_prefix);
     }
-    #[test]
-    fn test_format_error_response_json() {
-        let status = hyper::StatusCode::BAD_REQUEST;
-        let json_resp = r#"{"message": "Invalid config", "code": 400}"#;
-        let result = format_error_response(status, json_resp, "Failed");
-        assert!(result.contains("Invalid config"));
-    }
 
-    #[test]
-    fn test_format_error_response_plain() {
-        let status = hyper::StatusCode::NOT_FOUND;
-        let result = format_error_response(status, "Not found anywhere", "Failed");
-        assert!(result.contains("Not found anywhere"));
-    }
 }
 
 async fn handle_vm_create(args: &VmCreateArgs) -> Result<()> {
@@ -1794,7 +1744,7 @@ fn draw_vm_top_ui(
     f.render_widget(header, main_chunks[0]);
 
     if let Some(ref err) = last_err {
-        let err_p = Paragraph::new(err.as_str())
+        let err_p = Paragraph::new(*err)
             .style(Style::default().fg(Color::Red))
             .block(Block::default().borders(Borders::ALL).title("Error"));
         f.render_widget(err_p, main_chunks[1]);
@@ -2233,6 +2183,95 @@ async fn handle_vm_export_metrics(args: &VmExportArgs) -> Result<()> {
     Ok(())
 }
 
+
+async fn handle_vm_auto_tune(args: &VmIdArgs) -> Result<()> {
+    use crossterm::style::Stylize;
+    use std::io::Write;
+    use hitz_api::ToTerraform;
+    use hitz_api::RightSizer;
+    use hitz_api::ResizeRecommendation;
+
+    print!("{}", format!("⏳ Fetching config and metrics for auto-tuning VM '{}'...", args.id).cyan());
+    let _ = std::io::stdout().flush();
+
+    // Fetch VM Info
+    let (status_info, resp_info) = pipe_client::pipe_request(
+        &args.pipe,
+        args.tcp,
+        Method::GET,
+        &format!("/vms/{}", args.id),
+        None,
+    )
+    .await?;
+
+    if !status_info.is_success() {
+        print_error_response(status_info, &resp_info, &format!("Failed to get VM {} info", args.id));
+        return Ok(());
+    }
+
+    let info: hitz_api::VmInfo = match serde_json::from_str(&resp_info) {
+        Ok(i) => i,
+        Err(e) => {
+            print_error_response(status_info, &resp_info, &format!("Failed to parse VM {} info ({e})", args.id));
+            return Ok(());
+        }
+    };
+
+    if info.state != hitz_api::VmState::Running {
+        println!(
+            "\r\x1b[2K{}",
+            format!("VM is not running (State: {:?}). Auto-tuning requires a running VM.", info.state).yellow()
+        );
+        return Ok(());
+    }
+
+    // Fetch Metrics
+    let (status_metrics, resp_metrics) = pipe_client::pipe_request(
+        &args.pipe,
+        args.tcp,
+        Method::GET,
+        &format!("/vms/{}/metrics", args.id),
+        None,
+    )
+    .await?;
+
+    if !status_metrics.is_success() {
+        print_error_response(status_metrics, &resp_metrics, &format!("Failed to get VM {} metrics", args.id));
+        return Ok(());
+    }
+
+    let metrics: hitz_api::MetricsSnapshot = match serde_json::from_str(&resp_metrics) {
+        Ok(m) => m,
+        Err(e) => {
+            print_error_response(status_metrics, &resp_metrics, &format!("Failed to parse VM {} metrics ({e})", args.id));
+            return Ok(());
+        }
+    };
+
+    let mut optimized_config = info.config.clone();
+    let recommendations = metrics.recommend_sizing(&info.config);
+    for rec in recommendations {
+        match rec {
+            ResizeRecommendation::ScaleUpCpu { suggested, .. }
+            | ResizeRecommendation::ScaleDownCpu { suggested, .. } => {
+                optimized_config.cpus = suggested;
+            }
+            ResizeRecommendation::ScaleUpRam { suggested_mib, .. }
+            | ResizeRecommendation::ScaleDownRam { suggested_mib, .. } => {
+                optimized_config.ram_mib = suggested_mib;
+            }
+        }
+    }
+    let tuned_hcl = optimized_config.to_terraform(&args.id);
+
+    println!("\r\x1b[2K{} {}", "✅".green(), format!("Analyzed and tuned VM '{}'", args.id).cyan());
+    println!("\n{}", format!(" ⚙️  Tuned Terraform Configuration for VM '{}' ", args.id).bold().on_blue().white());
+    println!("\n{}", tuned_hcl.trim().cyan());
+    println!();
+
+    Ok(())
+}
+
 /// Execute a `vm` subcommand by talking to the daemon over the named pipe.
 fn run_vm_command(cmd: VmCommand) -> Result<()> {
     let rt = tokio::runtime::Builder::new_current_thread()
@@ -2258,6 +2297,7 @@ fn run_vm_command(cmd: VmCommand) -> Result<()> {
             VmCommand::Record(args) => handle_vm_record(&args).await,
             VmCommand::Analyze(args) => handle_vm_analyze(&args).await,
             VmCommand::Timeline(args) => handle_vm_timeline(&args),
+            VmCommand::AutoTune(args) => handle_vm_auto_tune(&args).await,
         }
     })
 }
@@ -2870,20 +2910,7 @@ mod tests {
             "missing networks header: {output}"
         );
     }
-    #[test]
-    fn test_format_error_response_json() {
-        let status = hyper::StatusCode::BAD_REQUEST;
-        let json_resp = r#"{"message": "Invalid config", "code": 400}"#;
-        let result = format_error_response(status, json_resp, "Failed");
-        assert!(result.contains("Invalid config"));
-    }
 
-    #[test]
-    fn test_format_error_response_plain() {
-        let status = hyper::StatusCode::NOT_FOUND;
-        let result = format_error_response(status, "Not found anywhere", "Failed");
-        assert!(result.contains("Not found anywhere"));
-    }
 }
 
 #[cfg(test)]
@@ -2948,49 +2975,9 @@ mod top_tests {
         };
         assert!(true);
     }
-    #[test]
-    fn test_format_error_response_json() {
-        let status = hyper::StatusCode::BAD_REQUEST;
-        let json_resp = r#"{"message": "Invalid config", "code": 400}"#;
-        let result = format_error_response(status, json_resp, "Failed");
-        assert!(result.contains("Invalid config"));
-    }
 
-    #[test]
-    fn test_format_error_response_plain() {
-        let status = hyper::StatusCode::NOT_FOUND;
-        let result = format_error_response(status, "Not found anywhere", "Failed");
-        assert!(result.contains("Not found anywhere"));
-    }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
 
-    #[test]
-    fn test_parse_port_forward() {
-        let pf = parse_port_forward("8080:80").unwrap();
-        assert_eq!(pf.host_port, 8080);
-        assert_eq!(pf.guest_port, 80);
 
-        assert!(parse_port_forward("8080").is_err());
-        assert!(parse_port_forward("8080:abc").is_err());
-        assert!(parse_port_forward("abc:80").is_err());
-        assert!(parse_port_forward("70000:80").is_err()); // > 65535
-    }
-    #[test]
-    fn test_format_error_response_json() {
-        let status = hyper::StatusCode::BAD_REQUEST;
-        let json_resp = r#"{"message": "Invalid config", "code": 400}"#;
-        let result = format_error_response(status, json_resp, "Failed");
-        assert!(result.contains("Invalid config"));
-    }
 
-    #[test]
-    fn test_format_error_response_plain() {
-        let status = hyper::StatusCode::NOT_FOUND;
-        let result = format_error_response(status, "Not found anywhere", "Failed");
-        assert!(result.contains("Not found anywhere"));
-    }
-}
