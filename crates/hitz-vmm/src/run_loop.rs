@@ -23,6 +23,30 @@ use crate::mmio_decode;
 const PIC_PORTS: [u16; 4] = [0x20, 0x21, 0xA0, 0xA1];
 
 /// Reason the run loop terminated.
+///
+/// # Abstract
+///
+/// Represents the fundamental lifecycle exit conditions of a virtual machine's execution thread.
+/// It provides a clean, platform-agnostic way to bubble up the termination reason to the caller.
+///
+/// # The Hero's Journey
+///
+/// ```rust
+/// use hitz_vmm::ExitReason;
+///
+/// let reason = ExitReason::Halt;
+///
+/// match reason {
+///     ExitReason::Halt => println!("The guest voluntarily went to sleep."),
+///     ExitReason::Shutdown => println!("The guest gracefully shut down."),
+///     ExitReason::Canceled => println!("We pulled the plug on the guest!"),
+///     ExitReason::Unexpected(msg) => println!("Something went wrong: {}", msg),
+/// }
+/// ```
+///
+/// # The Fine Print
+/// An `Unexpected` exit usually indicates a bug in the hypervisor abstraction or an unhandled
+/// architecture feature.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExitReason {
     /// Guest executed HLT.
@@ -37,8 +61,29 @@ pub enum ExitReason {
 
 /// Devices shared across all vCPU threads.
 ///
-/// Each vCPU locks this only during I/O exits (microseconds per lock).
-/// Compute-bound guests experience zero contention.
+/// # Abstract
+///
+/// A thread-safe container for the devices that must be accessible by every virtual processor.
+/// This includes the system serial console and the Memory-Mapped I/O (MMIO) bus where virtio devices live.
+///
+/// # The Hero's Journey
+///
+/// ```rust
+/// use hitz_vmm::SharedDevices;
+/// use hitz_devices::{MmioBus, SerialDevice};
+/// use std::io::sink;
+///
+/// let shared = SharedDevices {
+///     serial: SerialDevice::new(sink()),
+///     mmio_bus: MmioBus::new(),
+/// };
+///
+/// // Now pass this into the vCPU run loop behind a Mutex!
+/// ```
+///
+/// # The Fine Print
+/// Each vCPU locks this structure only during I/O exits (taking microseconds per lock).
+/// Compute-bound guests experience effectively zero lock contention.
 pub struct SharedDevices<W: Write> {
     /// Serial console (COM1).
     pub serial: SerialDevice<W>,

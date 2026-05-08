@@ -204,8 +204,41 @@ impl Write for SerialBuf {
 
 /// An independent async reader over a [`SerialBuf`].
 ///
-/// Each reader tracks its own position.  If the writer laps a slow reader,
-/// the reader skips ahead to the oldest available data.
+/// # Abstract
+///
+/// `SerialReader` acts as a consumer for the shared `SerialBuf` ring buffer.
+/// It provides an asynchronous interface for reading chunks of serial output produced by the virtual machine.
+///
+/// # The Hero's Journey
+///
+/// ```rust
+/// use hitz_vmm::SerialBuf;
+///
+/// #[tokio::main]
+/// async fn main() {
+///     let buf = SerialBuf::new();
+///     let mut reader = buf.reader();
+///
+///     // Spawn a background task to write to the buffer
+///     tokio::spawn(async move {
+///         use std::io::Write;
+///         let mut buf = buf;
+///         buf.write_all(b"Hello from the VM!").unwrap();
+///         buf.close();
+///     });
+///
+///     // Read chunks until the buffer is closed
+///     while let Some(chunk) = reader.read_chunk().await {
+///         let text = String::from_utf8_lossy(&chunk);
+///         println!("Received: {}", text);
+///     }
+///     println!("VM serial console closed.");
+/// }
+/// ```
+///
+/// # The Fine Print
+/// Each reader tracks its own read position. If the underlying `SerialBuf` (acting as the writer)
+/// laps a slow reader, the reader will skip ahead to the oldest available data, potentially dropping bytes.
 pub struct SerialReader {
     inner: Arc<Mutex<Inner>>,
     notify_rx: tokio::sync::watch::Receiver<()>,

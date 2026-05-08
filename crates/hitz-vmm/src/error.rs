@@ -1,6 +1,37 @@
 //! VMM error types.
 
 /// Errors arising from guest memory operations.
+///
+/// # Abstract
+///
+/// The `MemError` enum captures all failure modes related to memory management within the
+/// virtual machine, including out-of-bounds accesses, mapping issues, and invalid sizes.
+///
+/// # The Hero's Journey
+///
+/// ```rust
+/// use hitz_vmm::MemError;
+///
+/// fn access_memory() -> Result<(), MemError> {
+///     // Attempt to read past the end of the guest's memory...
+///     Err(MemError::OutOfBounds {
+///         gpa: 0x4000,
+///         len: 128,
+///     })
+/// }
+///
+/// match access_memory() {
+///     Ok(_) => println!("Memory read succeeded!"),
+///     Err(MemError::OutOfBounds { gpa, len }) => {
+///         println!("Tried to read {} bytes at GPA {:#x} - out of bounds!", len, gpa);
+///     }
+///     Err(e) => println!("Other memory error: {}", e),
+/// }
+/// ```
+///
+/// # The Fine Print
+/// Errors bubbling up from `hitz_hal::HalError` via the `Hal` variant represent hypervisor-specific
+/// platform failures, such as the OS refusing to lock pages into memory.
 #[derive(Debug, thiserror::Error)]
 pub enum MemError {
     /// Invalid size requested for memory region.
