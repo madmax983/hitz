@@ -493,3 +493,9 @@ pub use rightsizer::{ResizeRecommendation, RightSizer};
 mod terraform;
 #[cfg(feature = "terraform")]
 pub use terraform::ToTerraform;
+
+#[cfg(feature = "green_scaler")]
+/// Green scaler module for projecting carbon impact of scaling actions.
+mod green_scaler;
+#[cfg(feature = "green_scaler")]
+pub use green_scaler::{CarbonImpact, GreenScaler};
