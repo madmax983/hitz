@@ -251,7 +251,7 @@ pub struct DescriptorChain {
 ///
 /// # The Hero's Journey
 /// ```
-/// use hitz_devices::virtio::queue::Descriptor;
+/// use hitz_devices::virtio::Descriptor;
 ///
 /// // Descriptors are typically returned by the chain via the VirtQueue.
 /// // They are simple structs containing GPA and length.
