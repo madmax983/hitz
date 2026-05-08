@@ -220,6 +220,11 @@ impl SerialReader {
     /// and all remaining data has been drained.
     pub async fn read_chunk(&mut self) -> Option<Vec<u8>> {
         // ⚡ Bolt Optimization: Eliminated tokio::sync::watch::Receiver cloning inside the read loop.
+        // 👺 Havoc Fix: Mark the receiver as seen BEFORE entering the loop to ensure
+        // changed().await actually blocks until NEW data arrives, preventing a deadlock.
+        // `borrow_and_update` updates the internal "seen" version to the current version.
+        let _ = self.notify_rx.borrow_and_update();
+
         loop {
             {
                 #[cfg(not(loom))]
