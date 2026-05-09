@@ -1,3 +1,8 @@
+//! # Abstract
+//! Memory disruption test harness.
+//!
+//! # The Hero's Journey
+//! Tests what happens when we overflow GPA boundaries.
 #![allow(clippy::unwrap_used)]
 
 use hitz_hal::Gpa;

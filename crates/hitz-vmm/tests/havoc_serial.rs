@@ -1,3 +1,8 @@
+//! # Abstract
+//! Serial port disruption test harness.
+//!
+//! # The Hero's Journey
+//! Throws garbage at the serial device to test stability.
 #![allow(clippy::unwrap_used)]
 use hitz_vmm::SerialBuf;
 use proptest::prelude::*;

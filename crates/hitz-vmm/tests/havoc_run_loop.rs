@@ -1,3 +1,8 @@
+//! # Abstract
+//! Run loop disruption test harness.
+//!
+//! # The Hero's Journey
+//! Ensures the vCPU run loop survives bad state.
 #![allow(clippy::unwrap_used)]
 
 use hitz_devices::{MmioBus, SerialDevice};

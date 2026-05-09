@@ -1,3 +1,8 @@
+//! # Abstract
+//! MMIO disruption test harness.
+//!
+//! # The Hero's Journey
+//! Validates the VM loop handles unexpected MMIO behavior.
 use hitz_devices::{MmioBus, SerialDevice};
 use hitz_hal::GuestMemAccess;
 use hitz_hal::{Gpa, HalError, MmioExit, SpecialRegs, StandardRegs, Vcpu, VcpuExit};
