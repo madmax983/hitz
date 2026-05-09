@@ -10,6 +10,7 @@
 #![allow(clippy::expect_used)]
 
 mod analyzer;
+mod eco;
 mod pipe_client;
 
 use std::ffi::OsString;
@@ -350,6 +351,27 @@ enum VmCommand {
     Analyze(VmIdArgs),
     /// Replay metrics recording and output a timeline of health state changes.
     Timeline(VmTimelineArgs),
+    /// Provide a real-time Ecological & Efficiency report.
+    Eco(Box<VmEcoArgs>),
+}
+
+/// Arguments for `vm eco`.
+#[derive(Parser)]
+struct VmEcoArgs {
+    /// VM identifier.
+    id: String,
+
+    /// Named pipe path.
+    #[arg(long, default_value = DEFAULT_PIPE)]
+    pipe: String,
+
+    /// Connect to daemon via TCP instead of named pipe.
+    #[arg(long)]
+    tcp: Option<std::net::SocketAddr>,
+
+    /// Grid carbon intensity in gCO2eq/kWh.
+    #[arg(long, default_value_t = 400.0)]
+    grid_intensity: f64,
 }
 
 /// Arguments for `vm clone`.
@@ -1437,35 +1459,49 @@ async fn handle_vm_status(args: &VmIdArgs) -> Result<()> {
             };
 
             let _ = table.add_row([
-                Cell::new("ID:").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                Cell::new("ID:")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(comfy_table::Color::Cyan),
                 Cell::new(&info.id),
             ]);
             let _ = table.add_row([
-                Cell::new("State:").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                Cell::new("State:")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(comfy_table::Color::Cyan),
                 state_cell,
             ]);
             let _ = table.add_row([
-                Cell::new("Kernel:").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                Cell::new("Kernel:")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(comfy_table::Color::Cyan),
                 Cell::new(info.config.kernel_path.display().to_string()),
             ]);
             if let Some(ref path) = info.config.initramfs_path {
                 let _ = table.add_row([
-                    Cell::new("Initramfs:").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                    Cell::new("Initramfs:")
+                        .add_attribute(comfy_table::Attribute::Bold)
+                        .fg(comfy_table::Color::Cyan),
                     Cell::new(path.display().to_string()),
                 ]);
             }
             if let Some(ref path) = info.config.disk_path {
                 let _ = table.add_row([
-                    Cell::new("Disk:").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                    Cell::new("Disk:")
+                        .add_attribute(comfy_table::Attribute::Bold)
+                        .fg(comfy_table::Color::Cyan),
                     Cell::new(path.display().to_string()),
                 ]);
             }
             let _ = table.add_row([
-                Cell::new("RAM:").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                Cell::new("RAM:")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(comfy_table::Color::Cyan),
                 Cell::new(format!("{} MiB", info.config.ram_mib)),
             ]);
             let _ = table.add_row([
-                Cell::new("CPUs:").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                Cell::new("CPUs:")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(comfy_table::Color::Cyan),
                 Cell::new(info.config.cpus.to_string()),
             ]);
             let agent_str = match info.config.guest_agent {
@@ -1474,11 +1510,15 @@ async fn handle_vm_status(args: &VmIdArgs) -> Result<()> {
                 hitz_api::GuestAgentMode::Disabled => "Disabled".to_string(),
             };
             let _ = table.add_row([
-                Cell::new("Guest Agent:").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                Cell::new("Guest Agent:")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(comfy_table::Color::Cyan),
                 Cell::new(agent_str),
             ]);
             let _ = table.add_row([
-                Cell::new("Guest CID:").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                Cell::new("Guest CID:")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(comfy_table::Color::Cyan),
                 Cell::new(info.config.guest_cid.to_string()),
             ]);
             if let Some(ref net) = info.config.net {
@@ -1488,7 +1528,9 @@ async fn handle_vm_status(args: &VmIdArgs) -> Result<()> {
                     net.host_ip, net.guest_ip, mac_str
                 );
                 let _ = table.add_row([
-                    Cell::new("Network:").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                    Cell::new("Network:")
+                        .add_attribute(comfy_table::Attribute::Bold)
+                        .fg(comfy_table::Color::Cyan),
                     Cell::new(net_str),
                 ]);
             }
@@ -1507,13 +1549,17 @@ async fn handle_vm_status(args: &VmIdArgs) -> Result<()> {
                     let _ = write!(ports_str, "0.0.0.0:{} -> {}", p.host_port, p.guest_port);
                 }
                 let _ = table.add_row([
-                    Cell::new("Ports:").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                    Cell::new("Ports:")
+                        .add_attribute(comfy_table::Attribute::Bold)
+                        .fg(comfy_table::Color::Cyan),
                     Cell::new(ports_str),
                 ]);
             }
             if let Some(reason) = &info.exit_reason {
                 let _ = table.add_row([
-                    Cell::new("Exit:").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                    Cell::new("Exit:")
+                        .add_attribute(comfy_table::Attribute::Bold)
+                        .fg(comfy_table::Color::Cyan),
                     Cell::new(reason),
                 ]);
             }
@@ -1558,11 +1604,21 @@ async fn handle_vm_list(args: &VmListArgs) -> Result<()> {
             let mut table = Table::new();
             let _ = table.load_preset(UTF8_FULL_CONDENSED);
             let _ = table.set_header([
-                Cell::new("ID").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
-                Cell::new("State").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
-                Cell::new("RAM (MiB)").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
-                Cell::new("CPUs").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
-                Cell::new("Exit Reason").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                Cell::new("ID")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(comfy_table::Color::Cyan),
+                Cell::new("State")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(comfy_table::Color::Cyan),
+                Cell::new("RAM (MiB)")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(comfy_table::Color::Cyan),
+                Cell::new("CPUs")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(comfy_table::Color::Cyan),
+                Cell::new("Exit Reason")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(comfy_table::Color::Cyan),
             ]);
 
             for info in vms {
@@ -2079,10 +2135,18 @@ fn handle_vm_timeline(args: &VmTimelineArgs) -> Result<()> {
     let mut table = Table::new();
     let _ = table.load_preset(UTF8_FULL_CONDENSED);
     let _ = table.set_header([
-        Cell::new("Time").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
-        Cell::new("Status").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
-        Cell::new("Reasons Added").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
-        Cell::new("Reasons Removed").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+        Cell::new("Time")
+            .add_attribute(comfy_table::Attribute::Bold)
+            .fg(comfy_table::Color::Cyan),
+        Cell::new("Status")
+            .add_attribute(comfy_table::Attribute::Bold)
+            .fg(comfy_table::Color::Cyan),
+        Cell::new("Reasons Added")
+            .add_attribute(comfy_table::Attribute::Bold)
+            .fg(comfy_table::Color::Cyan),
+        Cell::new("Reasons Removed")
+            .add_attribute(comfy_table::Attribute::Bold)
+            .fg(comfy_table::Color::Cyan),
     ]);
 
     for (line_num, line_result) in reader.lines().enumerate() {
@@ -2258,8 +2322,107 @@ fn run_vm_command(cmd: VmCommand) -> Result<()> {
             VmCommand::Record(args) => handle_vm_record(&args).await,
             VmCommand::Analyze(args) => handle_vm_analyze(&args).await,
             VmCommand::Timeline(args) => handle_vm_timeline(&args),
+            VmCommand::Eco(args) => handle_vm_eco(&args).await,
         }
     })
+}
+
+async fn handle_vm_eco(args: &VmEcoArgs) -> Result<()> {
+    use comfy_table::presets::UTF8_FULL_CONDENSED;
+    use comfy_table::{Cell, Color, Table};
+    use crossterm::style::Stylize;
+
+    print!(
+        "{}",
+        format!("⏳ Generating Eco Report for VM '{}'...", args.id).cyan()
+    );
+    use std::io::Write;
+    let _ = std::io::stdout().flush();
+
+    // Fetch VM Info
+    let (status_info, resp_info) = pipe_client::pipe_request(
+        &args.pipe,
+        args.tcp,
+        Method::GET,
+        &format!("/vms/{}", args.id),
+        None,
+    )
+    .await?;
+
+    if !status_info.is_success() {
+        print_error_response(
+            status_info,
+            &resp_info,
+            &format!("Failed to get VM {} info", args.id),
+        );
+        return Err(anyhow::anyhow!("API error"));
+    }
+
+    let info: hitz_api::VmInfo = serde_json::from_str(&resp_info).context("Invalid JSON")?;
+
+    if info.state != hitz_api::VmState::Running {
+        eprintln!(
+            "\r\x1b[2K{}",
+            format!(
+                "✗ VM '{}' is not running (state: {:?})",
+                args.id, info.state
+            )
+            .red()
+            .bold()
+        );
+        return Err(anyhow::anyhow!("VM is not running"));
+    }
+
+    // Fetch live metrics
+    let req = hitz_api::MetricsRequest::Snapshot;
+    let payload = serde_json::to_string(&req).unwrap();
+
+    let (status_metrics, resp_metrics) = pipe_client::pipe_request(
+        &args.pipe,
+        args.tcp,
+        Method::POST,
+        &format!("/vms/{}/metrics", args.id),
+        Some(&payload),
+    )
+    .await?;
+
+    if !status_metrics.is_success() {
+        print_error_response(
+            status_metrics,
+            &resp_metrics,
+            &format!("Failed to get metrics for VM {}", args.id),
+        );
+        return Err(anyhow::anyhow!("API error"));
+    }
+
+    let metrics: hitz_api::MetricsSnapshot =
+        serde_json::from_str(&resp_metrics).context("Invalid JSON metrics payload")?;
+
+    let rows = eco::generate_eco_report(&info.config, &metrics, args.grid_intensity);
+
+    let mut table = Table::new();
+    let _ = table.load_preset(UTF8_FULL_CONDENSED);
+    let _ = table.set_header([
+        Cell::new("Category")
+            .add_attribute(comfy_table::Attribute::Bold)
+            .fg(Color::Magenta),
+        Cell::new("Result")
+            .add_attribute(comfy_table::Attribute::Bold)
+            .fg(Color::Magenta),
+        Cell::new("Details")
+            .add_attribute(comfy_table::Attribute::Bold)
+            .fg(Color::Magenta),
+    ]);
+
+    for row in rows {
+        let _ = table.add_row(row);
+    }
+
+    println!("\r\x1b[2K");
+    println!("{} {}", "🌟 Eco Dashboard:".green().bold(), info.id.cyan());
+    println!("{table}");
+
+    Ok(())
 }
 
 #[allow(clippy::too_many_lines)]
@@ -2370,8 +2533,12 @@ async fn handle_vm_analyze(args: &VmIdArgs) -> Result<()> {
         let _ = table.load_preset(UTF8_FULL_CONDENSED);
 
         let _ = table.set_header([
-            Cell::new("Level").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
-            Cell::new("Insight").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+            Cell::new("Level")
+                .add_attribute(comfy_table::Attribute::Bold)
+                .fg(comfy_table::Color::Cyan),
+            Cell::new("Insight")
+                .add_attribute(comfy_table::Attribute::Bold)
+                .fg(comfy_table::Color::Cyan),
         ]);
 
         for insight in insights {

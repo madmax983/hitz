@@ -29,6 +29,7 @@ tracing-subscriber.workspace     = true
 crossbeam-channel.workspace      = true
 rmp-serde.workspace              = true
 hitz-devices.workspace           = true
+hitz-boot = { workspace = true }
 
 [dev-dependencies]
 hitz-whp.workspace = true
