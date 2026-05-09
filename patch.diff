@@ -1,0 +1,25 @@
+<<<<<<< SEARCH
+        } else {
+            let max_len = 200;
+            let display_text = if clean.chars().count() > max_len {
+                let truncated: String = clean.chars().take(max_len).collect();
+                format!("{}...", truncated)
+            } else {
+                clean.to_string()
+            };
+            format!("✗ {error_prefix} ({status}): {display_text}")
+        }
+=======
+        } else {
+            let max_len = 200;
+            // ⚡ Bolt Optimization: Eliminated `O(N)` character counting and a `String` heap allocation (`.collect()`)
+            // when truncating long error messages. Using `char_indices().nth()` directly finds the byte offset
+            // and allows us to slice the original string.
+            let display_text = if let Some((idx, _)) = clean.char_indices().nth(max_len) {
+                format!("{}...", &clean[..idx])
+            } else {
+                clean.to_string()
+            };
+            format!("✗ {error_prefix} ({status}): {display_text}")
+        }
+>>>>>>> REPLACE
