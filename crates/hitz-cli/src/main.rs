@@ -1053,7 +1053,7 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
 
     let cpu_bar = format!(
         "{} {:.1}%",
-        make_bar(snap.cpu.total_pct, 15),
+        make_bar(snap.cpu.total_pct as f64, 15),
         snap.cpu.total_pct
     );
     let mem_bar = format!("{} {}", make_bar(mem_pct, 15), mem_str);
@@ -1062,7 +1062,7 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
         Cell::new("CPU Total")
             .add_attribute(Attribute::Bold)
             .fg(Color::Cyan),
-        Cell::new(cpu_bar).fg(color_for_pct(snap.cpu.total_pct)),
+        Cell::new(cpu_bar).fg(color_for_pct(snap.cpu.total_pct as f64)),
         Cell::new("Cores")
             .add_attribute(Attribute::Bold)
             .fg(Color::Cyan),
@@ -1178,7 +1178,7 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
         for proc in &snap.processes {
             let rss_mb = proc.rss_bytes / (1024 * 1024);
             let cpu_cell =
-                Cell::new(format!("{:.1}%", proc.cpu_pct)).fg(color_for_pct(proc.cpu_pct));
+                Cell::new(format!("{:.1}%", proc.cpu_pct)).fg(color_for_pct(proc.cpu_pct as f64));
             let _ = proc_table.add_row([
                 Cell::new(proc.pid.to_string()),
                 Cell::new(proc.name.clone()),
@@ -1194,6 +1194,20 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
 }
 
 // ── hitz vm * ──
+
+fn friendly_status(status: hyper::StatusCode) -> &'static str {
+    match status.as_u16() {
+        400 => "Bad Request",
+        401 => "Unauthorized",
+        403 => "Forbidden",
+        404 => "Not Found",
+        409 => "Conflict",
+        500 => "Internal Error",
+        502 => "Bad Gateway",
+        503 => "Service Unavailable",
+        _ => status.canonical_reason().unwrap_or("Error"),
+    }
+}
 
 fn format_error_response(status: hyper::StatusCode, resp: &str, error_prefix: &str) -> String {
     let msg = if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(resp) {
@@ -1230,15 +1244,15 @@ fn format_error_response(status: hyper::StatusCode, resp: &str, error_prefix: &s
                 })
             });
             if parts_str.is_empty() {
-                format!("✗ {error_prefix} ({status})")
+                format!("✗ {error_prefix} ({})", friendly_status(status))
             } else {
-                format!("✗ {error_prefix} ({status}): {parts_str}")
+                format!("✗ {error_prefix} ({}): {parts_str}", friendly_status(status))
             }
         }
     } else {
         let clean = resp.trim();
         if clean.is_empty() {
-            format!("✗ {error_prefix} ({status})")
+            format!("✗ {error_prefix} ({})", friendly_status(status))
         } else {
             let max_len = 200;
             let display_text = if clean.chars().count() > max_len {
@@ -1247,7 +1261,7 @@ fn format_error_response(status: hyper::StatusCode, resp: &str, error_prefix: &s
             } else {
                 clean.to_string()
             };
-            format!("✗ {error_prefix} ({status}): {display_text}")
+            format!("✗ {error_prefix} ({}): {display_text}", friendly_status(status))
         }
     };
     format!("\r\x1b[2K{}", msg)
@@ -1793,8 +1807,8 @@ fn draw_vm_top_ui(
         .block(Block::default().borders(Borders::ALL));
     f.render_widget(header, main_chunks[0]);
 
-    if let Some(ref err) = last_err {
-        let err_p = Paragraph::new(err.as_str())
+    if let Some(err) = last_err.as_deref() {
+        let err_p = Paragraph::new(err)
             .style(Style::default().fg(Color::Red))
             .block(Block::default().borders(Borders::ALL).title("Error"));
         f.render_widget(err_p, main_chunks[1]);
