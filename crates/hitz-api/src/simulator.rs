@@ -96,7 +96,10 @@ impl Iterator for VmSimulator {
             }
             WorkloadProfile::MemoryLeak => {
                 // Steady leak, 50MB per iteration
-                (10.0, 100 * 1024 * 1024 + self.iteration * 50 * 1024 * 1024)
+                (
+                    10.0,
+                    (100 * 1024 * 1024 + self.iteration * 50 * 1024 * 1024).min(1024 * 1024 * 1024),
+                )
             }
             WorkloadProfile::Idle => {
                 // Idle baseline
@@ -214,5 +217,20 @@ mod tests {
             critical_found,
             "The CPU spike should eventually trigger a Critical health status."
         );
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn test_memory_leak_profile_exhaustion() {
+        let mut sim = VmSimulator::new(WorkloadProfile::MemoryLeak);
+        let mut last_metrics = None;
+        for _ in 0..50 {
+            last_metrics = sim.next();
+        }
+
+        let metrics = last_metrics.unwrap();
+        // Total memory is 1024 * 1024 * 1024. The leak is clamped so it does not exceed this value.
+        assert_eq!(metrics.memory.used_bytes, 1024 * 1024 * 1024);
+        assert_eq!(metrics.memory.free_bytes, 0);
     }
 }
