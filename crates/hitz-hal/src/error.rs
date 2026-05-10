@@ -2,6 +2,11 @@
 
 /// Errors from hypervisor operations.
 ///
+/// # Optimization
+///
+/// We use `std::borrow::Cow<'static, str>` instead of `String` for the `reason` field
+/// to eliminate unnecessary heap allocations for static error messages during runtime failures.
+///
 /// # Abstract
 ///
 /// The central error type for all HAL operations. Encapsulates platform-specific
@@ -17,7 +22,7 @@
 ///     Err(HalError::MapMemory {
 ///         gpa: 0x1000,
 ///         size: 4096,
-///         reason: "Memory already mapped".to_string(),
+///         reason: std::borrow::Cow::Borrowed("Memory already mapped"),
 ///     })
 /// }
 ///
@@ -47,7 +52,7 @@ pub enum HalError {
         /// Size in bytes.
         size: usize,
         /// Error detail.
-        reason: String,
+        reason: std::borrow::Cow<'static, str>,
     },
 
     /// Failed to unmap guest memory.
@@ -56,7 +61,7 @@ pub enum HalError {
         /// Guest physical address.
         gpa: u64,
         /// Error detail.
-        reason: String,
+        reason: std::borrow::Cow<'static, str>,
     },
 
     /// Failed to create a vCPU.
@@ -65,7 +70,7 @@ pub enum HalError {
         /// vCPU index.
         vcpu_id: u32,
         /// Error detail.
-        reason: String,
+        reason: std::borrow::Cow<'static, str>,
     },
 
     /// vCPU run loop error.
@@ -90,7 +95,7 @@ pub enum HalError {
         /// Guest physical address.
         gpa: u64,
         /// Error detail.
-        reason: String,
+        reason: std::borrow::Cow<'static, str>,
     },
 
     /// Failed to inject an interrupt.

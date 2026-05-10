@@ -151,7 +151,9 @@ impl GuestMemory {
                 return Err(MemError::Hal(hitz_hal::HalError::MapMemory {
                     gpa: gpa.as_u64(),
                     size: aligned_size,
-                    reason: "region overlaps with an existing memory region".to_string(),
+                    reason: "region overlaps with an existing memory region"
+                        .to_string()
+                        .into(),
                 }));
             }
         }
@@ -344,7 +346,7 @@ impl GuestMemAccess for GuestMemory {
         self.read_slice(Gpa::new(gpa), buf)
             .map_err(|e| HalError::GuestMem {
                 gpa,
-                reason: e.to_string(),
+                reason: e.to_string().into(),
             })
     }
 
@@ -352,7 +354,7 @@ impl GuestMemAccess for GuestMemory {
         self.write_slice(Gpa::new(gpa), data)
             .map_err(|e| HalError::GuestMem {
                 gpa,
-                reason: e.to_string(),
+                reason: e.to_string().into(),
             })
     }
 }
@@ -362,7 +364,7 @@ impl GuestMemAccess for GuestMemory {
 impl hitz_boot::GuestMemWriter for GuestMemory {
     fn write_bytes(&self, gpa: Gpa, data: &[u8]) -> Result<(), hitz_boot::BootError> {
         self.write_slice(gpa, data)
-            .map_err(|e| hitz_boot::BootError::WriteFailed(e.to_string()))
+            .map_err(|e| hitz_boot::BootError::WriteFailed(e.to_string().into()))
     }
 
     fn write_zeroes(&self, mut gpa: Gpa, mut len: usize) -> Result<(), hitz_boot::BootError> {
@@ -373,7 +375,7 @@ impl hitz_boot::GuestMemWriter for GuestMemory {
         while len > 0 {
             let chunk = len.min(CHUNK_SIZE);
             self.write_slice(gpa, &zeroes[..chunk])
-                .map_err(|e| hitz_boot::BootError::WriteFailed(e.to_string()))?;
+                .map_err(|e| hitz_boot::BootError::WriteFailed(e.to_string().into()))?;
             gpa = Gpa::new(gpa.as_u64().saturating_add(chunk as u64));
             len -= chunk;
         }

@@ -96,7 +96,7 @@ impl Partition for WhpPartition {
         .map_err(|e| HalError::MapMemory {
             gpa: gpa.as_u64(),
             size,
-            reason: format!("WHvMapGpaRange: {e}"),
+            reason: std::borrow::Cow::Owned(format!("WHvMapGpaRange: {e}")),
         })
     }
 
@@ -104,7 +104,7 @@ impl Partition for WhpPartition {
         unsafe { WHvUnmapGpaRange(self.inner.handle, gpa.as_u64(), size as u64) }.map_err(|e| {
             HalError::UnmapMemory {
                 gpa: gpa.as_u64(),
-                reason: format!("WHvUnmapGpaRange: {e}"),
+                reason: std::borrow::Cow::Owned(format!("WHvUnmapGpaRange: {e}")),
             }
         })
     }
@@ -113,11 +113,11 @@ impl Partition for WhpPartition {
         if id.as_u32() >= self.vcpu_count {
             return Err(HalError::CreateVcpu {
                 vcpu_id: id.as_u32(),
-                reason: format!(
+                reason: std::borrow::Cow::Owned(format!(
                     "vCPU index {} exceeds partition limit {}",
                     id.as_u32(),
                     self.vcpu_count
-                ),
+                )),
             });
         }
         WhpVcpu::new(Arc::clone(&self.inner), id)

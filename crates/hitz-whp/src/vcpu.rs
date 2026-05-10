@@ -29,7 +29,7 @@ impl WhpVcpu {
         unsafe { WHvCreateVirtualProcessor(partition.handle, index, 0) }.map_err(|e| {
             HalError::CreateVcpu {
                 vcpu_id: index,
-                reason: format!("WHvCreateVirtualProcessor: {e}"),
+                reason: std::borrow::Cow::Owned(format!("WHvCreateVirtualProcessor: {e}")),
             }
         })?;
 

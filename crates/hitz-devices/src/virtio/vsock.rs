@@ -456,7 +456,7 @@ mod tests {
                 return Err(HalError::MapMemory {
                     gpa,
                     size: buf.len(),
-                    reason: "out of bounds".to_string(),
+                    reason: std::borrow::Cow::Borrowed("out of bounds"),
                 });
             }
             buf.copy_from_slice(&mem[start..start + buf.len()]);
@@ -473,7 +473,7 @@ mod tests {
                 return Err(HalError::MapMemory {
                     gpa,
                     size: data.len(),
-                    reason: "out of bounds".to_string(),
+                    reason: std::borrow::Cow::Borrowed("out of bounds"),
                 });
             }
             mem[start..start + data.len()].copy_from_slice(data);
