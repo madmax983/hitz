@@ -493,3 +493,9 @@ pub use rightsizer::{ResizeRecommendation, RightSizer};
 mod terraform;
 #[cfg(feature = "terraform")]
 pub use terraform::ToTerraform;
+
+#[cfg(feature = "report")]
+/// Markdown Reporting module for VM telemetry.
+pub mod report;
+#[cfg(feature = "report")]
+pub use report::MarkdownReport;
