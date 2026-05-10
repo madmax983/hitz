@@ -1,3 +1,5 @@
+#![allow(clippy::collapsible_if)]
+#![allow(clippy::significant_drop_tightening)]
 //! The core orchestrator of virtual machines.
 //!
 //! A modern VMM cannot simply boot a kernel and block the main thread. We must juggle

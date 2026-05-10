@@ -113,12 +113,10 @@ impl VirtioNetDevice {
                     if start_len.saturating_add(desc.len as usize) > 65536 {
                         break; // Prevent unbounded memory allocation from massive descriptors
                     }
-                    frame_data.resize(start_len + desc.len as usize, 0);
-                    if mem
-                        .read_guest(desc.gpa, &mut frame_data[start_len..])
-                        .is_err()
-                    {
-                        frame_data.truncate(start_len); // Revert on read failure
+                    frame_data.reserve(desc.len as usize);
+                    let mut temp_buf = vec![0u8; desc.len as usize];
+                    if mem.read_guest(desc.gpa, &mut temp_buf).is_ok() {
+                        frame_data.extend_from_slice(&temp_buf);
                     }
                 }
             }

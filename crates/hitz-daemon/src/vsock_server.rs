@@ -1,3 +1,5 @@
+#![allow(clippy::collapsible_if)]
+#![allow(clippy::cast_possible_wrap)]
 //! Host-side virtio-vsock metrics receiver.
 //!
 //! Reads [`MetricsSnapshot`] packets pushed by the guest agent over vsock

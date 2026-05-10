@@ -248,12 +248,13 @@ impl VirtioVsockDevice {
                     break; // TX descriptors are all device-readable
                 }
                 let start_len = raw.len();
-                if raw.len().saturating_add(desc.len as usize) > 65536 {
+                if start_len.saturating_add(desc.len as usize) > 65536 {
                     break;
                 }
-                raw.resize(start_len + desc.len as usize, 0);
-                if mem.read_guest(desc.gpa, &mut raw[start_len..]).is_err() {
-                    raw.truncate(start_len); // Revert on read failure
+                raw.reserve(desc.len as usize);
+                let mut temp_buf = vec![0u8; desc.len as usize];
+                if mem.read_guest(desc.gpa, &mut temp_buf).is_ok() {
+                    raw.extend_from_slice(&temp_buf);
                 }
             }
 

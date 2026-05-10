@@ -1,3 +1,4 @@
+#![allow(clippy::collapsible_if)]
 //! OpenTelemetry initialisation — traces + metrics over OTLP gRPC.
 //!
 //! Call [`TelemetryGuard::init`] once at daemon startup. Hold the returned

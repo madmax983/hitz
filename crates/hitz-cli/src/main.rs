@@ -1,3 +1,4 @@
+#![allow(unused_imports)]
 //! Hitz CLI — micro-VM manager for Windows.
 //!
 //! Usage:
@@ -1053,7 +1054,7 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
 
     let cpu_bar = format!(
         "{} {:.1}%",
-        make_bar(snap.cpu.total_pct, 15),
+        make_bar(f64::from(snap.cpu.total_pct), 15),
         snap.cpu.total_pct
     );
     let mem_bar = format!("{} {}", make_bar(mem_pct, 15), mem_str);
@@ -1062,7 +1063,7 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
         Cell::new("CPU Total")
             .add_attribute(Attribute::Bold)
             .fg(Color::Cyan),
-        Cell::new(cpu_bar).fg(color_for_pct(snap.cpu.total_pct)),
+        Cell::new(cpu_bar).fg(color_for_pct(f64::from(snap.cpu.total_pct))),
         Cell::new("Cores")
             .add_attribute(Attribute::Bold)
             .fg(Color::Cyan),
@@ -1178,7 +1179,7 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
         for proc in &snap.processes {
             let rss_mb = proc.rss_bytes / (1024 * 1024);
             let cpu_cell =
-                Cell::new(format!("{:.1}%", proc.cpu_pct)).fg(color_for_pct(proc.cpu_pct));
+                Cell::new(format!("{:.1}%", proc.cpu_pct)).fg(color_for_pct(f64::from(proc.cpu_pct)));
             let _ = proc_table.add_row([
                 Cell::new(proc.pid.to_string()),
                 Cell::new(proc.name.clone()),
@@ -1794,7 +1795,7 @@ fn draw_vm_top_ui(
     f.render_widget(header, main_chunks[0]);
 
     if let Some(ref err) = last_err {
-        let err_p = Paragraph::new(err.as_str())
+        let err_p = Paragraph::new(&**err)
             .style(Style::default().fg(Color::Red))
             .block(Block::default().borders(Borders::ALL).title("Error"));
         f.render_widget(err_p, main_chunks[1]);
