@@ -689,14 +689,18 @@ fn run_multi_vcpu<H: Hypervisor>(
                     let exit = match result {
                         Ok(r) => r,
                         Err(payload) => {
-                            let msg = payload.downcast_ref::<&str>().map_or_else(
-                                || {
-                                    payload
-                                        .downcast_ref::<String>()
-                                        .map_or_else(|| "unknown panic".to_string(), Clone::clone)
-                                },
-                                |s| (*s).to_string(),
-                            );
+                            let msg = (*payload)
+                                .downcast_ref::<&'static str>()
+                                .copied()
+                                .map_or_else(
+                                    || {
+                                        payload.downcast_ref::<String>().map_or_else(
+                                            || "unknown panic".to_string(),
+                                            Clone::clone,
+                                        )
+                                    },
+                                    |s| (*s).to_string(),
+                                );
                             Ok(ExitReason::Unexpected(format!(
                                 "vCPU {idx} panicked: {msg}"
                             )))
