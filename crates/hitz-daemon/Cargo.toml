@@ -12,6 +12,7 @@ workspace = true
 hitz-api.workspace = true
 hitz-hal.workspace = true
 hitz-vmm.workspace = true
+hitz-boot = { path = "../hitz-boot" }
 thiserror.workspace = true
 tracing.workspace = true
 tokio.workspace = true
