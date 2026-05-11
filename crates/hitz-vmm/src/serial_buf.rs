@@ -221,6 +221,9 @@ impl SerialReader {
     pub async fn read_chunk(&mut self) -> Option<Vec<u8>> {
         // ⚡ Bolt Optimization: Eliminated tokio::sync::watch::Receiver cloning inside the read loop.
         loop {
+            // ⚡ Bolt Optimization: Properly update the channel's 'seen' version to prevent
+            // `changed().await` from returning immediately and causing a 100% CPU tight loop.
+            let _ = self.notify_rx.borrow_and_update();
             {
                 #[cfg(not(loom))]
                 let Ok(inner) = self.inner.lock() else {
