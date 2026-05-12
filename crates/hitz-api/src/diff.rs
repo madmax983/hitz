@@ -229,9 +229,7 @@ impl CalculateDiff for MetricsSnapshot {
 
         let elapsed_secs = (self.timestamp_ms - previous.timestamp_ms) as f64 / 1000.0;
 
-        // Pre-allocate to avoid dynamic heap reallocations during iteration
-        let mut disks = Vec::with_capacity(self.disks.len());
-        disks.extend(self.disks.iter().filter_map(|current_disk| {
+        let disks = self.disks.iter().filter_map(|current_disk| {
             let prev_disk = previous
                 .disks
                 .iter()
@@ -255,11 +253,9 @@ impl CalculateDiff for MetricsSnapshot {
                     as f64
                     / elapsed_secs,
             })
-        }));
+        }).collect();
 
-        // Pre-allocate to avoid dynamic heap reallocations during iteration
-        let mut networks = Vec::with_capacity(self.networks.len());
-        networks.extend(self.networks.iter().filter_map(|current_net| {
+        let networks = self.networks.iter().filter_map(|current_net| {
             let prev_net = previous
                 .networks
                 .iter()
@@ -277,7 +273,7 @@ impl CalculateDiff for MetricsSnapshot {
                     as f64
                     / elapsed_secs,
             })
-        }));
+        }).collect();
 
         Some(MetricsDiff {
             elapsed_secs,
