@@ -10,6 +10,7 @@ workspace = true
 
 [dependencies]
 hitz-api.workspace = true
+hitz-boot.workspace = true
 hitz-hal.workspace = true
 hitz-vmm.workspace = true
 thiserror.workspace = true
