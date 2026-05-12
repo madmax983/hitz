@@ -493,3 +493,9 @@ pub use rightsizer::{ResizeRecommendation, RightSizer};
 mod terraform;
 #[cfg(feature = "terraform")]
 pub use terraform::ToTerraform;
+
+#[cfg(feature = "prediction")]
+/// Prediction module for forecasting metrics.
+pub mod prediction;
+#[cfg(feature = "prediction")]
+pub use prediction::VmHistory;
