@@ -689,7 +689,7 @@ fn run_multi_vcpu<H: Hypervisor>(
                     let exit = match result {
                         Ok(r) => r,
                         Err(payload) => {
-                            let msg = payload.downcast_ref::<&str>().map_or_else(
+                            let msg = payload.downcast_ref::<&'static str>().map_or_else(
                                 || {
                                     payload
                                         .downcast_ref::<String>()
@@ -884,5 +884,34 @@ mod tests {
         assert_ne!(blk, net);
         assert_ne!(net, vsock);
         assert_eq!(VIRTIO_IRQ_VSOCK, 7);
+    }
+}
+
+#[cfg(test)]
+mod havoc_tests {
+    use super::*;
+    use proptest::prelude::*;
+    use std::panic::{AssertUnwindSafe, catch_unwind};
+
+    proptest! {
+        #[test]
+        fn havoc_panic_payload_extraction(_ in 0..1u8) {
+            let result = catch_unwind(AssertUnwindSafe(|| {
+                panic!("literal panic message");
+            }));
+
+            let payload = result.unwrap_err();
+
+            let msg = payload.downcast_ref::<&'static str>().map_or_else(
+                || {
+                    payload
+                        .downcast_ref::<String>()
+                        .map_or_else(|| "unknown panic".to_string(), Clone::clone)
+                },
+                |s| (*s).to_string(),
+            );
+
+            assert_eq!(msg, "literal panic message");
+        }
     }
 }
