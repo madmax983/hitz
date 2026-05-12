@@ -292,3 +292,60 @@ pub struct ApiError {
     /// A human-readable, descriptive error message explaining the failure.
     pub message: String,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn should_format_vmaction_correctly() {
+        struct TestCase {
+            action: VmAction,
+            expected_display: &'static str,
+            expected_gerund: &'static str,
+            expected_past: &'static str,
+        }
+
+        let test_cases = vec![
+            TestCase {
+                action: VmAction::Start,
+                expected_display: "start",
+                expected_gerund: "Starting",
+                expected_past: "started",
+            },
+            TestCase {
+                action: VmAction::Stop,
+                expected_display: "stop",
+                expected_gerund: "Stopping",
+                expected_past: "stopped",
+            },
+            TestCase {
+                action: VmAction::Restart,
+                expected_display: "restart",
+                expected_gerund: "Restarting",
+                expected_past: "restarted",
+            },
+        ];
+
+        for case in test_cases {
+            assert_eq!(
+                case.action.to_string(),
+                case.expected_display,
+                "Failed Display for {:?}",
+                case.action
+            );
+            assert_eq!(
+                case.action.gerund(),
+                case.expected_gerund,
+                "Failed gerund() for {:?}",
+                case.action
+            );
+            assert_eq!(
+                case.action.past_tense(),
+                case.expected_past,
+                "Failed past_tense() for {:?}",
+                case.action
+            );
+        }
+    }
+}
