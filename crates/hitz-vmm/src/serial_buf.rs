@@ -1,3 +1,4 @@
+#![allow(unexpected_cfgs)]
 //! Shared ring buffer for serial output capture.
 //!
 //! # Abstract
@@ -38,8 +39,6 @@ use loom::sync::{Arc, Mutex};
 #[cfg(not(loom))]
 use std::sync::{Arc, Mutex};
 
-use tokio::sync::Notify;
-use tokio::sync::watch;
 
 /// Default ring buffer capacity (64 KiB).
 const DEFAULT_CAPACITY: usize = 64 * 1024;

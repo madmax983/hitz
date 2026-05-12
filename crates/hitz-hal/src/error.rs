@@ -59,6 +59,10 @@ pub enum HalError {
         reason: String,
     },
 
+    /// Device lock was poisoned by a panicked vCPU.
+    #[error("device lock poisoned")]
+    DeviceLockPoisoned,
+
     /// Failed to create a vCPU.
     #[error("failed to create vCPU {vcpu_id}: {reason}")]
     CreateVcpu {

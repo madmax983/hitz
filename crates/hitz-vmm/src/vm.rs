@@ -124,6 +124,10 @@ pub enum VmError {
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
 
+    /// Thread spawn failed.
+    #[error("thread spawn failed: {0}")]
+    ThreadSpawn(String),
+
     /// Guest memory error.
     #[error("memory error: {0}")]
     Mem(#[from] crate::error::MemError),
@@ -396,7 +400,7 @@ pub fn boot_and_run<H: Hypervisor, W: Write + Send + 'static>(
     let pml4_gpa = setup_guest_memory(&mut guest_mem, config, ram_bytes, gib_count)?;
 
     // ── 8. Write command line ──
-    build_kernel_cmdline(&mut guest_mem, config, &extras)?;
+    build_kernel_cmdline(&guest_mem, config, &extras)?;
 
     // ── 9. Write GDT ──
     boot_regs::write_gdt(&guest_mem)?;
@@ -433,14 +437,11 @@ pub fn boot_and_run<H: Hypervisor, W: Write + Send + 'static>(
     let exit_reason = if vcpus.len() == 1 {
         // ⚡ Bolt Optimization: Eliminated `.to_string()` allocation on error path.
         let single_vcpu = vcpus.pop().ok_or_else(|| {
-            std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "vcpus array is unexpectedly empty when it should have 1 element",
-            )
+            std::io::Error::other("vcpus array is unexpectedly empty when it should have 1 element")
         })?;
-        run_single_vcpu::<H>(single_vcpu, devices, guest_mem_arc, stop_flag)?
+        run_single_vcpu::<H>(single_vcpu, &devices, &guest_mem_arc, &stop_flag)?
     } else {
-        run_multi_vcpu::<H>(vcpus, devices, guest_mem_arc, stop_flag)?
+        run_multi_vcpu::<H>(vcpus, &devices, &guest_mem_arc, &stop_flag)?
     };
 
     drop(net_io_handle);
@@ -505,7 +506,7 @@ fn setup_guest_memory(
 }
 
 fn build_kernel_cmdline(
-    guest_mem: &mut GuestMemory,
+    guest_mem: &GuestMemory,
     config: &VmConfig,
     extras: &BootExtras,
 ) -> Result<(), VmError> {
@@ -610,12 +611,12 @@ fn setup_devices(
 
 fn run_single_vcpu<H: Hypervisor>(
     mut vcpu: <H::Partition as Partition>::Vcpu,
-    devices: Arc<Mutex<SharedDevices<impl Write + Send + 'static>>>,
-    guest_mem_arc: Arc<GuestMemory>,
-    stop_flag: Arc<AtomicBool>,
+    devices: &Arc<Mutex<SharedDevices<impl Write + Send + 'static>>>,
+    guest_mem_arc: &Arc<GuestMemory>,
+    stop_flag: &Arc<AtomicBool>,
 ) -> Result<ExitReason, VmError> {
     let cancel_handle = vcpu.cancel_handle();
-    let stop_clone = Arc::clone(&stop_flag);
+    let stop_clone = Arc::clone(stop_flag);
     let watchdog = std::thread::Builder::new()
         .name("cancel-watchdog".into())
         .spawn(move || {
@@ -624,9 +625,9 @@ fn run_single_vcpu<H: Hypervisor>(
             }
             let _ = <<H::Partition as Partition>::Vcpu as Vcpu>::cancel_via(&cancel_handle);
         })
-        .expect("spawn watchdog thread");
+        .map_err(|e| VmError::ThreadSpawn(e.to_string()))?;
 
-    let exit_reason = run_loop::run_vcpu_loop(&mut vcpu, &devices, &*guest_mem_arc, &stop_flag)?;
+    let exit_reason = run_loop::run_vcpu_loop(&mut vcpu, devices, &**guest_mem_arc, stop_flag)?;
 
     stop_flag.store(true, Ordering::Relaxed);
     let _ = watchdog.join();
@@ -635,16 +636,16 @@ fn run_single_vcpu<H: Hypervisor>(
 
 fn run_multi_vcpu<H: Hypervisor>(
     vcpus: Vec<<H::Partition as Partition>::Vcpu>,
-    devices: Arc<Mutex<SharedDevices<impl Write + Send + 'static>>>,
-    guest_mem_arc: Arc<GuestMemory>,
-    stop_flag: Arc<AtomicBool>,
+    devices: &Arc<Mutex<SharedDevices<impl Write + Send + 'static>>>,
+    guest_mem_arc: &Arc<GuestMemory>,
+    stop_flag: &Arc<AtomicBool>,
 ) -> Result<ExitReason, VmError> {
     let shared_handles: Arc<[_]> = vcpus.iter().map(Vcpu::cancel_handle).collect();
     let (exit_tx, exit_rx) = mpsc::channel::<Result<ExitReason, hitz_hal::HalError>>();
     let num_vcpus = vcpus.len();
 
     let watchdog = {
-        let stop_clone = Arc::clone(&stop_flag);
+        let stop_clone = Arc::clone(stop_flag);
         let handles_clone = Arc::clone(&shared_handles);
         std::thread::Builder::new()
             .name("cancel-watchdog".into())
@@ -654,16 +655,16 @@ fn run_multi_vcpu<H: Hypervisor>(
                 }
                 cancel_all_vcpus::<<H::Partition as Partition>::Vcpu>(&handles_clone);
             })
-            .expect("spawn watchdog thread")
+            .map_err(|e| VmError::ThreadSpawn(e.to_string()))?
     };
 
     let handles: Vec<_> = vcpus
         .into_iter()
         .enumerate()
         .map(|(idx, mut vcpu)| {
-            let devs = Arc::clone(&devices);
-            let mem = Arc::clone(&guest_mem_arc);
-            let stop = Arc::clone(&stop_flag);
+            let devs = Arc::clone(devices);
+            let mem = Arc::clone(guest_mem_arc);
+            let stop = Arc::clone(stop_flag);
             let cancel_handles = Arc::clone(&shared_handles);
             let tx = exit_tx.clone();
 
@@ -705,9 +706,9 @@ fn run_multi_vcpu<H: Hypervisor>(
 
                     let _ = tx.send(exit);
                 })
-                .expect("spawn vcpu thread")
+                .map_err(|e| VmError::ThreadSpawn(e.to_string()))
         })
-        .collect();
+        .collect::<Result<Vec<_>, VmError>>()?;
 
     drop(exit_tx);
 
