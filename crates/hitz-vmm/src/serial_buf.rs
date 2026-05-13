@@ -265,6 +265,10 @@ impl SerialReader {
                     return None;
                 }
             }
+            // 🛡️ Ensure we mark the current version as seen before parking,
+            // so we don't return immediately on a stale update and then deadlock.
+            let _ = self.notify_rx.borrow_and_update();
+
             // Park until the writer pushes more data or closes.
             let _ = self.notify_rx.changed().await;
         }
