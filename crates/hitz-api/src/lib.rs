@@ -493,3 +493,9 @@ pub use rightsizer::{ResizeRecommendation, RightSizer};
 mod terraform;
 #[cfg(feature = "terraform")]
 pub use terraform::ToTerraform;
+
+#[cfg(feature = "markdown")]
+/// Markdown exporter module.
+mod markdown;
+#[cfg(feature = "markdown")]
+pub use markdown::ToMarkdown;
