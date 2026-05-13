@@ -1,6 +1,18 @@
 //! VMM error types.
 
 /// Errors arising from guest memory operations.
+///
+/// # Abstract
+/// Represents various failures that can occur when managing guest memory,
+/// such as out-of-bounds accesses or failed allocations.
+///
+/// # The Hero's Journey
+/// ```
+/// use hitz_vmm::MemError;
+///
+/// let err = MemError::InvalidSize { gpa: 0x1000, size: 0 };
+/// assert_eq!(err.to_string(), "invalid size 0 bytes at GPA 0x1000");
+/// ```
 #[derive(Debug, thiserror::Error)]
 pub enum MemError {
     /// Invalid size requested for memory region.

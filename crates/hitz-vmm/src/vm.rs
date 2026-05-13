@@ -114,6 +114,9 @@ impl BootExtras {
 /// handle_error(io_err);
 /// ```
 ///
+/// # Abstract
+/// Represents all possible errors that can occur during the lifecycle of a VM.
+///
 /// # The Fine Print
 /// Most errors in this enum are wrappers around underlying sub-system errors
 /// (like [`std::io::Error`] or `hitz_hal::HalError`). They provide a unified
