@@ -504,12 +504,16 @@ fn setup_guest_memory(
     Ok(pml4_gpa)
 }
 
+/// Builds the kernel command line by appending network and vsock parameters.
+/// ⚡ Bolt Optimization: Uses `String::with_capacity` instead of `.to_string()`
+/// to prevent immediate heap reallocations when appending via `write!`.
 fn build_kernel_cmdline(
     guest_mem: &mut GuestMemory,
     config: &VmConfig,
     extras: &BootExtras,
 ) -> Result<(), VmError> {
-    let mut cmdline = config.effective_cmdline().to_string();
+    let mut cmdline = String::with_capacity(config.effective_cmdline().len() + 256);
+    let _ = write!(cmdline, "{}", config.effective_cmdline());
 
     if config.net.is_some() {
         let net_base = VIRTIO_MMIO_BASE + VIRTIO_MMIO_SIZE;
