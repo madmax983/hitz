@@ -1241,9 +1241,11 @@ fn format_error_response(status: hyper::StatusCode, resp: &str, error_prefix: &s
             format!("✗ {error_prefix} ({status})")
         } else {
             let max_len = 200;
-            let display_text = if clean.chars().count() > max_len {
-                let truncated: String = clean.chars().take(max_len).collect();
-                format!("{}...", truncated)
+            let display_text = if let Some((idx, _)) = clean.char_indices().nth(max_len) {
+                let mut s = String::with_capacity(idx + 3);
+                s.push_str(&clean[..idx]);
+                s.push_str("...");
+                s
             } else {
                 clean.to_string()
             };
