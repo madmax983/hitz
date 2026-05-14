@@ -77,3 +77,48 @@ fn havoc_test_notify_race_condition() {
         let _ = handle.await;
     });
 }
+
+#[test]
+fn havoc_serial_read_watch_channel_race() {
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .enable_all()
+        .build()
+        .unwrap();
+
+    let mut buf = SerialBuf::new();
+    let mut reader = buf.reader();
+
+    rt.block_on(async {
+        // Write initial data so the channel version increments.
+        buf.write_all(b"initial").unwrap();
+
+        // Read it. This consumes the data but does NOT update the watch channel's
+        // seen version because `changed().await` isn't called.
+        let data = reader.read_chunk().await.unwrap();
+        assert_eq!(data, b"initial");
+
+        // Now we spawn a background task that writes more data shortly.
+        // It writes exactly when the reader checks `total_written` and finds it empty,
+        // but BEFORE `changed().await` is called.
+        let mut w_buf = buf.clone();
+        let _ = tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            w_buf.write_all(b"second").unwrap();
+        });
+
+        // This read will:
+        // 1. Lock inner, see no data.
+        // 2. Call `borrow_and_update()` (updating the seen version)
+        // 3. Call `changed().await`
+        // 4. Then wake up when "second" is written.
+        //
+        // WITHOUT `borrow_and_update()`, if the sleep above happens before `changed().await`,
+        // the immediate return of `changed().await` consumes the "initial" version bump
+        // but the subsequent wait misses the "second" version bump because it already matched.
+        let next_chunk = tokio::time::timeout(std::time::Duration::from_millis(200), reader.read_chunk()).await;
+
+        let chunk = next_chunk.expect("Havoc: Deadlocked due to missed wakeup!").unwrap();
+        assert_eq!(chunk, b"second");
+    });
+}

@@ -266,6 +266,7 @@ impl SerialReader {
                 }
             }
             // Park until the writer pushes more data or closes.
+            let _ = self.notify_rx.borrow_and_update();
             let _ = self.notify_rx.changed().await;
         }
     }

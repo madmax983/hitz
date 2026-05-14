@@ -1,0 +1,23 @@
+<<<<<<< SEARCH
+        // Now we spawn a background task that writes more data shortly.
+        // It writes exactly when the reader checks `total_written` and finds it empty,
+        // but BEFORE `changed().await` is called.
+        let mut w_buf = buf.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            w_buf.write_all(b"second").unwrap();
+        });
+
+        // This read will:
+=======
+        // Now we spawn a background task that writes more data shortly.
+        // It writes exactly when the reader checks `total_written` and finds it empty,
+        // but BEFORE `changed().await` is called.
+        let mut w_buf = buf.clone();
+        let _ = tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            w_buf.write_all(b"second").unwrap();
+        });
+
+        // This read will:
+>>>>>>> REPLACE
