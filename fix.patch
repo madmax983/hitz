@@ -1,0 +1,10 @@
+--- crates/hitz-daemon/Cargo.toml
++++ crates/hitz-daemon/Cargo.toml
+@@ -12,6 +12,7 @@
+ hitz-api.workspace = true
+ hitz-hal.workspace = true
+ hitz-vmm.workspace = true
++hitz-boot.workspace = true
+ thiserror.workspace = true
+ tracing.workspace = true
+ tokio.workspace = true
