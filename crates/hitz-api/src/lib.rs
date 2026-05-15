@@ -493,3 +493,9 @@ pub use rightsizer::{ResizeRecommendation, RightSizer};
 mod terraform;
 #[cfg(feature = "terraform")]
 pub use terraform::ToTerraform;
+
+#[cfg(feature = "eco")]
+/// Eco Sizing impact module.
+pub mod eco;
+#[cfg(feature = "eco")]
+pub use eco::{EcoImpact, EcoSizer};
