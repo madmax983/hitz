@@ -215,4 +215,49 @@ mod tests {
             "The CPU spike should eventually trigger a Critical health status."
         );
     }
+
+    #[test]
+    #[allow(clippy::expect_used, clippy::float_cmp)]
+    fn test_simulator_table_driven() {
+        struct TestCase {
+            profile: WorkloadProfile,
+            expected_cpu: Option<f32>,
+            expected_memory_growth: bool,
+        }
+
+        let test_cases = vec![
+            TestCase {
+                profile: WorkloadProfile::Idle,
+                expected_cpu: Some(5.0),
+                expected_memory_growth: false,
+            },
+            TestCase {
+                profile: WorkloadProfile::CpuSpike,
+                expected_cpu: None, // Changes per iteration
+                expected_memory_growth: false,
+            },
+            TestCase {
+                profile: WorkloadProfile::MemoryLeak,
+                expected_cpu: Some(10.0),
+                expected_memory_growth: true,
+            },
+        ];
+
+        for case in test_cases {
+            let mut sim = VmSimulator::new(case.profile);
+            let metrics_0 = sim.next().expect("next should return Some");
+            let metrics_1 = sim.next().expect("next should return Some");
+
+            if let Some(expected_cpu) = case.expected_cpu {
+                assert_eq!(metrics_0.cpu.total_pct, expected_cpu);
+                assert_eq!(metrics_1.cpu.total_pct, expected_cpu);
+            }
+
+            if case.expected_memory_growth {
+                assert!(metrics_1.memory.used_bytes > metrics_0.memory.used_bytes);
+            } else {
+                assert_eq!(metrics_1.memory.used_bytes, metrics_0.memory.used_bytes);
+            }
+        }
+    }
 }

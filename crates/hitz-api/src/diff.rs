@@ -1,19 +1,15 @@
-//! Calculating differences and rates between telemetry snapshots.
+//! Metrics difference calculator.
 //!
 //! # Abstract
-//! This module provides the tools necessary to calculate rates of change
-//! over time (per second) by comparing two telemetry snapshots. This is essential
-//! for converting raw, monotonically increasing counters (like bytes read from disk)
-//! into actionable metrics (like bytes/sec).
+//! Calculates the rate of change (e.g., ops/sec, bytes/sec) between two
+//! `MetricsSnapshot` instances.
 //!
 //! # The Hero's Journey
 //!
 //! ```rust
-//! use hitz_api::{MetricsSnapshot, CpuMetrics, MemoryMetrics};
-//! use hitz_api::{CalculateDiff, MetricsDiff};
+//! use hitz_api::{CalculateDiff, MetricsSnapshot, CpuMetrics, MemoryMetrics};
 //!
-//! // We create an initial snapshot at time = 1000ms
-//! let snap1 = MetricsSnapshot {
+//! let t1 = MetricsSnapshot {
 //!     timestamp_ms: 1000,
 //!     cpu: CpuMetrics { total_pct: 10.0, per_core: vec![10.0], load_avg: [0.1, 0.1, 0.1] },
 //!     memory: MemoryMetrics { total_bytes: 1024, used_bytes: 512, free_bytes: 512, buffers_bytes: 0, cached_bytes: 0, swap_total: 0, swap_used: 0 },
@@ -22,68 +18,56 @@
 //!     processes: vec![],
 //! };
 //!
-//! // We create a second snapshot 2 seconds later (time = 3000ms)
-//! let snap2 = MetricsSnapshot {
-//!     timestamp_ms: 3000,
-//!     cpu: CpuMetrics { total_pct: 15.0, per_core: vec![15.0], load_avg: [0.1, 0.1, 0.1] },
-//!     memory: MemoryMetrics { total_bytes: 1024, used_bytes: 512, free_bytes: 512, buffers_bytes: 0, cached_bytes: 0, swap_total: 0, swap_used: 0 },
-//!     disks: vec![],
-//!     networks: vec![],
-//!     processes: vec![],
-//! };
+//! let mut t2 = t1.clone();
+//! t2.timestamp_ms = 2000;
 //!
-//! // Calculate the difference!
-//! let diff = snap2.diff(&snap1).expect("snap2 is newer than snap1");
-//!
-//! // The diff accurately reflects the 2-second elapsed time
-//! assert_eq!(diff.elapsed_secs, 2.0);
+//! let diff = t2.diff(&t1).expect("should succeed");
+//! assert_eq!(diff.elapsed_secs, 1.0);
 //! ```
 
 use crate::MetricsSnapshot;
 use serde::{Deserialize, Serialize};
 
-/// Calculated rates of change per second between two [`MetricsSnapshot`]s.
+/// The computed difference between two metrics snapshots.
 ///
 /// # Abstract
-/// This struct holds the unified record of calculated rates. It takes the absolute
-/// counter values from a `MetricsSnapshot` (like total bytes read) and normalizes
-/// them into a "per second" rate.
-/// The calculated rate of change between two telemetry snapshots.
-///
-/// # Abstract
-/// Contains the elapsed time and the calculated per-second rates for disk I/O
-/// and network traffic. This is essential for converting monotonically increasing
-/// counters into actionable rates.
+/// This struct holds the calculated rates (per second) for discrete events
+/// like disk reads or network packets. It is essential for generating Prometheus
+/// gauges that reflect current throughput rather than just raw counters.
 ///
 /// ## Examples
 ///
 /// ```rust
-/// use hitz_api::MetricsDiff;
+/// use hitz_api::{MetricsDiff, DiskRate};
 ///
 /// let diff = MetricsDiff {
 ///     elapsed_secs: 1.0,
-///     disks: vec![],
+///     disks: vec![DiskRate {
+///         name: "vda".to_string(),
+///         reads_per_sec: 100.0,
+///         writes_per_sec: 50.0,
+///         read_bytes_per_sec: 4096.0,
+///         write_bytes_per_sec: 2048.0,
+///     }],
 ///     networks: vec![],
 /// };
 ///
-/// assert_eq!(diff.elapsed_secs, 1.0);
+/// assert_eq!(diff.disks[0].reads_per_sec, 100.0);
 /// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MetricsDiff {
-    /// Time elapsed between the two snapshots in seconds.
+    /// The actual elapsed time between the two snapshots, in seconds.
     pub elapsed_secs: f64,
-    /// Disk rates of change (per second).
+    /// Rate of change for all active disks.
     pub disks: Vec<DiskRate>,
-    /// Network rates of change (per second).
+    /// Rate of change for all active network interfaces.
     pub networks: Vec<NetRate>,
 }
 
-/// Per-disk I/O rates (per second).
-/// I/O rate of change for a single block device.
+/// Disk throughput and IOPs rates.
 ///
 /// # Abstract
-/// Represents the calculated per-second rate of read and write operations,
-/// as well as the throughput in bytes per second for a specific disk.
+/// Represents the per-second activity of a single block device.
 ///
 /// ## Examples
 ///
@@ -91,35 +75,33 @@ pub struct MetricsDiff {
 /// use hitz_api::DiskRate;
 ///
 /// let rate = DiskRate {
-///     name: "vda".to_string(),
-///     reads_per_sec: 100.0,
-///     writes_per_sec: 50.0,
-///     read_bytes_per_sec: 1024.0,
-///     write_bytes_per_sec: 512.0,
+///     name: "vdb".to_string(),
+///     reads_per_sec: 10.0,
+///     writes_per_sec: 0.0,
+///     read_bytes_per_sec: 512.0,
+///     write_bytes_per_sec: 0.0,
 /// };
 ///
-/// assert_eq!(rate.name, "vda");
+/// assert_eq!(rate.name, "vdb");
 /// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DiskRate {
-    /// Device name.
+    /// Device name (e.g., "vda").
     pub name: String,
-    /// Reads per second.
+    /// Read operations per second.
     pub reads_per_sec: f64,
-    /// Writes per second.
+    /// Write operations per second.
     pub writes_per_sec: f64,
-    /// Bytes read per second.
+    /// Read bytes per second.
     pub read_bytes_per_sec: f64,
-    /// Bytes written per second.
+    /// Write bytes per second.
     pub write_bytes_per_sec: f64,
 }
 
-/// Per-network-interface I/O rates (per second).
-/// Network rate of change for a single interface.
+/// Network throughput and packet rates.
 ///
 /// # Abstract
-/// Represents the calculated per-second rate of received and transmitted
-/// packets, as well as the throughput in bytes per second for a specific network interface.
+/// Represents the per-second activity of a single network interface.
 ///
 /// ## Examples
 ///
@@ -138,40 +120,44 @@ pub struct DiskRate {
 /// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct NetRate {
-    /// Interface name.
+    /// Interface name (e.g., "eth0").
     pub interface: String,
-    /// Bytes received per second.
+    /// Received bytes per second.
     pub rx_bytes_per_sec: f64,
-    /// Bytes transmitted per second.
+    /// Transmitted bytes per second.
     pub tx_bytes_per_sec: f64,
-    /// Packets received per second.
+    /// Received packets per second.
     pub rx_packets_per_sec: f64,
-    /// Packets transmitted per second.
+    /// Transmitted packets per second.
     pub tx_packets_per_sec: f64,
 }
 
-/// A trait for types that can calculate the difference between themselves.
+/// Trait to calculate the difference between two temporal states.
 ///
 /// # Abstract
-/// This trait establishes a standardized interface for objects that represent
-/// an absolute value at a specific point in time (like a snapshot of counters)
-/// to produce a relative rate of change when compared to an older snapshot.
+/// Anything that implements this trait can be compared against a previous version
+/// of itself to generate a delta or rate of change.
 ///
-/// # The Hero's Journey
+/// ## Examples
 ///
 /// ```rust
 /// use hitz_api::CalculateDiff;
 ///
-/// struct MyCounter { time: u64, count: u64 }
-/// struct MyRate { ops_per_sec: f64 }
+/// struct MyCounter {
+///     time: u64,
+///     count: u64,
+/// }
+///
+/// struct MyRate {
+///     ops_per_sec: f64,
+/// }
 ///
 /// impl CalculateDiff for MyCounter {
 ///     type Diff = MyRate;
-///
-///     fn diff(&self, previous: &Self) -> Option<Self::Diff> {
-///         if self.time <= previous.time { return None; }
-///         let elapsed = (self.time - previous.time) as f64;
-///         let ops = (self.count.saturating_sub(previous.count)) as f64;
+///     fn diff(&self, prev: &Self) -> Option<Self::Diff> {
+///         if self.time <= prev.time { return None; }
+///         let elapsed = (self.time - prev.time) as f64;
+///         let ops = (self.count.saturating_sub(prev.count)) as f64;
 ///         Some(MyRate { ops_per_sec: ops / elapsed })
 ///     }
 /// }
@@ -179,7 +165,7 @@ pub struct NetRate {
 /// let c1 = MyCounter { time: 1, count: 10 };
 /// let c2 = MyCounter { time: 3, count: 50 }; // 40 ops over 2 seconds
 ///
-/// let rate = c2.diff(&c1).unwrap();
+/// let rate = c2.diff(&c1).expect("should succeed");
 /// assert_eq!(rate.ops_per_sec, 20.0);
 /// ```
 pub trait CalculateDiff {
@@ -212,7 +198,7 @@ pub trait CalculateDiff {
     /// let mut t2 = t1.clone();
     /// t2.timestamp_ms = 2000;
     ///
-    /// let diff = t2.diff(&t1).unwrap();
+    /// let diff = t2.diff(&t1).expect("should succeed");
     /// assert_eq!(diff.elapsed_secs, 1.0);
     /// ```
     fn diff(&self, previous: &Self) -> Option<Self::Diff>;
@@ -288,12 +274,17 @@ impl CalculateDiff for MetricsSnapshot {
 }
 
 #[cfg(test)]
-#[allow(clippy::float_cmp, clippy::unreadable_literal, clippy::expect_used)]
+#[allow(
+    clippy::float_cmp,
+    clippy::unreadable_literal,
+    clippy::expect_used,
+    clippy::cast_precision_loss
+)]
 mod tests {
     use super::*;
     use crate::{CpuMetrics, DiskMetrics, MemoryMetrics, NetMetrics};
 
-    fn dummy_snapshot(time_ms: u64, disk_io: u64, net_io: u64) -> MetricsSnapshot {
+    pub fn dummy_snapshot(time_ms: u64, disk_io: u64, net_io: u64) -> MetricsSnapshot {
         MetricsSnapshot {
             timestamp_ms: time_ms,
             cpu: CpuMetrics {
@@ -327,6 +318,70 @@ mod tests {
                 tx_errors: 0,
             }],
             processes: vec![],
+        }
+    }
+
+    #[test]
+    fn test_diff_timestamps_table_driven() {
+        struct TestCase {
+            t1_ms: u64,
+            t2_ms: u64,
+            expect_none: bool,
+        }
+
+        let test_cases = vec![
+            TestCase {
+                t1_ms: 1000,
+                t2_ms: 2000,
+                expect_none: false,
+            },
+            TestCase {
+                t1_ms: 2000,
+                t2_ms: 1000,
+                expect_none: true,
+            },
+            TestCase {
+                t1_ms: 1000,
+                t2_ms: 1000,
+                expect_none: true,
+            },
+            TestCase {
+                t1_ms: 0,
+                t2_ms: 1,
+                expect_none: false,
+            },
+            TestCase {
+                t1_ms: 1,
+                t2_ms: 0,
+                expect_none: true,
+            },
+        ];
+
+        for case in test_cases {
+            let t1 = dummy_snapshot(case.t1_ms, 100, 50);
+            let t2 = dummy_snapshot(case.t2_ms, 200, 100);
+
+            let diff_result = t2.diff(&t1);
+
+            if case.expect_none {
+                assert!(
+                    diff_result.is_none(),
+                    "Expected None for t1={} t2={}",
+                    case.t1_ms,
+                    case.t2_ms
+                );
+            } else {
+                assert!(
+                    diff_result.is_some(),
+                    "Expected Some for t1={} t2={}",
+                    case.t1_ms,
+                    case.t2_ms
+                );
+
+                let diff = diff_result.expect("should be some");
+                let expected_elapsed = (case.t2_ms - case.t1_ms) as f64 / 1000.0;
+                assert_eq!(diff.elapsed_secs, expected_elapsed);
+            }
         }
     }
 
