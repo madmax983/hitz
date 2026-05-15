@@ -23,12 +23,49 @@ pub struct StateStore {
 
 impl StateStore {
     /// Create a new store, creating `base_dir` if it does not exist.
+    ///
+    /// # Abstract
+    /// Initializes a `StateStore` instance, ensuring the root directory for VM state is created on disk.
+    ///
+    /// # The Hero's Journey
+    /// ```rust
+    /// use hitz_daemon::state_store::StateStore;
+    /// use std::path::PathBuf;
+    ///
+    /// let dir = tempfile::tempdir().unwrap();
+    /// let store = StateStore::new(dir.path().to_path_buf()).unwrap();
+    /// ```
     pub fn new(base_dir: PathBuf) -> Result<Self, DaemonError> {
         std::fs::create_dir_all(&base_dir)?;
         Ok(Self { base_dir })
     }
 
     /// Persist VM config to `<base_dir>/<id>/config.json`.
+    ///
+    /// # Abstract
+    /// Serializes a `VmConfig` to JSON and writes it to the VM's dedicated state directory.
+    ///
+    /// # The Hero's Journey
+    /// ```rust,no_run
+    /// # use hitz_daemon::state_store::StateStore;
+    /// # use std::path::PathBuf;
+    /// # use hitz_api::{VmConfig, GuestAgentMode};
+    /// # let dir = tempfile::tempdir().unwrap();
+    /// # let store = StateStore::new(dir.path().to_path_buf()).unwrap();
+    /// let config = VmConfig {
+    ///     kernel_path: PathBuf::from("/boot/vmlinux"),
+    ///     initramfs_path: None,
+    ///     disk_path: None,
+    ///     ram_mib: 512,
+    ///     cpus: 2,
+    ///     cmdline: None,
+    ///     net: None,
+    ///     ports: vec![],
+    ///     guest_cid: 3,
+    ///     guest_agent: GuestAgentMode::Disabled,
+    /// };
+    /// store.save_config("my-vm", &config).unwrap();
+    /// ```
     pub fn save_config(&self, id: &str, config: &VmConfig) -> Result<(), DaemonError> {
         let dir = self.vm_dir(id);
         std::fs::create_dir_all(&dir)?;
@@ -39,6 +76,20 @@ impl StateStore {
     }
 
     /// Persist VM state to `<base_dir>/<id>/state.json`.
+    ///
+    /// # Abstract
+    /// Serializes the current `VmState` (e.g. Running, Stopped) to JSON, updating the timestamp
+    /// while preserving the original creation time.
+    ///
+    /// # The Hero's Journey
+    /// ```rust,no_run
+    /// # use hitz_daemon::state_store::StateStore;
+    /// # use hitz_api::VmState;
+    /// # use std::path::PathBuf;
+    /// # let dir = tempfile::tempdir().unwrap();
+    /// # let store = StateStore::new(dir.path().to_path_buf()).unwrap();
+    /// store.save_state("my-vm", VmState::Running).unwrap();
+    /// ```
     ///
     /// Preserves `created_at` from any existing `state.json`.
     pub fn save_state(&self, id: &str, state: VmState) -> Result<(), DaemonError> {
@@ -58,6 +109,18 @@ impl StateStore {
     }
 
     /// Delete the VM directory for `id`. No-op if directory does not exist.
+    ///
+    /// # Abstract
+    /// Completely removes a VM's state directory and all its contents (config.json, state.json) from disk.
+    ///
+    /// # The Hero's Journey
+    /// ```rust,no_run
+    /// # use hitz_daemon::state_store::StateStore;
+    /// # use std::path::PathBuf;
+    /// # let dir = tempfile::tempdir().unwrap();
+    /// # let store = StateStore::new(dir.path().to_path_buf()).unwrap();
+    /// store.delete("my-vm").unwrap();
+    /// ```
     pub fn delete(&self, id: &str) -> Result<(), DaemonError> {
         match std::fs::remove_dir_all(self.vm_dir(id)) {
             Ok(()) => Ok(()),
@@ -67,6 +130,22 @@ impl StateStore {
     }
 
     /// Load all valid VMs from the state directory.
+    ///
+    /// # Abstract
+    /// Scans the base directory for VM configurations, returning a list of all successfully
+    /// parsed VMs along with their state. Used on daemon startup to recover existing VMs.
+    ///
+    /// # The Hero's Journey
+    /// ```rust,no_run
+    /// # use hitz_daemon::state_store::StateStore;
+    /// # use std::path::PathBuf;
+    /// # let dir = tempfile::tempdir().unwrap();
+    /// # let store = StateStore::new(dir.path().to_path_buf()).unwrap();
+    /// let vms = store.load_all().unwrap();
+    /// for (id, config, state) in vms {
+    ///     println!("Recovered VM {id} in state {state:?}");
+    /// }
+    /// ```
     ///
     /// Rules:
     /// - Missing or corrupt `config.json` → skip (log warning).

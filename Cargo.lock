@@ -751,6 +751,7 @@ dependencies = [
  "bytes",
  "crossbeam-channel",
  "hitz-api",
+ "hitz-boot",
  "hitz-devices",
  "hitz-hal",
  "hitz-vmm",
