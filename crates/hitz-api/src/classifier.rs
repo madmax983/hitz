@@ -54,19 +54,15 @@ impl WorkloadClassifier for MetricsSnapshot {
             }
         }
 
-        let mut disk_io_heavy = false;
-        for disk in &diff.disks {
-            if disk.reads_per_sec > 500.0 || disk.writes_per_sec > 500.0 {
-                disk_io_heavy = true;
-            }
-        }
+        let disk_io_heavy = diff
+            .disks
+            .iter()
+            .any(|disk| disk.reads_per_sec > 500.0 || disk.writes_per_sec > 500.0);
 
-        let mut net_io_heavy = false;
-        for net in &diff.networks {
-            if net.rx_bytes_per_sec > 10_000_000.0 || net.tx_bytes_per_sec > 10_000_000.0 {
-                net_io_heavy = true;
-            }
-        }
+        let net_io_heavy = diff
+            .networks
+            .iter()
+            .any(|net| net.rx_bytes_per_sec > 10_000_000.0 || net.tx_bytes_per_sec > 10_000_000.0);
 
         if disk_io_heavy || net_io_heavy {
             return WorkloadClass::IoHeavy;

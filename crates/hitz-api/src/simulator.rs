@@ -201,14 +201,10 @@ mod tests {
         assert_eq!(metrics_0.assess_health().status, HealthStatus::Healthy);
 
         // Advance to a point where CPU spikes over 90%
-        let mut critical_found = false;
-        for _ in 0..10 {
+        let critical_found = (0..10).any(|_| {
             let metrics = sim.next().expect("simulator iteration failed");
-            if metrics.assess_health().status == HealthStatus::Critical {
-                critical_found = true;
-                break;
-            }
-        }
+            metrics.assess_health().status == HealthStatus::Critical
+        });
 
         assert!(
             critical_found,
