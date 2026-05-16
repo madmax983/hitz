@@ -504,12 +504,16 @@ fn setup_guest_memory(
     Ok(pml4_gpa)
 }
 
+/// ⚡ Bolt Optimization: Pre-allocate the kernel cmdline string to prevent
+/// multiple heap reallocations during the VM boot hot path.
 fn build_kernel_cmdline(
     guest_mem: &mut GuestMemory,
     config: &VmConfig,
     extras: &BootExtras,
 ) -> Result<(), VmError> {
-    let mut cmdline = config.effective_cmdline().to_string();
+    let effective = config.effective_cmdline();
+    let mut cmdline = String::with_capacity(effective.len() + 256);
+    cmdline.push_str(effective);
 
     if config.net.is_some() {
         let net_base = VIRTIO_MMIO_BASE + VIRTIO_MMIO_SIZE;
