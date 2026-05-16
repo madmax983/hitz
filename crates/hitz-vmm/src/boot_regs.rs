@@ -531,4 +531,62 @@ mod tests {
         assert_eq!(regs.rflags, 0x2);
         assert_eq!(regs.rax, 0);
     }
+
+    struct DummyVcpu {
+        regs_set: Option<StandardRegs>,
+    }
+
+    impl Vcpu for DummyVcpu {
+        fn run(&mut self) -> Result<hitz_hal::VcpuExit, hitz_hal::HalError> {
+            Ok(hitz_hal::VcpuExit::Halt)
+        }
+
+        fn get_regs(&self) -> Result<StandardRegs, hitz_hal::HalError> {
+            Ok(self.regs_set.clone().unwrap_or_default())
+        }
+
+        fn set_regs(&mut self, regs: &StandardRegs) -> Result<(), hitz_hal::HalError> {
+            self.regs_set = Some(regs.clone());
+            Ok(())
+        }
+
+        fn get_sregs(&self) -> Result<hitz_hal::SpecialRegs, hitz_hal::HalError> {
+            unimplemented!()
+        }
+
+        fn set_sregs(&mut self, _sregs: &hitz_hal::SpecialRegs) -> Result<(), hitz_hal::HalError> {
+            Ok(())
+        }
+
+        fn inject_interrupt(&mut self, _vector: u8) -> Result<(), hitz_hal::HalError> {
+            Ok(())
+        }
+
+        fn request_interrupt_window(&mut self) -> Result<(), hitz_hal::HalError> {
+            Ok(())
+        }
+
+        type CancelHandle = ();
+
+        fn cancel_handle(&self) -> Self::CancelHandle {}
+
+        fn cancel_via(_handle: &Self::CancelHandle) -> Result<(), hitz_hal::HalError> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn should_configure_regs_successfully() {
+        let mut vcpu = DummyVcpu { regs_set: None };
+        let entry_point = Gpa::new(0x10_0000);
+        let boot_params_gpa = Gpa::new(0x7000);
+
+        configure_regs(&mut vcpu, entry_point, boot_params_gpa).expect("configure_regs failed");
+
+        let regs = vcpu.get_regs().expect("failed to get regs");
+        assert_eq!(regs.rip, 0x10_0000);
+        assert_eq!(regs.rsi, 0x7000);
+        assert_eq!(regs.rsp, 0);
+        assert_eq!(regs.rflags, 0x2);
+    }
 }
