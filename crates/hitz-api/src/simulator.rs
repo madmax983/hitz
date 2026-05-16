@@ -16,7 +16,7 @@
 //!
 //! // 2. Consume metrics over time
 //! for _ in 0..5 {
-//!     let metrics = simulator.next().expect("Simulator never ends");
+//!     let metrics = simulator.next()?;
 //!     println!("Current CPU: {}%", metrics.cpu.total_pct);
 //! }
 //! ```
@@ -130,12 +130,12 @@ impl Iterator for VmSimulator {
 }
 
 #[cfg(test)]
+#[allow(clippy::unnecessary_wraps)]
 mod tests {
     use super::*;
 
     #[test]
-    #[allow(clippy::expect_used)]
-    fn test_cpu_spike_profile() {
+    fn test_cpu_spike_profile() -> Result<(), Box<dyn std::error::Error>> {
         let mut sim = VmSimulator::new(WorkloadProfile::CpuSpike);
         let mut max_cpu = 0.0;
         for _ in 0..10 {
@@ -150,15 +150,15 @@ mod tests {
             max_cpu > 90.0,
             "CPU did not spike above 90%, max was {max_cpu}"
         );
+        Ok(())
     }
 
     #[test]
-    #[allow(clippy::expect_used)]
-    fn test_memory_leak_profile() {
+    fn test_memory_leak_profile() -> Result<(), Box<dyn std::error::Error>> {
         let mut sim = VmSimulator::new(WorkloadProfile::MemoryLeak);
-        let metrics_0 = sim.next().expect("next should return Some");
-        let metrics_1 = sim.next().expect("next should return Some");
-        let metrics_2 = sim.next().expect("next should return Some");
+        let metrics_0 = sim.next().ok_or("next should return Some")?;
+        let metrics_1 = sim.next().ok_or("next should return Some")?;
+        let metrics_2 = sim.next().ok_or("next should return Some")?;
 
         assert!(
             metrics_1.memory.used_bytes > metrics_0.memory.used_bytes,
@@ -168,14 +168,15 @@ mod tests {
             metrics_2.memory.used_bytes > metrics_1.memory.used_bytes,
             "Memory used should increase between iteration 1 and 2"
         );
+        Ok(())
     }
 
     #[test]
     #[allow(clippy::expect_used, clippy::float_cmp)]
-    fn test_idle_profile() {
+    fn test_idle_profile() -> Result<(), Box<dyn std::error::Error>> {
         let mut sim = VmSimulator::new(WorkloadProfile::Idle);
-        let metrics_0 = sim.next().expect("next should return Some");
-        let metrics_1 = sim.next().expect("next should return Some");
+        let metrics_0 = sim.next().ok_or("next should return Some")?;
+        let metrics_1 = sim.next().ok_or("next should return Some")?;
 
         assert_eq!(
             metrics_0.cpu.total_pct, metrics_1.cpu.total_pct,
@@ -185,25 +186,24 @@ mod tests {
             metrics_0.memory.used_bytes, metrics_1.memory.used_bytes,
             "Memory usage should be stable for Idle profile"
         );
+        Ok(())
     }
 
     #[cfg(feature = "health_check")]
     #[test]
-    #[allow(clippy::unwrap_used)]
-    #[allow(clippy::expect_used)]
-    fn test_simulator_health_check_integration() {
+    fn test_simulator_health_check_integration() -> Result<(), Box<dyn std::error::Error>> {
         use crate::{HealthCheck, HealthStatus};
 
         let mut sim = VmSimulator::new(WorkloadProfile::CpuSpike);
 
         // Iteration 0: Idle baseline (cpu ~0)
-        let metrics_0 = sim.next().expect("simulator iteration failed");
+        let metrics_0 = sim.next().ok_or("next should return Some")?;
         assert_eq!(metrics_0.assess_health().status, HealthStatus::Healthy);
 
         // Advance to a point where CPU spikes over 90%
         let mut critical_found = false;
         for _ in 0..10 {
-            let metrics = sim.next().expect("simulator iteration failed");
+            let metrics = sim.next().ok_or("next should return Some")?;
             if metrics.assess_health().status == HealthStatus::Critical {
                 critical_found = true;
                 break;
@@ -214,5 +214,6 @@ mod tests {
             critical_found,
             "The CPU spike should eventually trigger a Critical health status."
         );
+        Ok(())
     }
 }

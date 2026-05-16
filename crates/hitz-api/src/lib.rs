@@ -79,8 +79,7 @@ mod sentinel;
 pub use sentinel::{ConditionOperator, MetricTarget, SentinelCondition, SentinelRule};
 
 #[cfg(test)]
-#[allow(clippy::expect_used)]
-#[allow(clippy::unwrap_used)]
+#[allow(clippy::unnecessary_wraps)]
 mod tests {
     use super::*;
     use std::path::PathBuf;
@@ -105,7 +104,7 @@ mod tests {
     // ── Phase 12 new tests ────────────────────────────────────────────────────
 
     #[test]
-    fn metrics_snapshot_msgpack_roundtrip() {
+    fn metrics_snapshot_msgpack_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
         let snap = MetricsSnapshot {
             timestamp_ms: 1_700_000_000_000,
             cpu: CpuMetrics {
@@ -126,57 +125,63 @@ mod tests {
             networks: vec![],
             processes: vec![],
         };
-        let encoded = rmp_serde::to_vec(&snap).expect("encode");
-        let decoded: MetricsSnapshot = rmp_serde::from_slice(&encoded).expect("decode");
+        let encoded = rmp_serde::to_vec(&snap)?;
+        let decoded: MetricsSnapshot = rmp_serde::from_slice(&encoded)?;
         assert!((decoded.cpu.total_pct - 12.5).abs() < f32::EPSILON);
         assert_eq!(decoded.memory.total_bytes, 256 * 1024 * 1024);
+        Ok(())
     }
 
     #[test]
-    fn guest_agent_mode_default_is_auto() {
+    fn guest_agent_mode_default_is_auto() -> Result<(), Box<dyn std::error::Error>> {
         let mode: GuestAgentMode = GuestAgentMode::default();
         assert!(matches!(mode, GuestAgentMode::Auto));
+        Ok(())
     }
 
     #[test]
-    fn guest_agent_mode_custom_serde_roundtrip() {
+    fn guest_agent_mode_custom_serde_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
         let mode = GuestAgentMode::Custom(std::path::PathBuf::from("/usr/local/bin/my-agent"));
-        let json = serde_json::to_string(&mode).expect("serialize");
-        let decoded: GuestAgentMode = serde_json::from_str(&json).expect("deserialize");
+        let json = serde_json::to_string(&mode)?;
+        let decoded: GuestAgentMode = serde_json::from_str(&json)?;
         assert_eq!(decoded, mode);
+        Ok(())
     }
 
     #[test]
-    fn guest_agent_mode_disabled_serde_roundtrip() {
+    fn guest_agent_mode_disabled_serde_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
         let mode = GuestAgentMode::Disabled;
-        let json = serde_json::to_string(&mode).expect("serialize");
-        let decoded: GuestAgentMode = serde_json::from_str(&json).expect("deserialize");
+        let json = serde_json::to_string(&mode)?;
+        let decoded: GuestAgentMode = serde_json::from_str(&json)?;
         assert_eq!(decoded, mode);
+        Ok(())
     }
 
     #[test]
-    fn default_config_has_correct_values() {
+    fn default_config_has_correct_values() -> Result<(), Box<dyn std::error::Error>> {
         let json = r#"{"kernel_path": "vmlinux", "ram_mib": 256}"#;
-        let cfg: VmConfig = serde_json::from_str(json).expect("deserialize");
+        let cfg: VmConfig = serde_json::from_str(json)?;
         assert_eq!(cfg.guest_agent, GuestAgentMode::Auto);
         assert_eq!(cfg.guest_cid, DEFAULT_GUEST_CID);
         assert_eq!(cfg.cpus, DEFAULT_CPUS);
+        Ok(())
     }
 
     // ── Existing tests (updated for new VmConfig fields) ─────────────────────
 
     #[test]
-    fn test_port_forward_serde() {
+    fn test_port_forward_serde() -> Result<(), Box<dyn std::error::Error>> {
         let pf = PortForward {
             host_port: 8080,
             guest_port: 80,
         };
-        let json = serde_json::to_string(&pf).expect("serialize");
+        let json = serde_json::to_string(&pf)?;
         assert_eq!(json, r#"{"host_port":8080,"guest_port":80}"#);
+        Ok(())
     }
 
     #[test]
-    fn test_vmconfig_serde() {
+    fn test_vmconfig_serde() -> Result<(), Box<dyn std::error::Error>> {
         let cfg = VmConfig {
             kernel_path: PathBuf::from("vmlinux"),
             initramfs_path: Some(PathBuf::from("initrd")),
@@ -197,87 +202,95 @@ mod tests {
             guest_cid: DEFAULT_GUEST_CID,
             guest_agent: GuestAgentMode::Auto,
         };
-        let json = serde_json::to_string(&cfg).expect("serialize");
-        let restored: VmConfig = serde_json::from_str(&json).expect("deserialize");
+        let json = serde_json::to_string(&cfg)?;
+        let restored: VmConfig = serde_json::from_str(&json)?;
         assert_eq!(cfg, restored);
+        Ok(())
     }
 
     #[test]
-    fn test_create_vm_request_serde() {
+    fn test_create_vm_request_serde() -> Result<(), Box<dyn std::error::Error>> {
         let req = CreateVmRequest {
             config: minimal_config(),
         };
-        let json = serde_json::to_string(&req).expect("serialize");
-        let restored: CreateVmRequest = serde_json::from_str(&json).expect("deserialize");
+        let json = serde_json::to_string(&req)?;
+        let restored: CreateVmRequest = serde_json::from_str(&json)?;
         assert_eq!(req.config, restored.config);
+        Ok(())
     }
 
     #[test]
-    fn test_action_vm_request_serde() {
+    fn test_action_vm_request_serde() -> Result<(), Box<dyn std::error::Error>> {
         let req = ActionVmRequest {
             action: VmAction::Start,
         };
-        let json = serde_json::to_string(&req).expect("serialize");
-        let restored: ActionVmRequest = serde_json::from_str(&json).expect("deserialize");
+        let json = serde_json::to_string(&req)?;
+        let restored: ActionVmRequest = serde_json::from_str(&json)?;
         assert_eq!(req.action, restored.action);
+        Ok(())
     }
 
     #[test]
-    fn test_vminfo_serde() {
+    fn test_vminfo_serde() -> Result<(), Box<dyn std::error::Error>> {
         let info = VmInfo {
             id: "vm-1".to_string(),
             state: VmState::Running,
             config: minimal_config(),
             exit_reason: None,
         };
-        let json = serde_json::to_string(&info).expect("serialize");
-        let restored: VmInfo = serde_json::from_str(&json).expect("deserialize");
+        let json = serde_json::to_string(&info)?;
+        let restored: VmInfo = serde_json::from_str(&json)?;
         assert_eq!(info.id, restored.id);
         assert_eq!(info.state, restored.state);
         assert_eq!(info.config, restored.config);
+        Ok(())
     }
 
     #[test]
-    fn test_apierror_serde() {
+    fn test_apierror_serde() -> Result<(), Box<dyn std::error::Error>> {
         let err = ApiError {
             message: "Not found".to_string(),
         };
-        let json = serde_json::to_string(&err).expect("serialize");
-        let restored: ApiError = serde_json::from_str(&json).expect("deserialize");
+        let json = serde_json::to_string(&err)?;
+        let restored: ApiError = serde_json::from_str(&json)?;
         assert_eq!(err.message, restored.message);
+        Ok(())
     }
 
     #[test]
-    fn test_clone_vm_request_serde() {
+    fn test_clone_vm_request_serde() -> Result<(), Box<dyn std::error::Error>> {
         let req = CloneVmRequest {
             dest_id: "vm-2".to_string(),
         };
-        let json = serde_json::to_string(&req).expect("serialize");
-        let restored: CloneVmRequest = serde_json::from_str(&json).expect("deserialize");
+        let json = serde_json::to_string(&req)?;
+        let restored: CloneVmRequest = serde_json::from_str(&json)?;
         assert_eq!(req.dest_id, restored.dest_id);
+        Ok(())
     }
 
     #[test]
-    fn test_vmconfig_effective_cmdline() {
+    fn test_vmconfig_effective_cmdline() -> Result<(), Box<dyn std::error::Error>> {
         let mut cfg = minimal_config();
         assert_eq!(cfg.effective_cmdline(), DEFAULT_CMDLINE);
         cfg.cmdline = Some("root=/dev/vda".to_string());
         assert_eq!(cfg.effective_cmdline(), "root=/dev/vda");
+        Ok(())
     }
 
     #[test]
-    fn test_vmconfig_default_ports() {
+    fn test_vmconfig_default_ports() -> Result<(), Box<dyn std::error::Error>> {
         let json = r#"{
             "kernel_path": "vmlinux",
             "ram_mib": 256,
             "cpus": 1
         }"#;
-        let cfg: VmConfig = serde_json::from_str(json).expect("deserialize");
+        let cfg: VmConfig = serde_json::from_str(json)?;
         assert!(cfg.ports.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_vmconfig_with_ports() {
+    fn test_vmconfig_with_ports() -> Result<(), Box<dyn std::error::Error>> {
         let cfg = VmConfig {
             ports: vec![PortForward {
                 host_port: 8080,
@@ -285,25 +298,27 @@ mod tests {
             }],
             ..minimal_config()
         };
-        let json = serde_json::to_string(&cfg).expect("serialize");
-        let restored: VmConfig = serde_json::from_str(&json).expect("deserialize");
+        let json = serde_json::to_string(&cfg)?;
+        let restored: VmConfig = serde_json::from_str(&json)?;
         assert_eq!(restored.ports.len(), 1);
         assert_eq!(restored.ports[0].host_port, 8080);
+        Ok(())
     }
 
     #[test]
-    fn test_vmconfig_default_net() {
+    fn test_vmconfig_default_net() -> Result<(), Box<dyn std::error::Error>> {
         let json = r#"{
             "kernel_path": "vmlinux",
             "ram_mib": 256,
             "cpus": 1
         }"#;
-        let cfg: VmConfig = serde_json::from_str(json).expect("deserialize");
+        let cfg: VmConfig = serde_json::from_str(json)?;
         assert!(cfg.net.is_none());
+        Ok(())
     }
 
     #[test]
-    fn test_vmconfig_with_net() {
+    fn test_vmconfig_with_net() -> Result<(), Box<dyn std::error::Error>> {
         let cfg = VmConfig {
             net: Some(NetConfig {
                 mac: Some("AA:BB:CC:DD:EE:FF".to_string()),
@@ -313,39 +328,41 @@ mod tests {
             }),
             ..minimal_config()
         };
-        let json = serde_json::to_string(&cfg).expect("serialize");
-        let restored: VmConfig = serde_json::from_str(&json).expect("deserialize");
+        let json = serde_json::to_string(&cfg)?;
+        let restored: VmConfig = serde_json::from_str(&json)?;
         assert!(restored.net.is_some());
         assert_eq!(
-            restored.net.expect("net").mac.expect("mac"),
+            restored.net.ok_or("net")?.mac.ok_or("mac")?,
             "AA:BB:CC:DD:EE:FF"
         );
+        Ok(())
     }
 
     #[test]
-    fn should_serialize_and_deserialize_metrics_request() {
+    fn should_serialize_and_deserialize_metrics_request() -> Result<(), Box<dyn std::error::Error>>
+    {
         let req = MetricsRequest::Snapshot;
-        let json = serde_json::to_string(&req).expect("serialize/deserialize failed");
-        let deserialized: MetricsRequest =
-            serde_json::from_str(&json).expect("serialize/deserialize failed");
+        let json = serde_json::to_string(&req)?;
+        let deserialized: MetricsRequest = serde_json::from_str(&json)?;
         assert_eq!(req, deserialized);
+        Ok(())
     }
 
     #[test]
-    fn test_cpu_metrics_default_fields() {
+    fn test_cpu_metrics_default_fields() -> Result<(), Box<dyn std::error::Error>> {
         let cpu = CpuMetrics {
             total_pct: 0.0,
             per_core: vec![],
             load_avg: [0.0, 0.0, 0.0],
         };
-        let json = serde_json::to_string(&cpu).expect("serialize/deserialize failed");
-        let decoded: CpuMetrics =
-            serde_json::from_str(&json).expect("serialize/deserialize failed");
+        let json = serde_json::to_string(&cpu)?;
+        let decoded: CpuMetrics = serde_json::from_str(&json)?;
         assert_eq!(cpu, decoded);
+        Ok(())
     }
 
     #[test]
-    fn test_memory_metrics_zero_values() {
+    fn test_memory_metrics_zero_values() -> Result<(), Box<dyn std::error::Error>> {
         let mem = MemoryMetrics {
             total_bytes: 0,
             used_bytes: 0,
@@ -355,14 +372,14 @@ mod tests {
             swap_total: 0,
             swap_used: 0,
         };
-        let json = serde_json::to_string(&mem).expect("serialize/deserialize failed");
-        let decoded: MemoryMetrics =
-            serde_json::from_str(&json).expect("serialize/deserialize failed");
+        let json = serde_json::to_string(&mem)?;
+        let decoded: MemoryMetrics = serde_json::from_str(&json)?;
         assert_eq!(mem, decoded);
+        Ok(())
     }
 
     #[test]
-    fn test_disk_metrics_serialization() {
+    fn test_disk_metrics_serialization() -> Result<(), Box<dyn std::error::Error>> {
         let disk = DiskMetrics {
             name: "sda".to_string(),
             read_bytes: 1024,
@@ -370,14 +387,14 @@ mod tests {
             reads_total: 10,
             writes_total: 20,
         };
-        let json = serde_json::to_string(&disk).expect("serialize/deserialize failed");
-        let decoded: DiskMetrics =
-            serde_json::from_str(&json).expect("serialize/deserialize failed");
+        let json = serde_json::to_string(&disk)?;
+        let decoded: DiskMetrics = serde_json::from_str(&json)?;
         assert_eq!(disk, decoded);
+        Ok(())
     }
 
     #[test]
-    fn test_net_metrics_serialization() {
+    fn test_net_metrics_serialization() -> Result<(), Box<dyn std::error::Error>> {
         let net = NetMetrics {
             interface: "eth0".to_string(),
             rx_bytes: 5000,
@@ -387,14 +404,14 @@ mod tests {
             rx_errors: 0,
             tx_errors: 0,
         };
-        let json = serde_json::to_string(&net).expect("serialize/deserialize failed");
-        let decoded: NetMetrics =
-            serde_json::from_str(&json).expect("serialize/deserialize failed");
+        let json = serde_json::to_string(&net)?;
+        let decoded: NetMetrics = serde_json::from_str(&json)?;
         assert_eq!(net, decoded);
+        Ok(())
     }
 
     #[test]
-    fn test_proc_metrics_serialization() {
+    fn test_proc_metrics_serialization() -> Result<(), Box<dyn std::error::Error>> {
         let proc = ProcMetrics {
             pid: 1,
             name: "systemd".to_string(),
@@ -402,14 +419,14 @@ mod tests {
             rss_bytes: 4096,
             state: 'S',
         };
-        let json = serde_json::to_string(&proc).expect("serialize/deserialize failed");
-        let decoded: ProcMetrics =
-            serde_json::from_str(&json).expect("serialize/deserialize failed");
+        let json = serde_json::to_string(&proc)?;
+        let decoded: ProcMetrics = serde_json::from_str(&json)?;
         assert_eq!(proc, decoded);
+        Ok(())
     }
 
     #[test]
-    fn test_metrics_snapshot_roundtrip() {
+    fn test_metrics_snapshot_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
         let snap = MetricsSnapshot {
             timestamp_ms: 1_680_000_000_000,
             cpu: CpuMetrics {
@@ -452,16 +469,15 @@ mod tests {
         };
 
         // MsgPack roundtrip
-        let encoded_msgpack = rmp_serde::to_vec(&snap).expect("serialize/deserialize failed");
-        let decoded_msgpack: MetricsSnapshot =
-            rmp_serde::from_slice(&encoded_msgpack).expect("serialize/deserialize failed");
+        let encoded_msgpack = rmp_serde::to_vec(&snap)?;
+        let decoded_msgpack: MetricsSnapshot = rmp_serde::from_slice(&encoded_msgpack)?;
         assert_eq!(snap, decoded_msgpack);
 
         // JSON roundtrip
-        let encoded_json = serde_json::to_string(&snap).expect("serialize/deserialize failed");
-        let decoded_json: MetricsSnapshot =
-            serde_json::from_str(&encoded_json).expect("serialize/deserialize failed");
+        let encoded_json = serde_json::to_string(&snap)?;
+        let decoded_json: MetricsSnapshot = serde_json::from_str(&encoded_json)?;
         assert_eq!(snap, decoded_json);
+        Ok(())
     }
 }
 #[cfg(feature = "efficiency")]

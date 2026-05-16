@@ -192,14 +192,14 @@ impl SentinelRule {
 }
 
 #[cfg(test)]
-#[allow(clippy::expect_used)]
+#[allow(clippy::unnecessary_wraps)]
 mod tests {
     use super::*;
     use crate::{CpuMetrics, MemoryMetrics};
 
     #[test]
     #[allow(clippy::too_many_lines)]
-    fn test_sentinel_rule_evaluate_table_driven() {
+    fn test_sentinel_rule_evaluate_table_driven() -> Result<(), Box<dyn std::error::Error>> {
         struct TestCase {
             target: MetricTarget,
             operator: ConditionOperator,
@@ -338,10 +338,11 @@ mod tests {
                 case.operator
             );
         }
+        Ok(())
     }
 
     #[test]
-    fn test_sentinel_rule_evaluate() {
+    fn test_sentinel_rule_evaluate() -> Result<(), Box<dyn std::error::Error>> {
         let rule = SentinelRule {
             name: "High CPU".to_string(),
             condition: SentinelCondition {
@@ -376,5 +377,6 @@ mod tests {
 
         snap.cpu.total_pct = 70.0;
         assert!(!rule.evaluate(&snap));
+        Ok(())
     }
 }

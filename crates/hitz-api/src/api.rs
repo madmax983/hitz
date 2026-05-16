@@ -29,7 +29,7 @@
 //! };
 //!
 //! // 2. Serialize to JSON to send to the daemon over HTTP.
-//! let json = serde_json::to_string(&req).unwrap();
+//! let json = serde_json::to_string(&req).unwrap_or_default();
 //! println!("Sending payload: {}", json);
 //! ```
 
