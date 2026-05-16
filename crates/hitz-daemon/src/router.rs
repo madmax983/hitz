@@ -12,7 +12,7 @@ use bytes::Bytes;
 use hitz_api::{ActionVmRequest, ApiError, CloneVmRequest, CreateVmRequest, VmAction};
 use hitz_hal::Hypervisor;
 use http_body_util::combinators::BoxBody;
-use http_body_util::{BodyExt, Full};
+use http_body_util::{BodyExt, Full, Limited};
 use hyper::body::{Body, Frame};
 use hyper::{Method, Request, Response, StatusCode, body::Incoming};
 use tracing::Instrument as _;
@@ -126,8 +126,7 @@ async fn handle_create<H>(
 where
     H: Hypervisor + Send + Sync + 'static,
 {
-    let body = req
-        .into_body()
+    let body = Limited::new(req.into_body(), 1024 * 1024 * 10)
         .collect()
         .await
         .map_err(|e| DaemonError::Internal(format!("failed to read request body: {e}")))?;
@@ -181,8 +180,7 @@ async fn handle_action<H>(
 where
     H: Hypervisor + Send + Sync + 'static,
 {
-    let body = req
-        .into_body()
+    let body = Limited::new(req.into_body(), 1024 * 1024 * 10)
         .collect()
         .await
         .map_err(|e| DaemonError::Internal(format!("failed to read request body: {e}")))?;
@@ -205,8 +203,7 @@ async fn handle_clone<H>(
 where
     H: Hypervisor + Send + Sync + 'static,
 {
-    let body = req
-        .into_body()
+    let body = Limited::new(req.into_body(), 1024 * 1024 * 10)
         .collect()
         .await
         .map_err(|e| DaemonError::Internal(format!("failed to read request body: {e}")))?;
@@ -313,8 +310,11 @@ mod tests {
     }
 
     async fn extract_body_string(body: BoxBody<Bytes, Infallible>) -> String {
-        use http_body_util::BodyExt;
-        let collected = body.collect().await.expect("collect body");
+        use http_body_util::{BodyExt, Limited};
+        let collected = Limited::new(body, 1024 * 1024 * 10)
+            .collect()
+            .await
+            .expect("collect body");
         let bytes = collected.to_bytes();
         String::from_utf8(bytes.to_vec()).expect("valid utf8")
     }
