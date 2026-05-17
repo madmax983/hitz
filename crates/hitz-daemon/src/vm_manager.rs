@@ -343,34 +343,75 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
     /// # let manager = VmManager::new(hypervisor, state_dir).unwrap();
     /// manager.start_vm("my-vm").expect("Failed to start VM");
     /// ```
+    fn prepare_vm_entry(
+        &self,
+        id: &str,
+    ) -> Result<(VmConfig, Arc<AtomicBool>, SerialBuf, VmInfo), DaemonError> {
+        let mut vms = self
+            .vms
+            .lock()
+            .map_err(|e| DaemonError::Internal(e.to_string()))?;
+        let entry = vms
+            .get_mut(id)
+            .ok_or_else(|| DaemonError::NotFound(id.to_string()))?;
+
+        if entry.state != VmState::Created {
+            return Err(DaemonError::InvalidState {
+                id: id.to_string(),
+                state: entry.state,
+                expected: "Created".to_string(),
+            });
+        }
+
+        let flag = Arc::new(AtomicBool::new(false));
+        entry.stop_flag = Some(flag.clone());
+        entry.state = VmState::Running;
+
+        let serial_buf = SerialBuf::new();
+        entry.serial_buf = Some(serial_buf.clone());
+
+        Ok((entry.config.clone(), flag, serial_buf, entry.to_info(id)))
+    }
+
+    fn record_vm_memory_gauge(ram_mib: u32, vm_id: &str) {
+        let meter = opentelemetry::global::meter("hitz");
+        let memory_gauge = meter
+            .u64_gauge("hitz.vm.memory_bytes")
+            .with_description("Guest RAM in bytes at VM start")
+            .build();
+        memory_gauge.record(
+            u64::from(ram_mib) * 1024 * 1024,
+            &[KeyValue::new("vm.id", vm_id.to_string())],
+        );
+    }
+
+    fn setup_vsock_channels(
+        vm_id: String,
+        boot_config: &VmConfig,
+        shutdown_rx: tokio::sync::watch::Receiver<bool>,
+    ) -> hitz_vmm::BootExtras {
+        if matches!(
+            boot_config.guest_agent,
+            hitz_api::GuestAgentMode::Auto | hitz_api::GuestAgentMode::Custom(_)
+        ) {
+            let (handle, rx_receiver, tx_sender) = hitz_vmm::VsockIoHandle::new_pair();
+            drop(tokio::spawn(crate::vsock_server::run_metrics_task(
+                vm_id,
+                handle.tx_rx,
+                handle.rx_tx,
+                shutdown_rx,
+            )));
+            hitz_vmm::BootExtras {
+                vsock_channels: Some((rx_receiver, tx_sender)),
+            }
+        } else {
+            hitz_vmm::BootExtras::none()
+        }
+    }
+
     #[allow(clippy::significant_drop_tightening, clippy::too_many_lines)]
     pub fn start_vm(&self, id: &str) -> Result<VmInfo, DaemonError> {
-        let (config, stop_flag, serial_buf, info) = {
-            let mut vms = self
-                .vms
-                .lock()
-                .map_err(|e| DaemonError::Internal(e.to_string()))?;
-            let entry = vms
-                .get_mut(id)
-                .ok_or_else(|| DaemonError::NotFound(id.to_string()))?;
-
-            if entry.state != VmState::Created {
-                return Err(DaemonError::InvalidState {
-                    id: id.to_string(),
-                    state: entry.state,
-                    expected: "Created".to_string(),
-                });
-            }
-
-            let flag = Arc::new(AtomicBool::new(false));
-            entry.stop_flag = Some(flag.clone());
-            entry.state = VmState::Running;
-
-            let serial_buf = SerialBuf::new();
-            entry.serial_buf = Some(serial_buf.clone());
-
-            (entry.config.clone(), flag, serial_buf, entry.to_info(id))
-        };
+        let (config, stop_flag, serial_buf, info) = self.prepare_vm_entry(id)?;
         // Mutex released here — spawn_blocking must not hold it.
 
         // Persist Running state before spawning the VM task.
@@ -380,17 +421,7 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
         let boot_config = inject_guest_agent(config, id);
 
         // Record guest RAM size as a one-shot gauge.
-        {
-            let meter = opentelemetry::global::meter("hitz");
-            let memory_gauge = meter
-                .u64_gauge("hitz.vm.memory_bytes")
-                .with_description("Guest RAM in bytes at VM start")
-                .build();
-            memory_gauge.record(
-                u64::from(boot_config.ram_mib) * 1024 * 1024,
-                &[KeyValue::new("vm.id", id.to_string())],
-            );
-        }
+        Self::record_vm_memory_gauge(boot_config.ram_mib, id);
 
         // Increment the running-VM count.
         self.vm_count.add(1, &[KeyValue::new("state", "running")]);
@@ -405,26 +436,8 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
         // The host-facing ends are consumed by the async metrics task;
         // the device-facing ends are passed to boot_and_run via BootExtras.
         // On-demand pull is a future enhancement; only push-to-OTel is wired here.
-        let extras = if matches!(
-            boot_config.guest_agent,
-            hitz_api::GuestAgentMode::Auto | hitz_api::GuestAgentMode::Custom(_)
-        ) {
-            let (handle, rx_receiver, tx_sender) = hitz_vmm::VsockIoHandle::new_pair();
-            // Spawn the async metrics task with the host-facing channel ends.
-            // The task runs until the channels close (VM exit) or shutdown.
-            let shutdown_rx = self.shutdown_rx.clone();
-            drop(tokio::spawn(crate::vsock_server::run_metrics_task(
-                vm_id.clone(),
-                handle.tx_rx,
-                handle.rx_tx,
-                shutdown_rx,
-            )));
-            hitz_vmm::BootExtras {
-                vsock_channels: Some((rx_receiver, tx_sender)),
-            }
-        } else {
-            hitz_vmm::BootExtras::none()
-        };
+        let extras =
+            Self::setup_vsock_channels(vm_id.clone(), &boot_config, self.shutdown_rx.clone());
 
         let store_exit = Arc::clone(&self.store);
 
