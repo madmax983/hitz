@@ -493,3 +493,9 @@ pub use rightsizer::{ResizeRecommendation, RightSizer};
 mod terraform;
 #[cfg(feature = "terraform")]
 pub use terraform::ToTerraform;
+
+#[cfg(feature = "kubernetes")]
+/// Kubernetes Pod Manifest Exporter module.
+mod kubernetes;
+#[cfg(feature = "kubernetes")]
+pub use kubernetes::ToKubernetes;
