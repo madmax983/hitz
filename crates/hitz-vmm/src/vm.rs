@@ -509,7 +509,8 @@ fn build_kernel_cmdline(
     config: &VmConfig,
     extras: &BootExtras,
 ) -> Result<(), VmError> {
-    let mut cmdline = config.effective_cmdline().to_string();
+    let mut cmdline = String::with_capacity(256);
+    cmdline.push_str(config.effective_cmdline());
 
     if config.net.is_some() {
         let net_base = VIRTIO_MMIO_BASE + VIRTIO_MMIO_SIZE;
