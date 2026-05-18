@@ -1,0 +1,62 @@
+--- crates/hitz-daemon/src/router.rs
++++ crates/hitz-daemon/src/router.rs
+@@ -126,8 +126,7 @@
+ where
+     H: Hypervisor + Send + Sync + 'static,
+ {
+-    let body = req
+-        .into_body()
++    let body = http_body_util::Limited::new(req.into_body(), 1024 * 1024)
+         .collect()
+         .await
+         .map_err(|e| DaemonError::Internal(format!("failed to read request body: {e}")))?;
+@@ -181,8 +180,7 @@
+ where
+     H: Hypervisor + Send + Sync + 'static,
+ {
+-    let body = req
+-        .into_body()
++    let body = http_body_util::Limited::new(req.into_body(), 1024 * 1024)
+         .collect()
+         .await
+         .map_err(|e| DaemonError::Internal(format!("failed to read request body: {e}")))?;
+@@ -205,8 +203,7 @@
+ where
+     H: Hypervisor + Send + Sync + 'static,
+ {
+-    let body = req
+-        .into_body()
++    let body = http_body_util::Limited::new(req.into_body(), 1024 * 1024)
+         .collect()
+         .await
+         .map_err(|e| DaemonError::Internal(format!("failed to read request body: {e}")))?;
+@@ -315,6 +312,17 @@
+         let bytes = collected.to_bytes();
+         String::from_utf8(bytes.to_vec()).expect("valid utf8")
+     }
++
++    #[tokio::test]
++    async fn test_exploit_deserialization_bomb() {
++        use bytes::Bytes;
++        use http_body_util::{BodyExt, Full};
++
++        let chunk = vec![0u8; 1024 * 1024 * 2]; // 2MB
++        let body = Full::new(Bytes::from(chunk));
++        let result = http_body_util::Limited::new(body, 1024 * 1024).collect().await;
++        assert!(result.is_err(), "Deserialization bomb should have been caught by Limited");
++    }
+
+     #[tokio::test]
+     async fn should_format_error_response() {
+--- crates/hitz-cli/src/main.rs
++++ crates/hitz-cli/src/main.rs
+@@ -1633,8 +1633,8 @@
+     let mut body = resp.into_body();
+
+     if !status.is_success() {
+-        let collected = body.collect().await.context("read error body")?.to_bytes();
+-        let text = String::from_utf8_lossy(&collected);
++        let bytes_result = http_body_util::Limited::new(body, 1024 * 1024).collect().await;
++        let text = match bytes_result { Ok(c) => String::from_utf8_lossy(&c.to_bytes()).to_string(), Err(_) => "Error reading response body".to_string() };
+         anyhow::bail!("serial stream failed ({status}): {text}");
+     }
