@@ -22,6 +22,23 @@ pub const ARP_OP_REQUEST: u16 = 1;
 pub const ARP_OP_REPLY: u16 = 2;
 
 /// Parsed Ethernet header.
+///
+/// # Abstract
+/// Represents the fundamental routing information found at the beginning of
+/// an Ethernet frame, including the destination MAC, source MAC, and the
+/// `EtherType` indicating the payload protocol.
+///
+/// # The Hero's Journey
+/// ```rust
+/// use hitz_net::ethernet::{EthHeader, ETHERTYPE_IPV4};
+///
+/// let header = EthHeader {
+///     dst_mac: [0xFF; 6],
+///     src_mac: [0x00; 6],
+///     ethertype: ETHERTYPE_IPV4,
+/// };
+/// assert_eq!(header.ethertype, ETHERTYPE_IPV4);
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EthHeader {
     /// Destination MAC address.
@@ -34,6 +51,23 @@ pub struct EthHeader {
 
 /// Parse an Ethernet header from a raw frame.
 ///
+/// # Abstract
+/// Extracts the destination MAC, source MAC, and `EtherType` from the first 14 bytes
+/// of an Ethernet frame.
+///
+/// # The Hero's Journey
+/// ```rust
+/// use hitz_net::ethernet::parse_eth_header;
+///
+/// let mut frame = vec![0xFF; 14];
+/// frame[12] = 0x08; // IPv4
+/// frame[13] = 0x00;
+///
+/// let header = parse_eth_header(&frame).unwrap();
+/// assert_eq!(header.ethertype, 0x0800);
+/// ```
+///
+/// # The Fine Print
 /// Returns `None` if the frame is shorter than [`ETH_HEADER_LEN`] (14 bytes).
 #[must_use]
 pub fn parse_eth_header(frame: &[u8]) -> Option<EthHeader> {
@@ -56,6 +90,20 @@ pub fn parse_eth_header(frame: &[u8]) -> Option<EthHeader> {
 
 /// Build an Ethernet frame from its components.
 ///
+/// # Abstract
+/// Constructs a raw Ethernet II frame by prepending a 14-byte header to the provided
+/// payload. Useful for sending raw packets out over `WinTun`.
+///
+/// # The Hero's Journey
+/// ```rust
+/// use hitz_net::ethernet::{build_eth_frame, ETHERTYPE_IPV4};
+///
+/// let payload = b"hello";
+/// let frame = build_eth_frame(&[0x00; 6], &[0xFF; 6], ETHERTYPE_IPV4, payload);
+/// assert_eq!(frame.len(), 14 + payload.len());
+/// ```
+///
+/// # The Fine Print
 /// Returns a `Vec<u8>` containing the 14-byte Ethernet header followed
 /// by the payload.
 #[must_use]
@@ -75,6 +123,20 @@ pub fn build_eth_frame(
 
 /// Strip the Ethernet header and return the payload.
 ///
+/// # Abstract
+/// Advances past the 14-byte Ethernet header to return a slice pointing directly
+/// to the inner payload (e.g., an IPv4 or ARP packet).
+///
+/// # The Hero's Journey
+/// ```rust
+/// use hitz_net::ethernet::strip_eth_header;
+///
+/// let frame = vec![0x00; 20];
+/// let payload = strip_eth_header(&frame).unwrap();
+/// assert_eq!(payload.len(), 6);
+/// ```
+///
+/// # The Fine Print
 /// Returns `None` if the frame is shorter than [`ETH_HEADER_LEN`].
 #[must_use]
 pub fn strip_eth_header(frame: &[u8]) -> Option<&[u8]> {
@@ -86,6 +148,22 @@ pub fn strip_eth_header(frame: &[u8]) -> Option<&[u8]> {
 
 /// Detect the `EtherType` from an IP packet's version nibble.
 ///
+/// # Abstract
+/// Inspects the first byte of a raw IP packet to determine if it is an IPv4 or IPv6
+/// packet, returning the corresponding `EtherType`.
+///
+/// # The Hero's Journey
+/// ```rust
+/// use hitz_net::ethernet::{ethertype_from_ip, ETHERTYPE_IPV4, ETHERTYPE_IPV6};
+///
+/// let ipv4_packet = vec![0x45, 0x00];
+/// assert_eq!(ethertype_from_ip(&ipv4_packet), ETHERTYPE_IPV4);
+///
+/// let ipv6_packet = vec![0x60, 0x00];
+/// assert_eq!(ethertype_from_ip(&ipv6_packet), ETHERTYPE_IPV6);
+/// ```
+///
+/// # The Fine Print
 /// Examines the high nibble of the first byte:
 /// - 4 -> [`ETHERTYPE_IPV4`]
 /// - 6 -> [`ETHERTYPE_IPV6`]
@@ -103,6 +181,34 @@ pub fn ethertype_from_ip(packet: &[u8]) -> u16 {
 
 /// Build an ARP reply for a gateway ARP request.
 ///
+/// # Abstract
+/// Checks if the incoming frame is actually an ARP request for `gateway_ip`.
+/// If so, constructs a new Ethernet frame containing an ARP reply asserting
+/// that `gateway_ip` is at `gateway_mac`.
+///
+/// # The Hero's Journey
+/// ```rust
+/// use hitz_net::ethernet::{build_arp_reply, ETHERTYPE_ARP};
+///
+/// // Create a dummy ARP request frame.
+/// let mut arp_req = vec![0x00; 42];
+/// arp_req[12] = (ETHERTYPE_ARP >> 8) as u8;
+/// arp_req[13] = (ETHERTYPE_ARP & 0xFF) as u8;
+/// arp_req[20] = 0x00; // Opcode: Request (1)
+/// arp_req[21] = 0x01;
+/// // Set Target IP to 192.168.100.1
+/// arp_req[38..42].copy_from_slice(&[192, 168, 100, 1]);
+///
+/// let reply = build_arp_reply(
+///     &arp_req,
+///     &[0x02, 0x00, 0x00, 0x00, 0x00, 0x01],
+///     &[192, 168, 100, 1]
+/// ).unwrap();
+///
+/// assert_eq!(reply.len(), 42);
+/// ```
+///
+/// # The Fine Print
 /// Validates the ARP request frame and returns an Ethernet-framed ARP
 /// reply if:
 /// - The frame has a valid Ethernet + ARP structure (>= 42 bytes)
@@ -193,6 +299,20 @@ pub fn build_arp_reply(
 
 /// Generate a random locally-administered unicast MAC address.
 ///
+/// # Abstract
+/// Generates a MAC address suitable for virtual network interfaces, ensuring
+/// the locally administered bit is set and the multicast bit is cleared.
+///
+/// # The Hero's Journey
+/// ```rust
+/// use hitz_net::ethernet::random_mac;
+///
+/// let mac = random_mac();
+/// assert_eq!(mac[0] & 1, 0); // Unicast
+/// assert_eq!(mac[0] & 2, 2); // Locally administered
+/// ```
+///
+/// # The Fine Print
 /// The result has:
 /// - Bit 0 of byte 0 = 0 (unicast)
 /// - Bit 1 of byte 0 = 1 (locally administered)
@@ -259,6 +379,20 @@ pub fn parse_mac(s: &str) -> Result<[u8; 6], String> {
 
 /// Parse a CIDR notation string like "192.168.100.1/24".
 ///
+/// # Abstract
+/// Splits a CIDR notation string into its constituent 4-byte IPv4 address array and
+/// an integer prefix length.
+///
+/// # The Hero's Journey
+/// ```rust
+/// use hitz_net::ethernet::parse_cidr;
+///
+/// let (ip, prefix) = parse_cidr("192.168.100.1/24").unwrap();
+/// assert_eq!(ip, [192, 168, 100, 1]);
+/// assert_eq!(prefix, 24);
+/// ```
+///
+/// # The Fine Print
 /// Returns the IPv4 address and prefix length.
 ///
 /// # Errors
@@ -469,7 +603,7 @@ mod tests {
 }
 
 #[cfg(test)]
-mod tests {
+mod test_short {
     use super::*;
 
     #[test]
@@ -535,7 +669,7 @@ mod tests {
 }
 
 #[cfg(test)]
-mod tests {
+mod test_mac {
     use super::*;
 
     #[test]

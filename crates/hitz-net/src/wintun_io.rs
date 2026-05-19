@@ -25,9 +25,22 @@ use crate::ethernet;
 
 /// Handle to a running network I/O thread.
 ///
+/// # Abstract
 /// Keeps the thread alive until explicitly stopped via [`stop_and_join`]
 /// or dropped. The [`Drop`] implementation signals the thread to stop
 /// and joins it, ensuring clean shutdown.
+///
+/// # The Hero's Journey
+/// ```rust,no_run
+/// # use hitz_net::start_net_io;
+/// # use crossbeam_channel::unbounded;
+/// # let (tx_sender, tx_receiver) = unbounded();
+/// # let (rx_sender, rx_receiver) = unbounded();
+/// let handle = start_net_io(
+///     "hitz-test", "192.168.100.1/24", [0;6], [0;6], [0;4], tx_receiver, rx_sender
+/// ).unwrap();
+/// handle.stop_and_join();
+/// ```
 ///
 /// [`stop_and_join`]: NetIoHandle::stop_and_join
 pub struct NetIoHandle {
@@ -64,6 +77,10 @@ impl Drop for NetIoHandle {
 }
 
 /// Errors from network I/O operations.
+///
+/// # Abstract
+/// Defines the various failure states that can occur when initializing
+/// or interacting with the `WinTun` adapter.
 #[derive(Debug, thiserror::Error)]
 pub enum NetIoError {
     /// `WinTun` library or adapter error.
@@ -79,9 +96,31 @@ pub enum NetIoError {
 
 /// Start the network I/O thread.
 ///
+/// # Abstract
 /// Creates a `WinTun` adapter, configures the host-side IP address,
 /// starts a `WinTun` session, and spawns a background thread that
 /// bridges frames between the crossbeam channels and the adapter.
+///
+/// # The Hero's Journey
+/// ```rust,no_run
+/// use hitz_net::start_net_io;
+/// use crossbeam_channel::unbounded;
+///
+/// let (tx_sender, tx_receiver) = unbounded();
+/// let (rx_sender, rx_receiver) = unbounded();
+///
+/// let handle = start_net_io(
+///     "hitz-test",
+///     "192.168.100.1/24",
+///     [0x02, 0x00, 0x00, 0x00, 0x00, 0x01],
+///     [0x02, 0x00, 0x00, 0x00, 0x00, 0x02],
+///     [192, 168, 100, 1],
+///     tx_receiver,
+///     rx_sender,
+/// ).expect("Failed to start net IO");
+///
+/// handle.stop_and_join();
+/// ```
 ///
 /// # Arguments
 ///
@@ -288,6 +327,18 @@ fn prefix_to_ipv4_mask(prefix: u8) -> Ipv4Addr {
 }
 
 /// Convert a CIDR prefix length to a dotted-decimal subnet mask string.
+///
+/// # Abstract
+/// Translates a CIDR prefix length (e.g., 24) into its standard IPv4 subnet
+/// mask string representation (e.g., "255.255.255.0").
+///
+/// # The Hero's Journey
+/// ```rust
+/// use hitz_net::wintun_io::prefix_to_mask;
+///
+/// assert_eq!(prefix_to_mask(24), "255.255.255.0");
+/// assert_eq!(prefix_to_mask(8), "255.0.0.0");
+/// ```
 #[must_use]
 pub fn prefix_to_mask(prefix: u8) -> String {
     let mask = prefix_to_ipv4_mask(prefix);
