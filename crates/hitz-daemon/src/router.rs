@@ -126,8 +126,8 @@ async fn handle_create<H>(
 where
     H: Hypervisor + Send + Sync + 'static,
 {
-    let body = req
-        .into_body()
+    let limit = 2 * 1024 * 1024;
+    let body = http_body_util::Limited::new(req.into_body(), limit)
         .collect()
         .await
         .map_err(|e| DaemonError::Internal(format!("failed to read request body: {e}")))?;
@@ -181,8 +181,8 @@ async fn handle_action<H>(
 where
     H: Hypervisor + Send + Sync + 'static,
 {
-    let body = req
-        .into_body()
+    let limit = 2 * 1024 * 1024;
+    let body = http_body_util::Limited::new(req.into_body(), limit)
         .collect()
         .await
         .map_err(|e| DaemonError::Internal(format!("failed to read request body: {e}")))?;
@@ -205,8 +205,8 @@ async fn handle_clone<H>(
 where
     H: Hypervisor + Send + Sync + 'static,
 {
-    let body = req
-        .into_body()
+    let limit = 2 * 1024 * 1024;
+    let body = http_body_util::Limited::new(req.into_body(), limit)
         .collect()
         .await
         .map_err(|e| DaemonError::Internal(format!("failed to read request body: {e}")))?;
