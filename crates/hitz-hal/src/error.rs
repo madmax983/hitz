@@ -110,3 +110,84 @@ pub enum HalError {
         message: String,
     },
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn hal_error_display_formatting() {
+        let err = HalError::CreatePartition("insuffient resources".into());
+        assert_eq!(
+            err.to_string(),
+            "failed to create partition: insuffient resources"
+        );
+
+        let err = HalError::SetupPartition("invalid property".into());
+        assert_eq!(
+            err.to_string(),
+            "failed to set partition property: invalid property"
+        );
+
+        let err = HalError::MapMemory {
+            gpa: 0x1000,
+            size: 4096,
+            reason: "overlapping region".into(),
+        };
+        assert_eq!(
+            err.to_string(),
+            "failed to map guest memory at GPA 0x1000, size 0x1000: overlapping region"
+        );
+
+        let err = HalError::UnmapMemory {
+            gpa: 0x2000,
+            reason: "not mapped".into(),
+        };
+        assert_eq!(
+            err.to_string(),
+            "failed to unmap guest memory at GPA 0x2000: not mapped"
+        );
+
+        let err = HalError::CreateVcpu {
+            vcpu_id: 1,
+            reason: "exceeds limit".into(),
+        };
+        assert_eq!(err.to_string(), "failed to create vCPU 1: exceeds limit");
+
+        let err = HalError::VcpuRun("triple fault".into());
+        assert_eq!(err.to_string(), "vCPU run failed: triple fault");
+
+        let err = HalError::VcpuCancel("already canceled".into());
+        assert_eq!(err.to_string(), "failed to cancel vCPU: already canceled");
+
+        let err = HalError::RegisterAccess("invalid register".into());
+        assert_eq!(err.to_string(), "register access failed: invalid register");
+
+        let err = HalError::InterruptRequest("queue full".into());
+        assert_eq!(err.to_string(), "interrupt request failed: queue full");
+
+        let err = HalError::GuestMem {
+            gpa: 0x3000,
+            reason: "out of bounds".into(),
+        };
+        assert_eq!(
+            err.to_string(),
+            "guest memory access at GPA 0x3000: out of bounds"
+        );
+
+        let err = HalError::InjectInterrupt("APIC disabled".into());
+        assert_eq!(err.to_string(), "interrupt injection failed: APIC disabled");
+
+        let err = HalError::NotAvailable("kvm not found".into());
+        assert_eq!(err.to_string(), "hypervisor not available: kvm not found");
+
+        let err = HalError::Platform {
+            code: 42,
+            message: "Win32 exception".into(),
+        };
+        assert_eq!(
+            err.to_string(),
+            "platform error (code 0x2a): Win32 exception"
+        );
+    }
+}
