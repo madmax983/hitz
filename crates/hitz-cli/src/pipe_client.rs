@@ -115,11 +115,10 @@ where
         .context("send request failed")?;
 
     let status = resp.status();
-    let resp_body = resp
-        .into_body()
+    let resp_body = http_body_util::Limited::new(resp.into_body(), 2 * 1024 * 1024)
         .collect()
         .await
-        .context("read response body")?
+        .map_err(|e| anyhow::anyhow!("read response body: {e}"))?
         .to_bytes();
     let text = String::from_utf8_lossy(&resp_body).to_string();
 

@@ -1634,7 +1634,11 @@ async fn handle_vm_serial(args: &VmIdArgs) -> Result<()> {
     let mut body = resp.into_body();
 
     if !status.is_success() {
-        let collected = body.collect().await.context("read error body")?.to_bytes();
+        let collected = http_body_util::Limited::new(body, 2 * 1024 * 1024)
+            .collect()
+            .await
+            .map_err(|e| anyhow::anyhow!("read error body: {e}"))?
+            .to_bytes();
         let text = String::from_utf8_lossy(&collected);
         anyhow::bail!("serial stream failed ({status}): {text}");
     }
