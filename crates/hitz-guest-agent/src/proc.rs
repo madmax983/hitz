@@ -49,25 +49,30 @@ pub fn cpu_pct(prev: &CpuSample, curr: &CpuSample) -> f32 {
 /// Parse `/proc/stat` into per-CPU samples (index 0 = aggregate "cpu" line).
 #[must_use]
 pub fn parse_proc_stat_sample(content: &str) -> Vec<CpuSample> {
-    content
-        .lines()
-        .filter(|l| l.starts_with("cpu"))
-        .map(|line| {
-            let mut nums = line
-                .split_ascii_whitespace()
-                .skip(1)
-                .map(|s| s.parse().unwrap_or(0));
-            CpuSample {
-                user: nums.next().unwrap_or(0),
-                nice: nums.next().unwrap_or(0),
-                system: nums.next().unwrap_or(0),
-                idle: nums.next().unwrap_or(0),
-                iowait: nums.next().unwrap_or(0),
-                irq: nums.next().unwrap_or(0),
-                softirq: nums.next().unwrap_or(0),
-            }
-        })
-        .collect()
+    // ⚡ Bolt Optimization: Pre-allocate capacity for CPU samples
+    // Usually 1 aggregate + N cores. We assume up to 64 cores for a microVM to avoid reallocations.
+    let mut samples = Vec::with_capacity(65);
+    samples.extend(
+        content
+            .lines()
+            .filter(|l| l.starts_with("cpu"))
+            .map(|line| {
+                let mut nums = line
+                    .split_ascii_whitespace()
+                    .skip(1)
+                    .map(|s| s.parse().unwrap_or(0));
+                CpuSample {
+                    user: nums.next().unwrap_or(0),
+                    nice: nums.next().unwrap_or(0),
+                    system: nums.next().unwrap_or(0),
+                    idle: nums.next().unwrap_or(0),
+                    iowait: nums.next().unwrap_or(0),
+                    irq: nums.next().unwrap_or(0),
+                    softirq: nums.next().unwrap_or(0),
+                }
+            }),
+    );
+    samples
 }
 
 /// Parse `/proc/meminfo` into [`MemoryMetrics`].
@@ -123,27 +128,28 @@ pub fn parse_proc_meminfo(content: &str) -> Option<MemoryMetrics> {
 /// Only includes devices with entries present in the file.
 #[must_use]
 pub fn parse_proc_diskstats(content: &str) -> Vec<DiskMetrics> {
-    content
-        .lines()
-        .filter_map(|line| {
-            let mut cols = line.split_ascii_whitespace();
-            let name = cols.nth(2)?.to_string();
-            let reads = cols.next()?.parse::<u64>().ok()?;
-            let _reads_merged = cols.next()?;
-            let read_sec = cols.next()?.parse::<u64>().ok()?;
-            let _ms_reading = cols.next()?;
-            let writes = cols.next()?.parse::<u64>().ok()?;
-            let _writes_merged = cols.next()?;
-            let write_sec = cols.next()?.parse::<u64>().ok()?;
-            Some(DiskMetrics {
-                name,
-                reads_total: reads,
-                writes_total: writes,
-                read_bytes: read_sec.saturating_mul(512),
-                write_bytes: write_sec.saturating_mul(512),
-            })
+    // ⚡ Bolt Optimization: Pre-allocate capacity for disks to prevent intermediate reallocations.
+    // 4 is a reasonable upper bound for microVM block devices.
+    let mut disks = Vec::with_capacity(4);
+    disks.extend(content.lines().filter_map(|line| {
+        let mut cols = line.split_ascii_whitespace();
+        let name = cols.nth(2)?.to_string();
+        let reads = cols.next()?.parse::<u64>().ok()?;
+        let _reads_merged = cols.next()?;
+        let read_sec = cols.next()?.parse::<u64>().ok()?;
+        let _ms_reading = cols.next()?;
+        let writes = cols.next()?.parse::<u64>().ok()?;
+        let _writes_merged = cols.next()?;
+        let write_sec = cols.next()?.parse::<u64>().ok()?;
+        Some(DiskMetrics {
+            name,
+            reads_total: reads,
+            writes_total: writes,
+            read_bytes: read_sec.saturating_mul(512),
+            write_bytes: write_sec.saturating_mul(512),
         })
-        .collect()
+    }));
+    disks
 }
 
 /// Parse `/proc/net/dev` into a list of [`NetMetrics`].
@@ -151,29 +157,29 @@ pub fn parse_proc_diskstats(content: &str) -> Vec<DiskMetrics> {
 /// Skips the two header lines and the loopback interface.
 #[must_use]
 pub fn parse_proc_net_dev(content: &str) -> Vec<NetMetrics> {
-    content
-        .lines()
-        .skip(2)
-        .filter_map(|line| {
-            let (iface, stats) = line.split_once(':')?;
-            let iface = iface.trim().to_string();
-            if iface == "lo" {
-                return None;
-            }
-            let mut cols = stats
-                .split_ascii_whitespace()
-                .map(|s| s.parse().unwrap_or(0));
-            Some(NetMetrics {
-                interface: iface,
-                rx_bytes: cols.next().unwrap_or(0),
-                rx_packets: cols.next().unwrap_or(0),
-                rx_errors: cols.next().unwrap_or(0),
-                tx_bytes: cols.nth(5).unwrap_or(0),
-                tx_packets: cols.next().unwrap_or(0),
-                tx_errors: cols.next().unwrap_or(0),
-            })
+    // ⚡ Bolt Optimization: Pre-allocate capacity for network interfaces to prevent intermediate reallocations.
+    // 4 is a reasonable upper bound for microVM network interfaces.
+    let mut interfaces = Vec::with_capacity(4);
+    interfaces.extend(content.lines().skip(2).filter_map(|line| {
+        let (iface, stats) = line.split_once(':')?;
+        let iface = iface.trim().to_string();
+        if iface == "lo" {
+            return None;
+        }
+        let mut cols = stats
+            .split_ascii_whitespace()
+            .map(|s| s.parse().unwrap_or(0));
+        Some(NetMetrics {
+            interface: iface,
+            rx_bytes: cols.next().unwrap_or(0),
+            rx_packets: cols.next().unwrap_or(0),
+            rx_errors: cols.next().unwrap_or(0),
+            tx_bytes: cols.nth(5).unwrap_or(0),
+            tx_packets: cols.next().unwrap_or(0),
+            tx_errors: cols.next().unwrap_or(0),
         })
-        .collect()
+    }));
+    interfaces
 }
 
 #[cfg(test)]
