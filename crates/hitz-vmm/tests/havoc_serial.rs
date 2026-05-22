@@ -1,3 +1,4 @@
+#![allow(missing_docs)]
 #![allow(clippy::unwrap_used)]
 use hitz_vmm::SerialBuf;
 use proptest::prelude::*;

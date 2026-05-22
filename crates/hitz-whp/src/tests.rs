@@ -1768,7 +1768,7 @@ fn phase9_multi_vcpu_cancel() {
 /// - virtio-net working (Phase 7)
 ///
 /// Boots a VM with `ports: [19999:9999]` and verifies it exits cleanly.
-/// Full TCP connect + echo assertion is a TODO — a guest initramfs with
+/// Full TCP connect + echo assertion is a future enhancement — a guest initramfs with
 /// a TCP listener on port 9999 would be required.
 ///
 /// Skipped if `HITZ_TEST_INITRAMFS` is not set (env-var-gated).

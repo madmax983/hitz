@@ -1,3 +1,4 @@
+#![allow(missing_docs)]
 use hitz_devices::{MmioBus, SerialDevice};
 use hitz_hal::GuestMemAccess;
 use hitz_hal::{Gpa, HalError, MmioExit, SpecialRegs, StandardRegs, Vcpu, VcpuExit};
