@@ -493,3 +493,9 @@ pub use rightsizer::{ResizeRecommendation, RightSizer};
 mod terraform;
 #[cfg(feature = "terraform")]
 pub use terraform::ToTerraform;
+
+#[cfg(feature = "mermaid")]
+/// Mermaid.js architecture diagram generation module.
+mod mermaid;
+#[cfg(feature = "mermaid")]
+pub use mermaid::ToMermaid;
