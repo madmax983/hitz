@@ -1,0 +1,675 @@
+/app/crates/hitz-hal/src/newtypes.rs:
+    1|       |//! Strongly-typed newtypes for domain values.
+    2|       |//!
+    3|       |//! Raw primitives invite bugs (swapping a GPA for a size, an IRQ for a vCPU ID).
+    4|       |//! Newtypes make those mistakes compile-time errors.
+    5|       |
+    6|       |use std::fmt;
+    7|       |
+    8|       |use uuid::Uuid;
+    9|       |
+   10|       |/// Unique identifier for a virtual machine.
+   11|       |///
+   12|       |/// # Abstract
+   13|       |///
+   14|       |/// Wraps a UUID to uniquely identify a VM instance. Prevents mixing up
+   15|       |/// VM IDs with other UUIDs or strings.
+   16|       |///
+   17|       |/// # The Hero's Journey
+   18|       |///
+   19|       |/// ```rust
+   20|       |/// use hitz_hal::VmId;
+   21|       |///
+   22|       |/// let id1 = VmId::new();
+   23|       |/// let id2 = VmId::new();
+   24|       |/// assert_ne!(id1, id2);
+   25|       |/// println!("Created VM with ID: {}", id1);
+   26|       |/// ```
+   27|       |#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+   28|       |pub struct VmId(Uuid);
+   29|       |
+   30|       |impl VmId {
+   31|       |    /// Create a new random VM identifier.
+   32|       |    #[must_use]
+   33|      5|    pub fn new() -> Self {
+   34|      5|        Self(Uuid::new_v4())
+   35|      5|    }
+   36|       |
+   37|       |    /// Get the inner UUID.
+   38|       |    #[must_use]
+   39|      1|    pub const fn as_uuid(&self) -> &Uuid {
+   40|      1|        &self.0
+   41|      1|    }
+   42|       |}
+   43|       |
+   44|       |impl Default for VmId {
+   45|      2|    fn default() -> Self {
+   46|      2|        Self::new()
+   47|      2|    }
+   48|       |}
+   49|       |
+   50|       |impl fmt::Display for VmId {
+   51|      1|    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+   52|      1|        write!(f, "{}", self.0)
+   53|      1|    }
+   54|       |}
+   55|       |
+   56|       |/// Virtual CPU identifier within a partition.
+   57|       |///
+   58|       |/// # Abstract
+   59|       |///
+   60|       |/// Strongly-typed identifier for a vCPU.
+   61|       |///
+   62|       |/// # The Hero's Journey
+   63|       |///
+   64|       |/// ```rust
+   65|       |/// use hitz_hal::VcpuId;
+   66|       |///
+   67|       |/// let vcpu_id = VcpuId::new(0);
+   68|       |/// assert_eq!(vcpu_id.as_u32(), 0);
+   69|       |/// println!("Starting {}", vcpu_id);
+   70|       |/// ```
+   71|       |#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+   72|       |pub struct VcpuId(u32);
+   73|       |
+   74|       |impl VcpuId {
+   75|       |    /// Create a new vCPU identifier.
+   76|       |    #[must_use]
+   77|      1|    pub const fn new(id: u32) -> Self {
+   78|      1|        Self(id)
+   79|      1|    }
+   80|       |
+   81|       |    /// Get the raw vCPU index.
+   82|       |    #[must_use]
+   83|      1|    pub const fn as_u32(&self) -> u32 {
+   84|      1|        self.0
+   85|      1|    }
+   86|       |}
+   87|       |
+   88|       |impl fmt::Display for VcpuId {
+   89|      1|    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+   90|      1|        write!(f, "vcpu-{}", self.0)
+   91|      1|    }
+   92|       |}
+   93|       |
+   94|       |/// Guest Physical Address.
+   95|       |///
+   96|       |/// # Abstract
+   97|       |///
+   98|       |/// Represents an address in the guest's physical memory space. Prevents
+   99|       |/// accidental mix-ups with host physical addresses, host virtual addresses,
+  100|       |/// or guest virtual addresses.
+  101|       |///
+  102|       |/// # The Hero's Journey
+  103|       |///
+  104|       |/// ```rust
+  105|       |/// use hitz_hal::Gpa;
+  106|       |///
+  107|       |/// let base = Gpa::new(0x1000);
+  108|       |/// let offset = base.offset(0x500);
+  109|       |/// assert_eq!(offset.as_u64(), 0x1500);
+  110|       |/// assert_eq!(offset.page_base().as_u64(), 0x1000);
+  111|       |/// ```
+  112|       |#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+  113|       |pub struct Gpa(u64);
+  114|       |
+  115|       |impl Gpa {
+  116|       |    /// Create a new guest physical address.
+  117|       |    #[must_use]
+  118|      4|    pub const fn new(addr: u64) -> Self {
+  119|      4|        Self(addr)
+  120|      4|    }
+  121|       |
+  122|       |    /// Get the raw address value.
+  123|       |    #[must_use]
+  124|      0|    pub const fn as_u64(&self) -> u64 {
+  125|      0|        self.0
+  126|      0|    }
+  127|       |
+  128|       |    /// Add an offset to this address.
+  129|       |    #[must_use]
+  130|      1|    pub const fn offset(&self, bytes: u64) -> Self {
+  131|      1|        Self(self.0 + bytes)
+  132|      1|    }
+  133|       |
+  134|       |    /// Calculate the page-aligned base (4 KiB pages).
+  135|       |    #[must_use]
+  136|      1|    pub const fn page_base(&self) -> Self {
+  137|      1|        Self(self.0 & !0xFFF)
+  138|      1|    }
+  139|       |
+  140|       |    /// Get the offset within a 4 KiB page.
+  141|       |    #[must_use]
+  142|      1|    pub const fn page_offset(&self) -> u64 {
+  143|      1|        self.0 & 0xFFF
+  144|      1|    }
+  145|       |}
+  146|       |
+  147|       |impl fmt::Display for Gpa {
+  148|      0|    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+  149|      0|        write!(f, "0x{:016x}", self.0)
+  150|      0|    }
+  151|       |}
+  152|       |
+  153|       |/// Interrupt request line number.
+  154|       |///
+  155|       |/// # Abstract
+  156|       |///
+  157|       |/// Strongly typed wrapper for an IRQ number.
+  158|       |///
+  159|       |/// # The Hero's Journey
+  160|       |///
+  161|       |/// ```rust
+  162|       |/// use hitz_hal::IrqLine;
+  163|       |///
+  164|       |/// let timer_irq = IrqLine::new(0);
+  165|       |/// assert_eq!(timer_irq.as_u8(), 0);
+  166|       |/// ```
+  167|       |#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+  168|       |pub struct IrqLine(u8);
+  169|       |
+  170|       |impl IrqLine {
+  171|       |    /// Create a new IRQ line.
+  172|       |    #[must_use]
+  173|      1|    pub const fn new(irq: u8) -> Self {
+  174|      1|        Self(irq)
+  175|      1|    }
+  176|       |
+  177|       |    /// Get the raw IRQ number.
+  178|       |    #[must_use]
+  179|      1|    pub const fn as_u8(&self) -> u8 {
+  180|      1|        self.0
+  181|      1|    }
+  182|       |}
+  183|       |
+  184|       |impl fmt::Display for IrqLine {
+  185|      1|    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+  186|      1|        write!(f, "IRQ{}", self.0)
+  187|      1|    }
+  188|       |}
+  189|       |
+  190|       |/// Slot index for MMIO device registration.
+  191|       |///
+  192|       |/// # Abstract
+  193|       |///
+  194|       |/// Identifies a registered MMIO region or device slot.
+  195|       |///
+  196|       |/// # The Hero's Journey
+  197|       |///
+  198|       |/// ```rust
+  199|       |/// use hitz_hal::MmioSlot;
+  200|       |///
+  201|       |/// let slot = MmioSlot::new(1);
+  202|       |/// assert_eq!(slot.as_u16(), 1);
+  203|       |/// ```
+  204|       |#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+  205|       |pub struct MmioSlot(u16);
+  206|       |
+  207|       |impl MmioSlot {
+  208|       |    /// Create a new MMIO slot.
+  209|       |    #[must_use]
+  210|      0|    pub const fn new(slot: u16) -> Self {
+  211|      0|        Self(slot)
+  212|      0|    }
+  213|       |
+  214|       |    /// Get the raw slot index.
+  215|       |    #[must_use]
+  216|      0|    pub const fn as_u16(&self) -> u16 {
+  217|      0|        self.0
+  218|      0|    }
+  219|       |}
+  220|       |
+  221|       |/// Offset within a disk image.
+  222|       |///
+  223|       |/// # Abstract
+  224|       |///
+  225|       |/// Byte offset inside a virtual disk, helping prevent confusion with
+  226|       |/// memory offsets or sector indices.
+  227|       |///
+  228|       |/// # The Hero's Journey
+  229|       |///
+  230|       |/// ```rust
+  231|       |/// use hitz_hal::DiskOffset;
+  232|       |///
+  233|       |/// let offset = DiskOffset::new(4096);
+  234|       |/// assert_eq!(offset.as_u64(), 4096);
+  235|       |/// ```
+  236|       |#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+  237|       |pub struct DiskOffset(u64);
+  238|       |
+  239|       |impl DiskOffset {
+  240|       |    /// Create a new disk offset.
+  241|       |    #[must_use]
+  242|      0|    pub const fn new(offset: u64) -> Self {
+  243|      0|        Self(offset)
+  244|      0|    }
+  245|       |
+  246|       |    /// Get the raw byte offset.
+  247|       |    #[must_use]
+  248|      0|    pub const fn as_u64(&self) -> u64 {
+  249|      0|        self.0
+  250|      0|    }
+  251|       |}
+  252|       |
+  253|       |/// MAC address for a virtual network device.
+  254|       |///
+  255|       |/// # Abstract
+  256|       |///
+  257|       |/// Represents a 6-byte hardware address.
+  258|       |///
+  259|       |/// # The Hero's Journey
+  260|       |///
+  261|       |/// ```rust
+  262|       |/// use hitz_hal::MacAddress;
+  263|       |///
+  264|       |/// let mac = MacAddress::new([0xDE, 0xAD, 0xBE, 0xEF, 0x00, 0x01]);
+  265|       |/// assert_eq!(mac.to_string(), "de:ad:be:ef:00:01");
+  266|       |/// ```
+  267|       |#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+  268|       |pub struct MacAddress([u8; 6]);
+  269|       |
+  270|       |impl MacAddress {
+  271|       |    /// Create a MAC address from raw bytes.
+  272|       |    #[must_use]
+  273|      1|    pub const fn new(bytes: [u8; 6]) -> Self {
+  274|      1|        Self(bytes)
+  275|      1|    }
+  276|       |
+  277|       |    /// Get the raw bytes.
+  278|       |    #[must_use]
+  279|      0|    pub const fn as_bytes(&self) -> &[u8; 6] {
+  280|      0|        &self.0
+  281|      0|    }
+  282|       |}
+  283|       |
+  284|       |impl fmt::Display for MacAddress {
+  285|      1|    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+  286|      1|        write!(
+  287|      1|            f,
+  288|       |            "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
+  289|      1|            self.0[0], self.0[1], self.0[2], self.0[3], self.0[4], self.0[5]
+  290|       |        )
+  291|      1|    }
+  292|       |}
+  293|       |
+  294|       |/// Memory size in mebibytes.
+  295|       |///
+  296|       |/// # Abstract
+  297|       |///
+  298|       |/// Explicitly typed wrapper for memory capacity in MiB.
+  299|       |/// Prevents the classic "is this bytes, KiB, or MiB?" bug.
+  300|       |///
+  301|       |/// # The Hero's Journey
+  302|       |///
+  303|       |/// ```rust
+  304|       |/// use hitz_hal::MemSizeMiB;
+  305|       |///
+  306|       |/// let size = MemSizeMiB::new(1024); // 1 GiB
+  307|       |/// assert_eq!(size.as_bytes(), 1024 * 1024 * 1024);
+  308|       |/// ```
+  309|       |#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+  310|       |pub struct MemSizeMiB(u64);
+  311|       |
+  312|       |impl MemSizeMiB {
+  313|       |    /// Create a new memory size.
+  314|       |    #[must_use]
+  315|      1|    pub const fn new(mib: u64) -> Self {
+  316|      1|        Self(mib)
+  317|      1|    }
+  318|       |
+  319|       |    /// Get the size in MiB.
+  320|       |    #[must_use]
+  321|      0|    pub const fn as_mib(&self) -> u64 {
+  322|      0|        self.0
+  323|      0|    }
+  324|       |
+  325|       |    /// Convert to bytes.
+  326|       |    #[must_use]
+  327|      1|    pub const fn as_bytes(&self) -> u64 {
+  328|      1|        self.0 * 1024 * 1024
+  329|      1|    }
+  330|       |}
+  331|       |
+  332|       |impl fmt::Display for MemSizeMiB {
+  333|      0|    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+  334|      0|        write!(f, "{} MiB", self.0)
+  335|      0|    }
+  336|       |}
+  337|       |
+  338|       |#[cfg(test)]
+  339|       |mod tests {
+  340|       |    use super::*;
+  341|       |
+  342|       |    #[test]
+  343|      1|    fn gpa_page_alignment() {
+  344|      1|        let addr = Gpa::new(0x1234_5678);
+  345|      1|        assert_eq!(addr.page_base(), Gpa::new(0x1234_5000));
+  346|      1|        assert_eq!(addr.page_offset(), 0x678);
+  347|      1|    }
+  348|       |
+  349|       |    #[test]
+  350|      1|    fn gpa_offset() {
+  351|      1|        let base = Gpa::new(0x1000);
+  352|      1|        assert_eq!(base.offset(0x500), Gpa::new(0x1500));
+  353|      1|    }
+  354|       |
+  355|       |    #[test]
+  356|      1|    fn mem_size_conversion() {
+  357|      1|        let size = MemSizeMiB::new(128);
+  358|      1|        assert_eq!(size.as_bytes(), 128 * 1024 * 1024);
+  359|      1|    }
+  360|       |
+  361|       |    #[test]
+  362|      1|    fn mac_address_display() {
+  363|      1|        let mac = MacAddress::new([0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF]);
+  364|      1|        assert_eq!(mac.to_string(), "aa:bb:cc:dd:ee:ff");
+  365|      1|    }
+  366|       |
+  367|       |    #[test]
+  368|      1|    fn vm_id_uniqueness() {
+  369|      1|        let a = VmId::new();
+  370|      1|        let b = VmId::new();
+  371|      1|        assert_ne!(a, b);
+  372|      1|    }
+  373|       |
+  374|       |    #[test]
+  375|      1|    fn vm_id_as_uuid() {
+  376|      1|        let id = VmId::new();
+  377|      1|        let uuid = id.as_uuid();
+  378|      1|        assert_eq!(id.to_string(), uuid.to_string());
+  379|      1|    }
+  380|       |
+  381|       |    #[test]
+  382|      1|    fn vm_id_default() {
+  383|      1|        let id1 = VmId::default();
+  384|      1|        let id2 = VmId::default();
+  385|      1|        assert_ne!(id1, id2);
+  386|      1|    }
+  387|       |
+  388|       |    #[test]
+  389|      1|    fn vcpu_id_access_and_display() {
+  390|      1|        let vcpu_id = VcpuId::new(42);
+  391|      1|        assert_eq!(vcpu_id.as_u32(), 42);
+  392|      1|        assert_eq!(vcpu_id.to_string(), "vcpu-42");
+  393|      1|    }
+  394|       |
+  395|       |    #[test]
+  396|      1|    fn irq_line_access_and_display() {
+  397|      1|        let irq = IrqLine::new(7);
+  398|      1|        assert_eq!(irq.as_u8(), 7);
+  399|      1|        assert_eq!(irq.to_string(), "IRQ7");
+  400|      1|    }
+  401|       |}
+
+/app/crates/hitz-hal/src/traits.rs:
+    1|       |//! Core HAL traits: Hypervisor → Partition → Vcpu.
+    2|       |//!
+    3|       |//! Each backend (WHP, KVM, etc.) implements these traits with its own
+    4|       |//! concrete types via associated types — no boxing, no dynamic dispatch
+    5|       |//! on the hot path.
+    6|       |
+    7|       |use crate::error::HalError;
+    8|       |use crate::newtypes::{Gpa, VcpuId};
+    9|       |use crate::types::{MemFlags, PartitionConfig, SpecialRegs, StandardRegs, VcpuExit};
+   10|       |
+   11|       |/// Guest physical memory access.
+   12|       |///
+   13|       |/// # Abstract
+   14|       |///
+   15|       |/// Allows devices to read/write guest RAM
+   16|       |/// without depending on a concrete memory implementation.
+   17|       |/// This is the key abstraction that decouples `hitz-devices` (virtio stack)
+   18|       |/// from `hitz-vmm` (memory management), preventing circular dependencies.
+   19|       |///
+   20|       |/// # The Hero's Journey
+   21|       |///
+   22|       |/// ```rust
+   23|       |/// use hitz_hal::{GuestMemAccess, HalError};
+   24|       |///
+   25|       |/// # struct DummyMem;
+   26|       |/// # impl GuestMemAccess for DummyMem {
+   27|       |/// #     fn read_guest(&self, gpa: u64, buf: &mut [u8]) -> Result<(), HalError> { Ok(()) }
+   28|       |/// #     fn write_guest(&self, gpa: u64, data: &[u8]) -> Result<(), HalError> { Ok(()) }
+   29|       |/// # }
+   30|       |/// # let memory = DummyMem;
+   31|       |/// let mut buffer = [0u8; 4];
+   32|       |/// // Read 4 bytes from guest physical address 0x1000.
+   33|       |/// memory.read_guest(0x1000, &mut buffer).unwrap();
+   34|       |/// ```
+   35|       |pub trait GuestMemAccess: Send + Sync {
+   36|       |    /// Read `buf.len()` bytes from guest physical address `gpa` into `buf`.
+   37|       |    fn read_guest(&self, gpa: u64, buf: &mut [u8]) -> Result<(), HalError>;
+   38|       |
+   39|       |    /// Write `data` into guest memory starting at `gpa`.
+   40|       |    fn write_guest(&self, gpa: u64, data: &[u8]) -> Result<(), HalError>;
+   41|       |}
+   42|       |
+   43|       |/// Top-level hypervisor interface.
+   44|       |///
+   45|       |/// # Abstract
+   46|       |///
+   47|       |/// This is the entry point for interacting with a hypervisor. Generally,
+   48|       |/// there is only one instance of this per process. It acts as a factory
+   49|       |/// for creating [`Partition`] instances.
+   50|       |///
+   51|       |/// # The Hero's Journey
+   52|       |///
+   53|       |/// ```rust
+   54|       |/// use hitz_hal::{Hypervisor, PartitionConfig, HalError, MemSizeMiB};
+   55|       |/// # use hitz_hal::{Partition, VcpuId, MemFlags, Gpa, Vcpu};
+   56|       |/// # struct DummyPartition;
+   57|       |/// # struct DummyVcpu;
+   58|       |/// # impl Vcpu for DummyVcpu {
+   59|       |/// #     type CancelHandle = ();
+   60|       |/// #     fn run(&mut self) -> Result<hitz_hal::VcpuExit, HalError> { unreachable!() }
+   61|       |/// #     fn cancel_handle(&self) -> () { () }
+   62|       |/// #     fn cancel_via(_: &()) -> Result<(), HalError> { Ok(()) }
+   63|       |/// #     fn get_regs(&self) -> Result<hitz_hal::StandardRegs, HalError> { unreachable!() }
+   64|       |/// #     fn set_regs(&mut self, _: &hitz_hal::StandardRegs) -> Result<(), HalError> { Ok(()) }
+   65|       |/// #     fn get_sregs(&self) -> Result<hitz_hal::SpecialRegs, HalError> { unreachable!() }
+   66|       |/// #     fn set_sregs(&mut self, _: &hitz_hal::SpecialRegs) -> Result<(), HalError> { Ok(()) }
+   67|       |/// #     fn inject_interrupt(&mut self, _: u8) -> Result<(), HalError> { Ok(()) }
+   68|       |/// #     fn request_interrupt_window(&mut self) -> Result<(), HalError> { Ok(()) }
+   69|       |/// # }
+   70|       |/// # impl Partition for DummyPartition {
+   71|       |/// #     type Vcpu = DummyVcpu;
+   72|       |/// #     unsafe fn map_memory(&mut self, _: Gpa, _: *mut u8, _: usize, _: MemFlags) -> Result<(), HalError> { Ok(()) }
+   73|       |/// #     fn unmap_memory(&mut self, _: Gpa, _: usize) -> Result<(), HalError> { Ok(()) }
+   74|       |/// #     fn create_vcpu(&mut self, _: VcpuId) -> Result<Self::Vcpu, HalError> { Ok(DummyVcpu) }
+   75|       |/// #     fn request_interrupt(&self, _: VcpuId, _: u8) -> Result<(), HalError> { Ok(()) }
+   76|       |/// # }
+   77|       |/// # struct DummyHypervisor;
+   78|       |/// # impl Hypervisor for DummyHypervisor {
+   79|       |/// #     type Partition = DummyPartition;
+   80|       |/// #     fn create_partition(&self, _: &PartitionConfig) -> Result<Self::Partition, HalError> {
+   81|       |/// #         Ok(DummyPartition)
+   82|       |/// #     }
+   83|       |/// # }
+   84|       |/// # let hv = DummyHypervisor;
+   85|       |/// let config = PartitionConfig {
+   86|       |///     vcpu_count: 2,
+   87|       |///     memory_size: MemSizeMiB::new(2048),
+   88|       |/// };
+   89|       |/// let partition = hv.create_partition(&config).expect("failed to create VM");
+   90|       |/// ```
+   91|       |pub trait Hypervisor: Send + Sync {
+   92|       |    /// The partition type produced by this hypervisor.
+   93|       |    type Partition: Partition;
+   94|       |
+   95|       |    /// Create a new VM partition with the given configuration.
+   96|       |    fn create_partition(&self, cfg: &PartitionConfig) -> Result<Self::Partition, HalError>;
+   97|       |}
+   98|       |
+   99|       |/// A VM partition — owns guest memory mappings and vCPUs.
+  100|       |///
+  101|       |/// # Abstract
+  102|       |///
+  103|       |/// A partition represents a single virtual machine instance. It encapsulates
+  104|       |/// the physical memory mappings (RAM) and acts as a factory for its
+  105|       |/// virtual processors ([`Vcpu`]).
+  106|       |///
+  107|       |/// # The Hero's Journey
+  108|       |///
+  109|       |/// ```rust
+  110|       |/// use hitz_hal::{Partition, VcpuId, HalError, Gpa, MemFlags};
+  111|       |/// # use hitz_hal::{Vcpu};
+  112|       |/// # struct DummyVcpu;
+  113|       |/// # impl Vcpu for DummyVcpu {
+  114|       |/// #     type CancelHandle = ();
+  115|       |/// #     fn run(&mut self) -> Result<hitz_hal::VcpuExit, HalError> { unreachable!() }
+  116|       |/// #     fn cancel_handle(&self) -> () { () }
+  117|       |/// #     fn cancel_via(_: &()) -> Result<(), HalError> { Ok(()) }
+  118|       |/// #     fn get_regs(&self) -> Result<hitz_hal::StandardRegs, HalError> { unreachable!() }
+  119|       |/// #     fn set_regs(&mut self, _: &hitz_hal::StandardRegs) -> Result<(), HalError> { Ok(()) }
+  120|       |/// #     fn get_sregs(&self) -> Result<hitz_hal::SpecialRegs, HalError> { unreachable!() }
+  121|       |/// #     fn set_sregs(&mut self, _: &hitz_hal::SpecialRegs) -> Result<(), HalError> { Ok(()) }
+  122|       |/// #     fn inject_interrupt(&mut self, _: u8) -> Result<(), HalError> { Ok(()) }
+  123|       |/// #     fn request_interrupt_window(&mut self) -> Result<(), HalError> { Ok(()) }
+  124|       |/// # }
+  125|       |/// # struct DummyPartition;
+  126|       |/// # impl Partition for DummyPartition {
+  127|       |/// #     type Vcpu = DummyVcpu;
+  128|       |/// #     unsafe fn map_memory(&mut self, _: Gpa, _: *mut u8, _: usize, _: MemFlags) -> Result<(), HalError> { Ok(()) }
+  129|       |/// #     fn unmap_memory(&mut self, _: Gpa, _: usize) -> Result<(), HalError> { Ok(()) }
+  130|       |/// #     fn create_vcpu(&mut self, _: VcpuId) -> Result<Self::Vcpu, HalError> { Ok(DummyVcpu) }
+  131|       |/// #     fn request_interrupt(&self, _: VcpuId, _: u8) -> Result<(), HalError> { Ok(()) }
+  132|       |/// # }
+  133|       |/// # let mut partition = DummyPartition;
+  134|       |/// let vcpu = partition.create_vcpu(VcpuId::new(0)).expect("failed to create vCPU 0");
+  135|       |/// ```
+  136|       |///
+  137|       |/// # Details
+  138|       |///
+  139|       |/// Implementations must ensure that memory mappings outlive any vCPU
+  140|       |/// that may access them. The `map_memory` function is `unsafe` because
+  141|       |/// the caller must guarantee the host pointer remains valid.
+  142|       |pub trait Partition: Send + Sync {
+  143|       |    /// The vCPU type produced by this partition.
+  144|       |    type Vcpu: Vcpu + 'static;
+  145|       |
+  146|       |    /// Map a region of host memory into the guest physical address space.
+  147|       |    ///
+  148|       |    /// # Safety
+  149|       |    ///
+  150|       |    /// `hva` must point to a valid allocation of at least `size` bytes
+  151|       |    /// that remains valid for the lifetime of this mapping.
+  152|       |    unsafe fn map_memory(
+  153|       |        &mut self,
+  154|       |        gpa: Gpa,
+  155|       |        hva: *mut u8,
+  156|       |        size: usize,
+  157|       |        flags: MemFlags,
+  158|       |    ) -> Result<(), HalError>;
+  159|       |
+  160|       |    /// Remove a previously mapped region from the guest physical address space.
+  161|       |    fn unmap_memory(&mut self, gpa: Gpa, size: usize) -> Result<(), HalError>;
+  162|       |
+  163|       |    /// Create a new virtual processor in this partition.
+  164|       |    fn create_vcpu(&mut self, id: VcpuId) -> Result<Self::Vcpu, HalError>;
+  165|       |
+  166|       |    /// Request an interrupt be delivered to a vCPU.
+  167|       |    ///
+  168|       |    /// On WHP this requires canceling the vCPU run and using the
+  169|       |    /// interrupt window mechanism.
+  170|       |    fn request_interrupt(&self, vcpu_id: VcpuId, vector: u8) -> Result<(), HalError>;
+  171|       |}
+  172|       |
+  173|       |/// A virtual processor — the vCPU run loop lives here.
+  174|       |///
+  175|       |/// # Abstract
+  176|       |///
+  177|       |/// Each vCPU usually runs on its own dedicated OS thread. The `run` method
+  178|       |/// enters the guest execution context and blocks until the guest exits
+  179|       |/// due to an event like I/O, MMIO, or HLT.
+  180|       |///
+  181|       |/// # The Hero's Journey
+  182|       |///
+  183|       |/// ```rust
+  184|       |/// use hitz_hal::{Vcpu, HalError, VcpuExit};
+  185|       |/// # struct DummyVcpu;
+  186|       |/// # impl Vcpu for DummyVcpu {
+  187|       |/// #     type CancelHandle = ();
+  188|       |/// #     fn run(&mut self) -> Result<hitz_hal::VcpuExit, HalError> { Ok(VcpuExit::Halt) }
+  189|       |/// #     fn cancel_handle(&self) -> () { () }
+  190|       |/// #     fn cancel_via(_: &()) -> Result<(), HalError> { Ok(()) }
+  191|       |/// #     fn get_regs(&self) -> Result<hitz_hal::StandardRegs, HalError> { unreachable!() }
+  192|       |/// #     fn set_regs(&mut self, _: &hitz_hal::StandardRegs) -> Result<(), HalError> { Ok(()) }
+  193|       |/// #     fn get_sregs(&self) -> Result<hitz_hal::SpecialRegs, HalError> { unreachable!() }
+  194|       |/// #     fn set_sregs(&mut self, _: &hitz_hal::SpecialRegs) -> Result<(), HalError> { Ok(()) }
+  195|       |/// #     fn inject_interrupt(&mut self, _: u8) -> Result<(), HalError> { Ok(()) }
+  196|       |/// #     fn request_interrupt_window(&mut self) -> Result<(), HalError> { Ok(()) }
+  197|       |/// # }
+  198|       |/// # let mut vcpu = DummyVcpu;
+  199|       |/// loop {
+  200|       |///     match vcpu.run().expect("vcpu run failed") {
+  201|       |///         VcpuExit::Halt => break, // Guest executed HLT
+  202|       |///         _ => {} // Handle other exits
+  203|       |///     }
+  204|       |/// }
+  205|       |/// ```
+  206|       |///
+  207|       |/// # Details
+  208|       |///
+  209|       |/// Call [`cancel_handle`][Vcpu::cancel_handle] *before* moving the vCPU into
+  210|       |/// a thread. Share the handle via `Arc<Self::CancelHandle>` or by cloning,
+  211|       |/// then call [`cancel_via`][Vcpu::cancel_via] from any thread to interrupt a
+  212|       |/// blocked `run` call.
+  213|       |pub trait Vcpu: Send {
+  214|       |    /// Opaque handle that can cancel a running vCPU from any thread.
+  215|       |    ///
+  216|       |    /// Must be extracted before the vCPU is moved into a thread.
+  217|       |    /// Safe to clone and share across threads via `Arc` or direct clone.
+  218|       |    type CancelHandle: Send + Sync + Clone;
+  219|       |
+  220|       |    /// Enter the guest and run until an exit occurs.
+  221|       |    fn run(&mut self) -> Result<VcpuExit, HalError>;
+  222|       |
+  223|       |    /// Extract a cancel handle for this vCPU.
+  224|       |    ///
+  225|       |    /// Call this *before* moving the vCPU into a thread. The returned
+  226|       |    /// handle can be cloned and shared freely across threads.
+  227|       |    fn cancel_handle(&self) -> Self::CancelHandle;
+  228|       |
+  229|       |    /// Cancel a running vCPU using a previously extracted handle.
+  230|       |    ///
+  231|       |    /// Forces `run` to return `VcpuExit::Canceled`. Safe to call from
+  232|       |    /// any thread. Returns `Ok(())` if the cancel was delivered (the
+  233|       |    /// vCPU may not have exited yet).
+  234|       |    ///
+  235|       |    /// Returns `Err` if the underlying hypervisor call fails (e.g. the
+  236|       |    /// partition has already been destroyed).
+  237|       |    fn cancel_via(handle: &Self::CancelHandle) -> Result<(), HalError>;
+  238|       |
+  239|       |    /// Cancel a running vCPU from another thread.
+  240|       |    ///
+  241|       |    /// This causes `run` to return `VcpuExit::Canceled`.
+  242|      0|    fn cancel(&self) -> Result<(), HalError> {
+  243|      0|        Self::cancel_via(&self.cancel_handle())
+  244|      0|    }
+  245|       |
+  246|       |    /// Read the general-purpose registers.
+  247|       |    fn get_regs(&self) -> Result<StandardRegs, HalError>;
+  248|       |
+  249|       |    /// Write the general-purpose registers.
+  250|       |    fn set_regs(&mut self, regs: &StandardRegs) -> Result<(), HalError>;
+  251|       |
+  252|       |    /// Read the special (system) registers.
+  253|       |    fn get_sregs(&self) -> Result<SpecialRegs, HalError>;
+  254|       |
+  255|       |    /// Write the special (system) registers.
+  256|       |    fn set_sregs(&mut self, sregs: &SpecialRegs) -> Result<(), HalError>;
+  257|       |
+  258|       |    /// Inject an external interrupt into the vCPU.
+  259|       |    ///
+  260|       |    /// On WHP this sets `WHvRegisterPendingInterruption` before re-entering
+  261|       |    /// the guest. The guest must have IF=1 (interrupts enabled) for this
+  262|       |    /// to take effect immediately.
+  263|       |    fn inject_interrupt(&mut self, vector: u8) -> Result<(), HalError>;
+  264|       |
+  265|       |    /// Request an `InterruptWindow` exit when the guest becomes interruptible.
+  266|       |    ///
+  267|       |    /// On WHP this sets `WHvX64RegisterDeliverabilityNotifications` bit 0,
+  268|       |    /// causing the next `run` to exit with `VcpuExit::InterruptWindow` once
+  269|       |    /// IF=1 and the vCPU is not in an interrupt shadow.
+  270|       |    fn request_interrupt_window(&mut self) -> Result<(), HalError>;
+  271|       |}
