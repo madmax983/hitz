@@ -370,4 +370,88 @@ mod tests {
         let b = VmId::new();
         assert_ne!(a, b);
     }
+
+    #[test]
+    fn vm_id_as_uuid() {
+        let id = VmId::new();
+        let uuid = id.as_uuid();
+        assert_eq!(uuid.get_version(), Some(uuid::Version::Random));
+    }
+
+    #[test]
+    fn vm_id_default() {
+        let _ = VmId::default();
+    }
+
+    #[test]
+    fn vm_id_fmt() {
+        let id = VmId::new();
+        assert_eq!(format!("{}", id), format!("{}", id.as_uuid()));
+    }
+
+    #[test]
+    fn vcpu_id_accessors() {
+        let id = VcpuId::new(42);
+        assert_eq!(id.as_u32(), 42);
+    }
+
+    #[test]
+    fn vcpu_id_fmt() {
+        let id = VcpuId::new(42);
+        assert_eq!(format!("{}", id), "vcpu-42");
+    }
+
+    #[test]
+    fn gpa_accessors() {
+        let gpa = Gpa::new(0x1000);
+        assert_eq!(gpa.as_u64(), 0x1000);
+    }
+
+    #[test]
+    fn gpa_fmt() {
+        let gpa = Gpa::new(0x1000);
+        assert_eq!(format!("{}", gpa), "0x0000000000001000");
+    }
+
+    #[test]
+    fn irq_line_accessors() {
+        let irq = IrqLine::new(5);
+        assert_eq!(irq.as_u8(), 5);
+    }
+
+    #[test]
+    fn irq_line_fmt() {
+        let irq = IrqLine::new(5);
+        assert_eq!(format!("{}", irq), "IRQ5");
+    }
+
+    #[test]
+    fn mmio_slot_accessors() {
+        let slot = MmioSlot::new(3);
+        assert_eq!(slot.as_u16(), 3);
+    }
+
+    #[test]
+    fn disk_offset_accessors() {
+        let offset = DiskOffset::new(0x2000);
+        assert_eq!(offset.as_u64(), 0x2000);
+    }
+
+    #[test]
+    fn mac_address_accessors() {
+        let mac = MacAddress::new([0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF]);
+        assert_eq!(mac.as_bytes(), &[0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF]);
+    }
+
+    #[test]
+    fn mem_size_mib_accessors() {
+        let size = MemSizeMiB::new(128);
+        assert_eq!(size.as_mib(), 128);
+    }
+
+    #[test]
+    fn mem_size_mib_fmt() {
+        let size = MemSizeMiB::new(128);
+        assert_eq!(format!("{}", size), "128 MiB");
+    }
 }

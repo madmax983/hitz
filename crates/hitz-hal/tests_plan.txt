@@ -1,0 +1,19 @@
+Tests to add to newtypes.rs:
+- VmId::as_uuid
+- VmId::default
+- VmId::fmt
+- VcpuId::new
+- VcpuId::as_u32
+- VcpuId::fmt
+- Gpa::as_u64
+- Gpa::fmt
+- IrqLine::new
+- IrqLine::as_u8
+- IrqLine::fmt
+- MmioSlot::new
+- MmioSlot::as_u16
+- DiskOffset::new
+- DiskOffset::as_u64
+- MacAddress::as_bytes
+- MemSizeMiB::as_mib
+- MemSizeMiB::fmt
