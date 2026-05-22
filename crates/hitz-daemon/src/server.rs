@@ -26,6 +26,31 @@ use crate::vm_manager::VmManager;
 ///
 /// When `tcp_addr` is `Some`, a TCP listener is spawned as a parallel task
 /// sharing the same router and `VmManager`.
+///
+/// ## Examples
+///
+/// ```rust,no_run
+/// # use std::sync::Arc;
+/// # use std::path::PathBuf;
+/// # use hitz_daemon::{VmManager, run_server};
+/// # use hitz_whp::WhpHypervisor;
+/// #
+/// # let hypervisor = Arc::new(WhpHypervisor::new().unwrap());
+/// # let state_dir = PathBuf::from("C:\\hitz\\vms");
+/// # let manager = VmManager::new(hypervisor, state_dir).unwrap();
+/// # let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+/// # rt.block_on(async {
+/// let (tx, rx) = tokio::sync::watch::channel(false);
+/// let server = run_server(
+///     "\\\\.\\pipe\\my-pipe",
+///     None,
+///     manager,
+///     rx,
+/// );
+/// // tokio::spawn(server);
+/// // tx.send(true).unwrap(); // To shutdown
+/// # });
+/// ```
 pub async fn run_server<H>(
     pipe_path: &str,
     tcp_addr: Option<SocketAddr>,

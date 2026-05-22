@@ -32,6 +32,15 @@ impl TelemetryGuard {
     ///
     /// If provider construction fails (e.g. bad endpoint URL), a warning is
     /// logged and the no-op guard is returned so the daemon still starts.
+    ///
+    /// ## Examples
+    ///
+    /// ```rust,no_run
+    /// use hitz_daemon::TelemetryGuard;
+    ///
+    /// let guard = TelemetryGuard::init(Some("http://127.0.0.1:4317".to_string()));
+    /// // OpenTelemetry tracing and metrics are now active for the scope of `guard`.
+    /// ```
     #[must_use]
     pub fn init(endpoint: Option<String>) -> Self {
         let Some(endpoint) = endpoint else {
@@ -97,6 +106,19 @@ impl TelemetryGuard {
     ///
     /// Returns `None` when OpenTelemetry is disabled (no-op path). Call this after
     /// [`TelemetryGuard::init`] and before building the subscriber registry.
+    ///
+    /// ## Examples
+    ///
+    /// ```rust,no_run
+    /// use hitz_daemon::TelemetryGuard;
+    /// use tracing_subscriber::{layer::SubscriberExt, Registry};
+    ///
+    /// let guard = TelemetryGuard::init(Some("http://127.0.0.1:4317".to_string()));
+    /// if let Some(layer) = guard.tracing_layer() {
+    ///     let subscriber = Registry::default().with(layer);
+    ///     tracing::subscriber::set_global_default(subscriber).unwrap();
+    /// }
+    /// ```
     #[must_use]
     pub fn tracing_layer(
         &self,

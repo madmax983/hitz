@@ -545,6 +545,23 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
     }
 
     /// Restarts a running VM by stopping it, waiting for it to stop, and then starting it again.
+    ///
+    /// ## Examples
+    ///
+    /// ```rust,no_run
+    /// # use std::sync::Arc;
+    /// # use std::path::PathBuf;
+    /// # use hitz_daemon::VmManager;
+    /// # use hitz_whp::WhpHypervisor;
+    /// #
+    /// # let hypervisor = Arc::new(WhpHypervisor::new().unwrap());
+    /// # let state_dir = PathBuf::from("C:\\hitz\\vms");
+    /// # let manager = VmManager::new(hypervisor, state_dir).unwrap();
+    /// # let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+    /// # rt.block_on(async {
+    /// manager.restart_vm("my-vm").await.unwrap();
+    /// # });
+    /// ```
     pub async fn restart_vm(&self, id: &str) -> Result<VmInfo, DaemonError> {
         let _ = self.stop_vm(id)?;
 
