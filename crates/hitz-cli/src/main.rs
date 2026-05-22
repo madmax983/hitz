@@ -1017,7 +1017,8 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
     use crossterm::style::Stylize;
     use std::fmt::Write as _;
 
-    let mut out = String::new();
+    // ⚡ Bolt Optimization: Initialize the target string with `String::with_capacity()` instead of `String::new()`.
+    let mut out = String::with_capacity(1024);
     let _ = writeln!(
         out,
         "\n{}",
@@ -1205,10 +1206,10 @@ fn format_error_response(status: hyper::StatusCode, resp: &str, error_prefix: &s
             format!("✗ {error_prefix}: {}", err)
         } else {
             // ⚡ Bolt Optimization: Replace intermediate `Vec` heap allocations and `.join(...)`
-            // with an iterator chain using `.fold(String::new(), ...)` to eliminate
+            // with an iterator chain using `.fold(String::with_capacity(256), ...)` to eliminate
             // intermediate heap allocations and multiple `format!` calls when formatting CLI error responses.
             let parts_str = v.as_object().map_or_else(String::new, |obj| {
-                obj.iter().fold(String::new(), |mut acc, (k, val)| {
+                obj.iter().fold(String::with_capacity(256), |mut acc, (k, val)| {
                     use std::fmt::Write;
                     if let Some(s) = val.as_str() {
                         if !acc.is_empty() {
@@ -2146,7 +2147,7 @@ fn handle_vm_timeline(args: &VmTimelineArgs) -> Result<()> {
                 .reasons
                 .iter()
                 .filter(|reason| !current_reasons.contains(*reason))
-                .fold(String::new(), |mut acc, reason| {
+                .fold(String::with_capacity(256), |mut acc, reason| {
                     use std::fmt::Write;
                     if !acc.is_empty() {
                         let _ = write!(acc, "\n");
@@ -2158,7 +2159,7 @@ fn handle_vm_timeline(args: &VmTimelineArgs) -> Result<()> {
             let removed_reasons = current_reasons
                 .iter()
                 .filter(|reason| !health.reasons.contains(*reason))
-                .fold(String::new(), |mut acc, reason| {
+                .fold(String::with_capacity(256), |mut acc, reason| {
                     use std::fmt::Write;
                     if !acc.is_empty() {
                         let _ = write!(acc, "\n");
