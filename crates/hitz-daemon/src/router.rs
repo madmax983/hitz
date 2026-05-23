@@ -126,8 +126,7 @@ async fn handle_create<H>(
 where
     H: Hypervisor + Send + Sync + 'static,
 {
-    let body = req
-        .into_body()
+    let body = http_body_util::Limited::new(req.into_body(), 1024 * 1024)
         .collect()
         .await
         .map_err(|e| DaemonError::Internal(format!("failed to read request body: {e}")))?;
