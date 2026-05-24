@@ -88,4 +88,29 @@ mod tests {
         assert!(hcl.contains("ram_mib = 512"));
         assert!(hcl.contains("cpus = 2"));
     }
+
+    #[test]
+    fn test_to_terraform_full() {
+        let config = VmConfig {
+            kernel_path: PathBuf::from("/boot/vmlinux"),
+            initramfs_path: Some(PathBuf::from("/boot/initramfs.img")),
+            disk_path: Some(PathBuf::from("/mnt/disk.img")),
+            ram_mib: 1024,
+            cpus: 4,
+            cmdline: Some("console=ttyS0".to_string()),
+            net: None,
+            ports: vec![],
+            guest_cid: 4,
+            guest_agent: GuestAgentMode::Auto,
+        };
+
+        let hcl = config.to_terraform("full_vm");
+        assert!(hcl.contains("resource \"hitz_vm\" \"full_vm\" {"));
+        assert!(hcl.contains("kernel_path = \"/boot/vmlinux\""));
+        assert!(hcl.contains("initramfs_path = \"/boot/initramfs.img\""));
+        assert!(hcl.contains("disk_path = \"/mnt/disk.img\""));
+        assert!(hcl.contains("ram_mib = 1024"));
+        assert!(hcl.contains("cpus = 4"));
+        assert!(hcl.contains("cmdline = \"console=ttyS0\""));
+    }
 }
