@@ -56,18 +56,17 @@ where
 {
     // ⚡ Bolt Optimization: Avoid cloning the HTTP method.
     // It's cheaper to borrow it or let it remain bound to the request.
-    let method = req.method().clone();
     let path = req.uri().path().to_string();
 
     let span = tracing::info_span!(
         "daemon.request",
-        http.method = %method,
+        http.method = %req.method(),
         http.route = %path,
         http.status_code = tracing::field::Empty,
     );
 
     let result = async {
-        match (&method, path.as_str()) {
+        match (req.method(), path.as_str()) {
             (&Method::GET, "/vms") => handle_list(manager),
             _ if path.starts_with("/vms/") => {
                 let mut segments = path.splitn(4, '/');
@@ -75,7 +74,7 @@ where
                 match segments.nth(2) {
                     Some(id) if !id.is_empty() => {
                         let suffix = segments.next();
-                        route_vm(req, &method, id, suffix, manager).await
+                        route_vm(req, id, suffix, manager).await
                     }
                     _ => Ok(error_response(StatusCode::BAD_REQUEST, "missing VM ID")),
                 }
@@ -95,7 +94,6 @@ where
 
 async fn route_vm<H>(
     req: Request<Incoming>,
-    method: &Method,
     id: &str,
     suffix: Option<&str>,
     manager: &VmManager<H>,
@@ -103,7 +101,7 @@ async fn route_vm<H>(
 where
     H: Hypervisor + Send + Sync + 'static,
 {
-    match (method, suffix) {
+    match (req.method(), suffix) {
         (&Method::PUT, None) => handle_create(req, id, manager).await,
         (&Method::GET, None) => handle_get(id, manager),
         (&Method::GET, Some("serial")) => handle_serial(id, manager),
