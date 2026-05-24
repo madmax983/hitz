@@ -425,4 +425,55 @@ mod tests {
 
         dev.process_tx(&mut q, &mem);
     }
+
+    #[test]
+    fn should_handle_out_of_bounds_read_in_process_tx() {
+        let mac = [0x02, 0x00, 0x00, 0x00, 0x00, 0x01];
+        let (dev, _tx_receiver, _rx_sender) = VirtioNetDevice::new(mac);
+
+        let mem = MockMem::new(0x10000);
+        let mut q = VirtQueue::new(16);
+        q.configure(0, 0x1000, 0x2000);
+        q.set_ready(true);
+        set_avail_idx(&mem, 0);
+        mem.write_bytes(0x2000 + 2, &0u16.to_le_bytes());
+
+        // Valid desc length, but address is out of bounds (0x20000 > 0x10000)
+        write_desc(&mem, 0, 0x20000, 32, 0, 0);
+        write_avail_entry(&mem, 0, 0);
+        set_avail_idx(&mem, 1);
+
+        // This should not panic; it will just fail to read the memory and return early or drop the frame
+        dev.process_tx(&mut q, &mem);
+    }
+
+    #[test]
+    fn should_handle_out_of_bounds_write_in_deliver_rx() {
+        // Create a writable desc pointing out of bounds (0x20000 > 0x10000)
+        const F_WRITE: u16 = 2;
+
+        let mac = [0x02, 0x00, 0x00, 0x00, 0x00, 0x01];
+        let (mut dev, _tx_receiver, rx_sender) = VirtioNetDevice::new(mac);
+
+        // Inject a pending RX frame
+        let test_frame = vec![0xAB; 64];
+        rx_sender.send(test_frame).unwrap();
+
+        let mem = MockMem::new(0x10000);
+        let mut q = VirtQueue::new(16);
+        q.configure(0, 0x1000, 0x2000);
+        q.set_ready(true);
+        set_avail_idx(&mem, 0);
+        mem.write_bytes(0x2000 + 2, &0u16.to_le_bytes());
+
+        write_desc(&mem, 0, 0x20000, 128, F_WRITE, 0);
+        write_avail_entry(&mem, 0, 0);
+        set_avail_idx(&mem, 1);
+
+        // Process queue to drain rx_sender and call deliver_rx
+        let _ = dev.poll_rx(&mut q, &mem);
+
+        // rx_pending should still have the frame since delivery failed
+        assert_eq!(dev.rx_pending.len(), 1);
+    }
 }
