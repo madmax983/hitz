@@ -1183,7 +1183,7 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
                 Cell::new(proc.pid.to_string()),
                 Cell::new(proc.name.clone()),
                 cpu_cell,
-                Cell::new(rss_mb.to_string()),
+                Cell::new(format!("{rss_mb} MB")),
             ]);
         }
         let _ = writeln!(out, "\n{}", "Top Processes".bold());
