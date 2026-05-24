@@ -1,0 +1,29 @@
+<<<<<<< SEARCH
+fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
+    use comfy_table::presets::UTF8_BORDERS_ONLY;
+    use comfy_table::{Attribute, Cell, Color, Table};
+    use crossterm::style::Stylize;
+    use std::fmt::Write as _;
+
+    let mut out = String::new();
+    let _ = writeln!(
+        out,
+        "\n{}",
+        " 📊 Metrics Snapshot ".bold().on_blue().white()
+    );
+=======
+struct MetricsSnapshotDisplay<'a>(&'a hitz_api::MetricsSnapshot);
+
+impl<'a> std::fmt::Display for MetricsSnapshotDisplay<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let snap = self.0;
+        use comfy_table::presets::UTF8_BORDERS_ONLY;
+        use comfy_table::{Attribute, Cell, Color, Table};
+        use crossterm::style::Stylize;
+
+        writeln!(
+            f,
+            "\n{}",
+            " 📊 Metrics Snapshot ".bold().on_blue().white()
+        )?;
+>>>>>>> REPLACE
