@@ -1011,6 +1011,26 @@ fn make_bar(pct: f64, width: usize) -> String {
     format!("[{}{}]", filled, empty)
 }
 
+fn format_bytes(bytes: u64) -> String {
+    const KB: f64 = 1024.0;
+    const MB: f64 = KB * 1024.0;
+    const GB: f64 = MB * 1024.0;
+    const TB: f64 = GB * 1024.0;
+    #[allow(clippy::cast_precision_loss)]
+    let b = bytes as f64;
+    if b >= TB {
+        format!("{:.2} TiB", b / TB)
+    } else if b >= GB {
+        format!("{:.2} GiB", b / GB)
+    } else if b >= MB {
+        format!("{:.2} MiB", b / MB)
+    } else if b >= KB {
+        format!("{:.2} KiB", b / KB)
+    } else {
+        format!("{bytes} B")
+    }
+}
+
 fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
     use comfy_table::presets::UTF8_BORDERS_ONLY;
     use comfy_table::{Attribute, Cell, Color, Table};
@@ -1041,15 +1061,17 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
         snap.cpu.load_avg[0], snap.cpu.load_avg[1], snap.cpu.load_avg[2]
     );
 
-    let used_mib = snap.memory.used_bytes / (1024 * 1024);
-    let total_mib = snap.memory.total_bytes / (1024 * 1024);
     #[allow(clippy::cast_precision_loss)]
-    let mem_pct = if total_mib > 0 {
-        (used_mib as f64 / total_mib as f64) * 100.0
+    let mem_pct = if snap.memory.total_bytes > 0 {
+        (snap.memory.used_bytes as f64 / snap.memory.total_bytes as f64) * 100.0
     } else {
         0.0
     };
-    let mem_str = format!("{used_mib} MiB / {total_mib} MiB");
+    let mem_str = format!(
+        "{} / {}",
+        format_bytes(snap.memory.used_bytes),
+        format_bytes(snap.memory.total_bytes)
+    );
 
     let cpu_bar = format!(
         "{} {:.1}%",
@@ -1096,23 +1118,21 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
             Cell::new("Writes")
                 .add_attribute(Attribute::Bold)
                 .fg(Color::Cyan),
-            Cell::new("Read KB")
+            Cell::new("Read")
                 .add_attribute(Attribute::Bold)
                 .fg(Color::Cyan),
-            Cell::new("Write KB")
+            Cell::new("Write")
                 .add_attribute(Attribute::Bold)
                 .fg(Color::Cyan),
         ]);
 
         for disk in &snap.disks {
-            let read_kb = disk.read_bytes / 1024;
-            let write_kb = disk.write_bytes / 1024;
             let _ = disk_table.add_row([
                 disk.name.clone(),
                 disk.reads_total.to_string(),
                 disk.writes_total.to_string(),
-                read_kb.to_string(),
-                write_kb.to_string(),
+                format_bytes(disk.read_bytes),
+                format_bytes(disk.write_bytes),
             ]);
         }
         let _ = writeln!(out, "{}", disk_table);
@@ -1127,10 +1147,10 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
             Cell::new("Interface")
                 .add_attribute(Attribute::Bold)
                 .fg(Color::Cyan),
-            Cell::new("RX KB")
+            Cell::new("RX")
                 .add_attribute(Attribute::Bold)
                 .fg(Color::Cyan),
-            Cell::new("TX KB")
+            Cell::new("TX")
                 .add_attribute(Attribute::Bold)
                 .fg(Color::Cyan),
             Cell::new("RX Pkts")
@@ -1142,12 +1162,10 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
         ]);
 
         for net in &snap.networks {
-            let rx_kb = net.rx_bytes / 1024;
-            let tx_kb = net.tx_bytes / 1024;
             let _ = net_table.add_row([
                 net.interface.clone(),
-                rx_kb.to_string(),
-                tx_kb.to_string(),
+                format_bytes(net.rx_bytes),
+                format_bytes(net.tx_bytes),
                 net.rx_packets.to_string(),
                 net.tx_packets.to_string(),
             ]);
@@ -1170,20 +1188,19 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
             Cell::new("CPU %")
                 .add_attribute(Attribute::Bold)
                 .fg(Color::Cyan),
-            Cell::new("RSS MB")
+            Cell::new("RSS")
                 .add_attribute(Attribute::Bold)
                 .fg(Color::Cyan),
         ]);
 
         for proc in &snap.processes {
-            let rss_mb = proc.rss_bytes / (1024 * 1024);
             let cpu_cell =
                 Cell::new(format!("{:.1}%", proc.cpu_pct)).fg(color_for_pct(proc.cpu_pct));
             let _ = proc_table.add_row([
                 Cell::new(proc.pid.to_string()),
                 Cell::new(proc.name.clone()),
                 cpu_cell,
-                Cell::new(rss_mb.to_string()),
+                Cell::new(format_bytes(proc.rss_bytes)),
             ]);
         }
         let _ = writeln!(out, "\n{}", "Top Processes".bold());
@@ -1437,35 +1454,49 @@ async fn handle_vm_status(args: &VmIdArgs) -> Result<()> {
             };
 
             let _ = table.add_row([
-                Cell::new("ID:").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                Cell::new("ID:")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(comfy_table::Color::Cyan),
                 Cell::new(&info.id),
             ]);
             let _ = table.add_row([
-                Cell::new("State:").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                Cell::new("State:")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(comfy_table::Color::Cyan),
                 state_cell,
             ]);
             let _ = table.add_row([
-                Cell::new("Kernel:").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                Cell::new("Kernel:")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(comfy_table::Color::Cyan),
                 Cell::new(info.config.kernel_path.display().to_string()),
             ]);
             if let Some(ref path) = info.config.initramfs_path {
                 let _ = table.add_row([
-                    Cell::new("Initramfs:").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                    Cell::new("Initramfs:")
+                        .add_attribute(comfy_table::Attribute::Bold)
+                        .fg(comfy_table::Color::Cyan),
                     Cell::new(path.display().to_string()),
                 ]);
             }
             if let Some(ref path) = info.config.disk_path {
                 let _ = table.add_row([
-                    Cell::new("Disk:").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                    Cell::new("Disk:")
+                        .add_attribute(comfy_table::Attribute::Bold)
+                        .fg(comfy_table::Color::Cyan),
                     Cell::new(path.display().to_string()),
                 ]);
             }
             let _ = table.add_row([
-                Cell::new("RAM:").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                Cell::new("RAM:")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(comfy_table::Color::Cyan),
                 Cell::new(format!("{} MiB", info.config.ram_mib)),
             ]);
             let _ = table.add_row([
-                Cell::new("CPUs:").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                Cell::new("CPUs:")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(comfy_table::Color::Cyan),
                 Cell::new(info.config.cpus.to_string()),
             ]);
             let agent_str = match info.config.guest_agent {
@@ -1474,11 +1505,15 @@ async fn handle_vm_status(args: &VmIdArgs) -> Result<()> {
                 hitz_api::GuestAgentMode::Disabled => "Disabled".to_string(),
             };
             let _ = table.add_row([
-                Cell::new("Guest Agent:").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                Cell::new("Guest Agent:")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(comfy_table::Color::Cyan),
                 Cell::new(agent_str),
             ]);
             let _ = table.add_row([
-                Cell::new("Guest CID:").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                Cell::new("Guest CID:")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(comfy_table::Color::Cyan),
                 Cell::new(info.config.guest_cid.to_string()),
             ]);
             if let Some(ref net) = info.config.net {
@@ -1488,7 +1523,9 @@ async fn handle_vm_status(args: &VmIdArgs) -> Result<()> {
                     net.host_ip, net.guest_ip, mac_str
                 );
                 let _ = table.add_row([
-                    Cell::new("Network:").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                    Cell::new("Network:")
+                        .add_attribute(comfy_table::Attribute::Bold)
+                        .fg(comfy_table::Color::Cyan),
                     Cell::new(net_str),
                 ]);
             }
@@ -1507,13 +1544,17 @@ async fn handle_vm_status(args: &VmIdArgs) -> Result<()> {
                     let _ = write!(ports_str, "0.0.0.0:{} -> {}", p.host_port, p.guest_port);
                 }
                 let _ = table.add_row([
-                    Cell::new("Ports:").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                    Cell::new("Ports:")
+                        .add_attribute(comfy_table::Attribute::Bold)
+                        .fg(comfy_table::Color::Cyan),
                     Cell::new(ports_str),
                 ]);
             }
             if let Some(reason) = &info.exit_reason {
                 let _ = table.add_row([
-                    Cell::new("Exit:").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                    Cell::new("Exit:")
+                        .add_attribute(comfy_table::Attribute::Bold)
+                        .fg(comfy_table::Color::Cyan),
                     Cell::new(reason),
                 ]);
             }
@@ -1558,11 +1599,21 @@ async fn handle_vm_list(args: &VmListArgs) -> Result<()> {
             let mut table = Table::new();
             let _ = table.load_preset(UTF8_FULL_CONDENSED);
             let _ = table.set_header([
-                Cell::new("ID").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
-                Cell::new("State").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
-                Cell::new("RAM (MiB)").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
-                Cell::new("CPUs").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
-                Cell::new("Exit Reason").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                Cell::new("ID")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(comfy_table::Color::Cyan),
+                Cell::new("State")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(comfy_table::Color::Cyan),
+                Cell::new("RAM (MiB)")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(comfy_table::Color::Cyan),
+                Cell::new("CPUs")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(comfy_table::Color::Cyan),
+                Cell::new("Exit Reason")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(comfy_table::Color::Cyan),
             ]);
 
             for info in vms {
@@ -1901,7 +1952,7 @@ fn draw_vm_top_ui(
                     Cell::from(p.pid.to_string()),
                     Cell::from(p.name.as_str()),
                     Cell::from(format!("{:.1}%", p.cpu_pct)),
-                    Cell::from(format!("{} MB", p.rss_bytes / (1024 * 1024))),
+                    Cell::from(format_bytes(p.rss_bytes)),
                 ])
             }),
             [
@@ -2079,10 +2130,18 @@ fn handle_vm_timeline(args: &VmTimelineArgs) -> Result<()> {
     let mut table = Table::new();
     let _ = table.load_preset(UTF8_FULL_CONDENSED);
     let _ = table.set_header([
-        Cell::new("Time").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
-        Cell::new("Status").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
-        Cell::new("Reasons Added").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
-        Cell::new("Reasons Removed").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+        Cell::new("Time")
+            .add_attribute(comfy_table::Attribute::Bold)
+            .fg(comfy_table::Color::Cyan),
+        Cell::new("Status")
+            .add_attribute(comfy_table::Attribute::Bold)
+            .fg(comfy_table::Color::Cyan),
+        Cell::new("Reasons Added")
+            .add_attribute(comfy_table::Attribute::Bold)
+            .fg(comfy_table::Color::Cyan),
+        Cell::new("Reasons Removed")
+            .add_attribute(comfy_table::Attribute::Bold)
+            .fg(comfy_table::Color::Cyan),
     ]);
 
     for (line_num, line_result) in reader.lines().enumerate() {
@@ -2370,8 +2429,12 @@ async fn handle_vm_analyze(args: &VmIdArgs) -> Result<()> {
         let _ = table.load_preset(UTF8_FULL_CONDENSED);
 
         let _ = table.set_header([
-            Cell::new("Level").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
-            Cell::new("Insight").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+            Cell::new("Level")
+                .add_attribute(comfy_table::Attribute::Bold)
+                .fg(comfy_table::Color::Cyan),
+            Cell::new("Insight")
+                .add_attribute(comfy_table::Attribute::Bold)
+                .fg(comfy_table::Color::Cyan),
         ]);
 
         for insight in insights {
@@ -2855,7 +2918,7 @@ mod tests {
         let output = format_metrics_snapshot(&snap);
         assert!(output.contains("12.5%"), "missing CPU pct: {output}");
         assert!(
-            output.contains("128 MiB / 256 MiB"),
+            output.contains("128.00 MiB / 256.00 MiB"),
             "missing memory: {output}"
         );
         assert!(output.contains("vda"), "missing disk: {output}");
