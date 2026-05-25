@@ -1,0 +1,71 @@
+    Updating crates.io index
+ Downloading crates ...
+  Downloaded rmp v0.8.15
+  Downloaded memoffset v0.9.1
+  Downloaded autocfg v1.5.0
+  Downloaded vsock v0.5.4
+  Downloaded cfg_aliases v0.2.1
+  Downloaded quote v1.0.45
+  Downloaded vm-superio v0.8.1
+  Downloaded uuid v1.23.0
+  Downloaded proc-macro2 v1.0.106
+  Downloaded serde_derive v1.0.228
+  Downloaded serde v1.0.228
+  Downloaded crossbeam-channel v0.5.15
+  Downloaded unicode-ident v1.0.24
+  Downloaded tracing-core v0.1.36
+  Downloaded once_cell v1.21.4
+  Downloaded num-traits v0.2.19
+  Downloaded getrandom v0.4.2
+  Downloaded tracing-attributes v0.1.31
+  Downloaded thiserror-impl v2.0.18
+  Downloaded thiserror v2.0.18
+  Downloaded syn v2.0.117
+  Downloaded serde_core v1.0.228
+  Downloaded rmp-serde v1.3.1
+  Downloaded nix v0.31.2
+  Downloaded crossbeam-utils v0.8.21
+  Downloaded bitflags v2.11.0
+  Downloaded pin-project-lite v0.2.17
+  Downloaded cfg-if v1.0.4
+  Downloaded tracing v0.1.44
+  Downloaded libc v0.2.184
+   Compiling proc-macro2 v1.0.106
+   Compiling unicode-ident v1.0.24
+   Compiling quote v1.0.45
+   Compiling serde_core v1.0.228
+   Compiling libc v0.2.184
+   Compiling autocfg v1.5.0
+    Checking cfg-if v1.0.4
+   Compiling getrandom v0.4.2
+   Compiling serde v1.0.228
+   Compiling syn v2.0.117
+   Compiling thiserror v2.0.18
+   Compiling num-traits v0.2.19
+   Compiling memoffset v0.9.1
+   Compiling cfg_aliases v0.2.1
+   Compiling nix v0.31.2
+   Compiling crossbeam-utils v0.8.21
+    Checking uuid v1.23.0
+    Checking once_cell v1.21.4
+    Checking tracing-core v0.1.36
+    Checking bitflags v2.11.0
+    Checking pin-project-lite v0.2.17
+    Checking rmp v0.8.15
+    Checking crossbeam-channel v0.5.15
+    Checking vm-superio v0.8.1
+    Checking vsock v0.5.4
+   Compiling serde_derive v1.0.228
+   Compiling thiserror-impl v2.0.18
+   Compiling tracing-attributes v0.1.31
+    Checking tracing v0.1.44
+    Checking hitz-hal v0.1.0 (/app/crates/hitz-hal)
+ Documenting hitz-hal v0.1.0 (/app/crates/hitz-hal)
+ Documenting hitz-devices v0.1.0 (/app/crates/hitz-devices)
+ Documenting hitz-boot v0.1.0 (/app/crates/hitz-boot)
+    Checking rmp-serde v1.3.1
+    Checking hitz-api v0.1.0 (/app/crates/hitz-api)
+ Documenting hitz-api v0.1.0 (/app/crates/hitz-api)
+ Documenting hitz-guest-agent v0.1.0 (/app/crates/hitz-guest-agent)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 30.22s
+   Generated /app/target/doc/hitz_api/index.html and 4 other files

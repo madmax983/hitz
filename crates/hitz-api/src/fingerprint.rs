@@ -40,6 +40,21 @@ use crate::MetricsSnapshot;
 use serde::{Deserialize, Serialize};
 
 /// A discrete identifier for a VM's resource usage profile.
+///
+/// # Abstract
+/// Represents a discrete identifier for a VM's resource usage profile.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::VmFingerprint;
+///
+/// let fp = VmFingerprint {
+///     id: "FP-C9-R4-D0-N0".to_string(),
+/// };
+///
+/// assert_eq!(fp.id, "FP-C9-R4-D0-N0");
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct VmFingerprint {
     /// The formatted fingerprint string (e.g., "FP-C9-R4-D0-N0").
@@ -49,6 +64,27 @@ pub struct VmFingerprint {
 /// Trait to generate a fingerprint.
 pub trait FingerprintGenerator {
     /// Generates a fingerprint based on current state.
+    ///
+    /// # Abstract
+    /// Generates a fingerprint based on current state.
+    ///
+    /// ## Examples
+    ///
+    /// ```rust
+    /// use hitz_api::{FingerprintGenerator, MetricsSnapshot, CpuMetrics, MemoryMetrics};
+    ///
+    /// let snap = MetricsSnapshot {
+    ///     timestamp_ms: 1000,
+    ///     cpu: CpuMetrics { total_pct: 95.0, per_core: vec![95.0], load_avg: [0.1, 0.1, 0.1] },
+    ///     memory: MemoryMetrics { total_bytes: 1000, used_bytes: 400, free_bytes: 600, buffers_bytes: 0, cached_bytes: 0, swap_total: 0, swap_used: 0 },
+    ///     disks: vec![],
+    ///     networks: vec![],
+    ///     processes: vec![],
+    /// };
+    ///
+    /// let fingerprint = snap.generate_fingerprint();
+    /// assert_eq!(fingerprint.id, "FP-C9-R4-D0-N0");
+    /// ```
     fn generate_fingerprint(&self) -> VmFingerprint;
 }
 
