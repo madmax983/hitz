@@ -115,8 +115,7 @@ where
         .context("send request failed")?;
 
     let status = resp.status();
-    let resp_body = resp
-        .into_body()
+    let resp_body = http_body_util::Limited::new(resp.into_body(), 1024 * 1024)
         .collect()
         .await
         .context("read response body")?
