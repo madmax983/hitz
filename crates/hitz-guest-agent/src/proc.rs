@@ -322,4 +322,44 @@ mod tests {
             " 8       0 sda 9999999999999999999 0 9999999999999999999 0 9999999999999999999 0 9999999999999999999\n",
         );
     }
+
+    #[test]
+    fn cpu_pct_total_delta_zero() {
+        let a = CpuSample {
+            user: 1000,
+            nice: 0,
+            system: 200,
+            idle: 8800,
+            iowait: 0,
+            irq: 0,
+            softirq: 0,
+        };
+        let b = CpuSample {
+            user: 1000,
+            nice: 0,
+            system: 200,
+            idle: 8800,
+            iowait: 0,
+            irq: 0,
+            softirq: 0,
+        };
+        let pct = cpu_pct(&a, &b);
+        assert!((pct - 0.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn parse_proc_meminfo_missing_total() {
+        let content = "MemFree: 131072 kB\nBuffers: 10240 kB\n";
+        let result = parse_proc_meminfo(content);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn parse_proc_net_dev_skips_lo() {
+        let content = "Inter-|   Receive                                                |  Transmit\n\
+             face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed\n\
+             lo:    5000     40    0    0    0     0          0         0     2000      20    0    0    0     0       0          0\n";
+        let nets = parse_proc_net_dev(content);
+        assert_eq!(nets.len(), 0);
+    }
 }
