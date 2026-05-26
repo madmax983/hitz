@@ -582,6 +582,37 @@ mod tests {
     }
 
     #[test]
+    fn unwriteable_status_descriptor() {
+        let f = create_temp_disk(2);
+        let mut dev = VirtioBlockDevice::new(f).expect("new block device");
+        let mem = MockMem::new(0x10000);
+        let mut q = setup_queue(&mem);
+
+        // Manually build a chain with a read-only status descriptor.
+        let base_desc = 0;
+        let data_len = 32;
+
+        const F_NEXT: u16 = 1;
+        write_desc(&mem, base_desc, HDR_GPA, 16, F_NEXT, base_desc + 1);
+        write_desc(
+            &mem,
+            base_desc + 1,
+            DATA_GPA,
+            data_len,
+            F_NEXT,
+            base_desc + 2,
+        ); // No F_WRITE on data for OUT
+        write_desc(&mem, base_desc + 2, STATUS_GPA, 1, 0, 0); // No F_WRITE on status
+
+        write_blk_header(&mem, HDR_GPA, VIRTIO_BLK_T_OUT, 0);
+
+        write_avail_entry(&mem, 0, base_desc);
+        set_avail_idx(&mem, 1);
+
+        dev.process_queue(0, &mut q, &mem);
+    }
+
+    #[test]
     fn unknown_request_type_returns_ioerr() {
         let f = create_temp_disk(2);
         let mut dev = VirtioBlockDevice::new(f).expect("new block device");

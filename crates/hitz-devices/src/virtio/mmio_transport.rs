@@ -927,13 +927,15 @@ mod tests {
     #[test]
     fn unhandled_mmio_read_returns_0() {
         let mut t = make_transport();
-        assert_eq!(read_u32(&mut t, 0xFFFF), 0);
+        // Read from an unhandled offset in the MMIO block.
+        assert_eq!(read_u32(&mut t, 0x054), 0);
     }
 
     #[test]
     fn unhandled_mmio_write_returns_none() {
         let mut t = make_transport();
-        assert_eq!(write_u32(&mut t, 0xFFFF, 0), None);
+        // Write to something below 0x100 that isn't handled
+        assert_eq!(write_u32(&mut t, 0x098, 0), None);
     }
 
     #[test]
