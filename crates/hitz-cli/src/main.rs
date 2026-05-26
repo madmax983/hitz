@@ -1364,12 +1364,44 @@ async fn handle_vm_clone(args: &VmCloneArgs) -> Result<()> {
     Ok(())
 }
 
+struct VmActionDisplay<'a>(&'a VmAction);
+
+impl std::fmt::Display for VmActionDisplay<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self.0 {
+            VmAction::Start => "start",
+            VmAction::Stop => "stop",
+            VmAction::Restart => "restart",
+        };
+        write!(f, "{s}")
+    }
+}
+
+impl VmActionDisplay<'_> {
+    const fn gerund(&self) -> &'static str {
+        match self.0 {
+            VmAction::Start => "Starting",
+            VmAction::Stop => "Stopping",
+            VmAction::Restart => "Restarting",
+        }
+    }
+
+    const fn past_tense(&self) -> &'static str {
+        match self.0 {
+            VmAction::Start => "started",
+            VmAction::Stop => "stopped",
+            VmAction::Restart => "restarted",
+        }
+    }
+}
+
 async fn handle_vm_action(args: &VmIdArgs, action: VmAction) -> Result<()> {
     use crossterm::style::Stylize;
     use std::io::Write;
+    let action_display = VmActionDisplay(&action);
     print!(
         "{}",
-        format!("⏳ {} VM '{}'...", action.gerund(), args.id).cyan()
+        format!("⏳ {} VM '{}'...", action_display.gerund(), args.id).cyan()
     );
     let _ = std::io::stdout().flush();
     let body = serde_json::to_string(&ActionVmRequest { action }).context("serialize request")?;
@@ -1385,8 +1417,8 @@ async fn handle_vm_action(args: &VmIdArgs, action: VmAction) -> Result<()> {
     print_action_result(
         status,
         &resp,
-        &format!("✓ Successfully {} VM {}", action.past_tense(), args.id),
-        &format!("Failed to {} VM {}", action, args.id),
+        &format!("✓ Successfully {} VM {}", action_display.past_tense(), args.id),
+        &format!("Failed to {} VM {}", action_display, args.id),
     );
     Ok(())
 }
