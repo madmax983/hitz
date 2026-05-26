@@ -72,6 +72,12 @@ mod carbon;
 #[cfg(feature = "carbon")]
 pub use carbon::{CarbonEstimator, EmissionFactors};
 
+#[cfg(feature = "cost")]
+/// Financial cost estimation module.
+mod cost;
+#[cfg(feature = "cost")]
+pub use cost::{BillingRate, CostEstimator};
+
 #[cfg(feature = "sentinel")]
 /// Sentinel module for defining rules based on metrics.
 mod sentinel;
