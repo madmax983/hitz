@@ -71,14 +71,13 @@ fn handle_packet(
             let _ = rx_tx.try_send((resp, vec![]));
         }
         Some(VsockOp::Rw) if hdr.dst_port == VSOCK_METRICS_PORT => {
-            if let Some(len_bytes) = payload.get(0..4) {
-                let len = u32::from_le_bytes(len_bytes.try_into().unwrap_or([0; 4])) as usize;
-                if let Some(snap_bytes) = payload.get(4..4 + len) {
-                    if let Ok(snap) = rmp_serde::from_slice::<MetricsSnapshot>(snap_bytes) {
-                        publish_to_otel(vm_id, &snap);
-                    }
-                }
-            }
+            let _ = payload
+                .get(0..4)
+                .map(|b| u32::from_le_bytes(b.try_into().unwrap_or([0; 4])) as usize)
+                .and_then(|len| payload.get(4..4 + len))
+                .and_then(|bytes| rmp_serde::from_slice::<MetricsSnapshot>(bytes).ok())
+                .map(|snap| publish_to_otel(vm_id, &snap));
+
             *fwd_cnt = fwd_cnt.saturating_add(hdr.len);
             let mut credit = hdr.make_response(VsockOp::CreditUpdate, 0);
             credit.fwd_cnt = *fwd_cnt;

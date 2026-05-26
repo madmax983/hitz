@@ -457,31 +457,7 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
             // Update state based on result.
             if let Ok(mut vms) = vms.lock() {
                 if let Some(entry) = vms.get_mut(&vm_id) {
-                    match result {
-                        Ok(Ok(run_result)) => match run_result.exit_reason {
-                            ExitReason::Halt | ExitReason::Shutdown | ExitReason::Canceled => {
-                                entry.state = VmState::Stopped;
-                                entry.exit_reason = Some(format!("{:?}", run_result.exit_reason));
-                            }
-                            ExitReason::Unexpected(ref reason) => {
-                                entry.state = VmState::Failed;
-                                entry.exit_reason = Some(reason.clone());
-                            }
-                        },
-                        Ok(Err(e)) => {
-                            entry.state = VmState::Failed;
-                            entry.exit_reason = Some(e.to_string());
-                        }
-                        Err(e) => {
-                            entry.state = VmState::Failed;
-                            entry.exit_reason = Some(format!("task panicked: {e}"));
-                        }
-                    }
-                    entry.stop_flag = None;
-                    entry.vsock_handle = None;
-                    if let Some(ref buf) = entry.serial_buf {
-                        buf.close();
-                    }
+                    Self::update_vm_state_after_run(entry, result);
                     let final_state = entry.state;
                     drop(vms); // explicit drop — persist state outside the lock
                     if let Err(e) = store_exit.save_state(&vm_id, final_state) {
@@ -626,6 +602,37 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
     /// let info = manager.get_vm("my-vm").unwrap();
     /// println!("State: {:?}", info.state);
     /// ```
+    fn update_vm_state_after_run(
+        entry: &mut VmEntry,
+        result: Result<Result<hitz_vmm::RunResult, hitz_vmm::VmError>, tokio::task::JoinError>,
+    ) {
+        match result {
+            Ok(Ok(run_result)) => match run_result.exit_reason {
+                ExitReason::Halt | ExitReason::Shutdown | ExitReason::Canceled => {
+                    entry.state = VmState::Stopped;
+                    entry.exit_reason = Some(format!("{:?}", run_result.exit_reason));
+                }
+                ExitReason::Unexpected(ref reason) => {
+                    entry.state = VmState::Failed;
+                    entry.exit_reason = Some(reason.clone());
+                }
+            },
+            Ok(Err(e)) => {
+                entry.state = VmState::Failed;
+                entry.exit_reason = Some(e.to_string());
+            }
+            Err(e) => {
+                entry.state = VmState::Failed;
+                entry.exit_reason = Some(format!("task panicked: {e}"));
+            }
+        }
+        entry.stop_flag = None;
+        entry.vsock_handle = None;
+        if let Some(ref buf) = entry.serial_buf {
+            buf.close();
+        }
+    }
+
     pub fn get_vm(&self, id: &str) -> Result<VmInfo, DaemonError> {
         let vms = self
             .vms
@@ -734,14 +741,12 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
     /// println!("Shutdown signals sent, moving on...");
     /// ```
     pub fn stop_all(&self) {
-        if let Ok(vms) = self.vms.lock() {
-            for entry in vms.values() {
-                if entry.state == VmState::Running {
-                    if let Some(ref flag) = entry.stop_flag {
-                        flag.store(true, Ordering::Relaxed);
-                    }
-                }
-            }
+        let Ok(vms) = self.vms.lock() else { return };
+        for entry in vms.values().filter(|e| e.state == VmState::Running) {
+            let Some(ref flag) = entry.stop_flag else {
+                continue;
+            };
+            flag.store(true, Ordering::Relaxed);
         }
     }
 
@@ -778,13 +783,11 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
         let running_count = {
             let Ok(vms) = self.vms.lock() else { return };
             let mut count = 0usize;
-            for entry in vms.values() {
-                if entry.state == VmState::Running {
-                    if let Some(ref flag) = entry.stop_flag {
-                        flag.store(true, Ordering::Relaxed);
-                    }
-                    count += 1;
+            for entry in vms.values().filter(|e| e.state == VmState::Running) {
+                if let Some(ref flag) = entry.stop_flag {
+                    flag.store(true, Ordering::Relaxed);
                 }
+                count += 1;
             }
             count
         };
