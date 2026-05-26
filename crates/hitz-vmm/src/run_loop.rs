@@ -166,7 +166,9 @@ fn poll_devices<V: Vcpu, W: Write>(
     let pending_vector = devs.mmio_bus.poll_devices();
     drop(devs);
 
-    let Some(vector) = pending_vector else { return Ok(()); };
+    let Some(vector) = pending_vector else {
+        return Ok(());
+    };
     if vcpu.inject_interrupt(vector).is_err() {
         *pending_irq = Some(vector);
         vcpu.request_interrupt_window()?;
@@ -205,21 +207,12 @@ fn dispatch_exit<V: Vcpu, W: Write>(
         }
         VcpuExit::InterruptWindow => {
             record_exit(exit_counter, "InterruptWindow");
-            // Guest is now interruptible. WHP auto-clears the
-            // deliverability notification after this exit fires.
-            let Some(vector) = pending_irq.take() else { return Ok(None); };
-            vcpu.inject_interrupt(vector)?;
-            tracing::debug!(vector, "deferred interrupt injected via interrupt window");
+            handle_interrupt_window(vcpu, pending_irq)?;
             Ok(None)
         }
         VcpuExit::Canceled => {
             record_exit(exit_counter, "Canceled");
-            // vCPU run was canceled (e.g. by another thread).
-            // If we have a pending IRQ, re-request the interrupt window
-            // so we get notified once the guest becomes interruptible.
-            if pending_irq.is_some() {
-                vcpu.request_interrupt_window()?;
-            }
+            handle_canceled(vcpu, *pending_irq)?;
             Ok(None)
         }
         VcpuExit::Unknown(code) => {
@@ -232,6 +225,30 @@ fn dispatch_exit<V: Vcpu, W: Write>(
 }
 
 /// Dispatch an MMIO exit to the appropriate device handler.
+fn handle_interrupt_window<V: Vcpu>(
+    vcpu: &mut V,
+    pending_irq: &mut Option<u8>,
+) -> Result<(), HalError> {
+    // Guest is now interruptible. WHP auto-clears the
+    // deliverability notification after this exit fires.
+    let Some(vector) = pending_irq.take() else {
+        return Ok(());
+    };
+    vcpu.inject_interrupt(vector)?;
+    tracing::debug!(vector, "deferred interrupt injected via interrupt window");
+    Ok(())
+}
+
+fn handle_canceled<V: Vcpu>(vcpu: &mut V, pending_irq: Option<u8>) -> Result<(), HalError> {
+    // vCPU run was canceled (e.g. by another thread).
+    // If we have a pending IRQ, re-request the interrupt window
+    // so we get notified once the guest becomes interruptible.
+    if pending_irq.is_some() {
+        vcpu.request_interrupt_window()?;
+    }
+    Ok(())
+}
+
 #[allow(clippy::expect_used)]
 fn handle_mmio<V: Vcpu, W: Write>(
     vcpu: &mut V,
@@ -320,7 +337,9 @@ fn handle_mmio_write<V: Vcpu, W: Write>(
     };
     advance_rip(vcpu, instr_len)?;
 
-    let Some(vector) = irq else { return Ok(()); };
+    let Some(vector) = irq else {
+        return Ok(());
+    };
     // Try to inject immediately. If the guest has IF=0
     // (interrupts disabled) or is in interrupt shadow,
     // WHP rejects the injection — stash the IRQ and
