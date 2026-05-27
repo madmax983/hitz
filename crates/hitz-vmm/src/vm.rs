@@ -235,6 +235,9 @@ pub fn validate_config(config: &VmConfig) -> Result<(), VmError> {
     if let Some(ref path) = config.disk_path {
         let _disk_path = SafePath::new(path)?;
     }
+    if let hitz_api::GuestAgentMode::Custom(ref path) = config.guest_agent {
+        let _agent_path = SafePath::new(path)?;
+    }
     if !config.kernel_path.exists() {
         return Err(VmError::Config(format!(
             "kernel not found: {}",
@@ -774,6 +777,13 @@ mod tests {
 
         let err = validate_config(&config).expect_err("should reject path traversal");
         assert!(err.to_string().contains("path traversal detected"));
+
+        let mut config_agent = valid_config(valid_path.clone());
+        config_agent.guest_agent =
+            hitz_api::GuestAgentMode::Custom(std::path::PathBuf::from("/etc/../shadow"));
+        let err_agent = validate_config(&config_agent)
+            .expect_err("should reject path traversal in guest agent");
+        assert!(err_agent.to_string().contains("path traversal detected"));
 
         // Legitimate filenames with two dots should pass
         let mut config2 = config;
