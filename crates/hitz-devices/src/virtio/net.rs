@@ -425,4 +425,263 @@ mod tests {
 
         dev.process_tx(&mut q, &mem);
     }
+
+    #[test]
+    fn tx_read_guest_failure_reverts_frame_data() {
+        let mac = [0x02, 0x00, 0x00, 0x00, 0x00, 0x01];
+        let (dev, _tx_receiver, _rx_sender) = VirtioNetDevice::new(mac);
+
+        let mem = MockMem::new(0x10000);
+        let mut q = VirtQueue::new(16);
+        q.configure(0, 0x1000, 0x2000);
+        q.set_ready(true);
+        mem.write_bytes(0x2000 + 2, &0u16.to_le_bytes());
+
+        // Put a readable descriptor pointing out of bounds (past 0x10000)
+        write_desc(&mem, 0, 0x10000, 32, 0, 0); // Out of bounds
+        write_avail_entry(&mem, 0, 0);
+        set_avail_idx(&mem, 1);
+
+        dev.process_tx(&mut q, &mem);
+
+        let mut used_idx_bytes = [0u8; 2];
+        let _ = mem.read_guest(0x2000 + 2, &mut used_idx_bytes);
+        let used_idx = u16::from_le_bytes(used_idx_bytes);
+        assert_eq!(used_idx, 1);
+    }
+
+    #[test]
+    fn tx_drop_frame_when_channel_disconnected() {
+        let mac = [0x02, 0x00, 0x00, 0x00, 0x00, 0x01];
+        let (dev, tx_receiver, _rx_sender) = VirtioNetDevice::new(mac);
+
+        // Drop the receiver to disconnect the channel
+        drop(tx_receiver);
+
+        let mem = MockMem::new(0x10000);
+        let mut q = VirtQueue::new(16);
+        q.configure(0, 0x1000, 0x2000);
+        q.set_ready(true);
+        mem.write_bytes(0x2000 + 2, &0u16.to_le_bytes());
+
+        // Valid frame with size 14 (just enough for header + tiny payload)
+        write_desc(&mem, 0, 0x3000, 14, 0, 0);
+        write_avail_entry(&mem, 0, 0);
+        set_avail_idx(&mem, 1);
+
+        dev.process_tx(&mut q, &mem);
+
+        let mut used_idx_bytes = [0u8; 2];
+        let _ = mem.read_guest(0x2000 + 2, &mut used_idx_bytes);
+        let used_idx = u16::from_le_bytes(used_idx_bytes);
+        assert_eq!(used_idx, 1);
+    }
+
+    #[test]
+    fn tx_huge_descriptor_is_bounded() {
+        let mac = [0x02, 0x00, 0x00, 0x00, 0x00, 0x01];
+        let (dev, _tx_receiver, _rx_sender) = VirtioNetDevice::new(mac);
+
+        let mem = MockMem::new(0x20000); // Larger memory to accommodate
+        let mut q = VirtQueue::new(16);
+        q.configure(0, 0x1000, 0x2000);
+        q.set_ready(true);
+        mem.write_bytes(0x2000 + 2, &0u16.to_le_bytes());
+
+        // We want frame_data.len() + desc.len > 65536
+        // Let's create two chained descriptors:
+        // 1. A small valid one (len = 10000)
+        // 2. A massive one (len = 60000)
+        // This will trigger the `start_len.saturating_add(...) > 65536` break.
+        write_desc(&mem, 0, 0x3000, 10000, 1, 1); // flag=1=next, next=1
+        write_desc(&mem, 1, 0x4000, 60000, 0, 0);
+        write_avail_entry(&mem, 0, 0);
+        set_avail_idx(&mem, 1);
+
+        dev.process_tx(&mut q, &mem);
+
+        let mut used_idx_bytes = [0u8; 2];
+        let _ = mem.read_guest(0x2000 + 2, &mut used_idx_bytes);
+        let used_idx = u16::from_le_bytes(used_idx_bytes);
+        assert_eq!(used_idx, 1);
+    }
+
+    #[test]
+    fn process_queue_unknown_queue() {
+        let mac = [0x02, 0x00, 0x00, 0x00, 0x00, 0x01];
+        let (mut dev, _tx_receiver, _rx_sender) = VirtioNetDevice::new(mac);
+        let mem = MockMem::new(0x10000);
+        let mut q = VirtQueue::new(16);
+        // This should hit the default branch and do nothing
+        dev.process_queue(2, &mut q, &mem);
+        // We just ensure it doesn't panic
+    }
+
+    #[test]
+    fn process_queue_rx_queue() {
+        let mac = [0x02, 0x00, 0x00, 0x00, 0x00, 0x01];
+        let (mut dev, _tx_receiver, rx_sender) = VirtioNetDevice::new(mac);
+        let mem = MockMem::new(0x10000);
+        let mut q = VirtQueue::new(16);
+        q.configure(0, 0x1000, 0x2000);
+        q.set_ready(true);
+        mem.write_bytes(0x2000 + 2, &0u16.to_le_bytes());
+
+        // We push a frame to the rx queue
+        rx_sender.send(vec![0u8; 14]).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        let _ = dev.poll_rx(&mut q, &mem);
+
+        // Put a device-writable descriptor
+        write_desc(&mem, 0, 0x3000, 64, 2, 0); // VIRTQ_DESC_F_WRITE = 2
+        write_avail_entry(&mem, 0, 0);
+        set_avail_idx(&mem, 1);
+
+        dev.process_queue(RX_QUEUE, &mut q, &mem);
+
+        let mut used_idx_bytes = [0u8; 2];
+        let _ = mem.read_guest(0x2000 + 2, &mut used_idx_bytes);
+        let used_idx = u16::from_le_bytes(used_idx_bytes);
+        assert_eq!(used_idx, 1);
+    }
+
+    #[test]
+    fn write_config_is_noop() {
+        let mac = [0x02, 0x00, 0x00, 0x00, 0x00, 0x01];
+        let (mut dev, _tx_receiver, _rx_sender) = VirtioNetDevice::new(mac);
+        // Writing to config space should do nothing, test it does not panic
+        dev.write_config(0, &[0u8; 6]);
+    }
+
+    #[test]
+    fn no_mem_write_fails() {
+        let nomem = NoMem;
+        assert!(nomem.write_guest(0, &[0]).is_ok());
+    }
+
+    #[test]
+    fn no_mem_read_fails() {
+        let nomem = NoMem;
+        let mut buf = [0u8; 1];
+        assert!(nomem.read_guest(0, &mut buf).is_ok());
+    }
+
+    #[test]
+    fn rx_deliver_device_writable_desc() {
+        let mac = [0x02, 0x00, 0x00, 0x00, 0x00, 0x01];
+        let (mut dev, _tx_receiver, rx_sender) = VirtioNetDevice::new(mac);
+
+        let mem = MockMem::new(0x10000);
+        let mut q = VirtQueue::new(16);
+        q.configure(0, 0x1000, 0x2000);
+        q.set_ready(true);
+        mem.write_bytes(0x2000 + 2, &0u16.to_le_bytes());
+
+        // Put a device-writable descriptor
+        write_desc(&mem, 0, 0x3000, 64, 2, 0); // VIRTQ_DESC_F_WRITE = 2
+        write_avail_entry(&mem, 0, 0);
+        set_avail_idx(&mem, 1);
+
+        // We push a frame to the rx queue
+        rx_sender.send(vec![0u8; 14]).unwrap();
+        // Give the channel a moment to deliver
+        std::thread::sleep(std::time::Duration::from_millis(50));
+
+        // This triggers poll_rx to move it to rx_pending
+        let _ = dev.poll_rx(&mut q, &mem);
+
+        let _ = dev.deliver_rx(&mut q, &mem);
+
+        let mut used_idx_bytes = [0u8; 2];
+        let _ = mem.read_guest(0x2000 + 2, &mut used_idx_bytes);
+        let used_idx = u16::from_le_bytes(used_idx_bytes);
+        assert_eq!(used_idx, 1);
+
+        let mut used_len_bytes = [0u8; 4];
+        let _ = mem.read_guest(0x2000 + 4 + 4, &mut used_len_bytes);
+        assert_eq!(u32::from_le_bytes(used_len_bytes), 12 + 14); // Header + payload
+    }
+
+    #[test]
+    fn rx_deliver_skips_read_only_desc() {
+        let mac = [0x02, 0x00, 0x00, 0x00, 0x00, 0x01];
+        let (mut dev, _tx_receiver, rx_sender) = VirtioNetDevice::new(mac);
+
+        let mem = MockMem::new(0x10000);
+        let mut q = VirtQueue::new(16);
+        q.configure(0, 0x1000, 0x2000);
+        q.set_ready(true);
+        mem.write_bytes(0x2000 + 2, &0u16.to_le_bytes());
+
+        // Put a read-only descriptor
+        write_desc(&mem, 0, 0x3000, 64, 0, 0); // No VIRTQ_DESC_F_WRITE
+        write_avail_entry(&mem, 0, 0);
+        set_avail_idx(&mem, 1);
+
+        // We push a frame to the rx queue
+        rx_sender.send(vec![0u8; 14]).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        let _ = dev.poll_rx(&mut q, &mem);
+
+        let _ = dev.deliver_rx(&mut q, &mem);
+
+        // Since it's read-only, it won't write the packet, but will consume the desc
+        let mut used_idx_bytes = [0u8; 2];
+        let _ = mem.read_guest(0x2000 + 2, &mut used_idx_bytes);
+        let used_idx = u16::from_le_bytes(used_idx_bytes);
+        assert_eq!(used_idx, 1);
+
+        let mut used_len_bytes = [0u8; 4];
+        let _ = mem.read_guest(0x2000 + 4 + 4, &mut used_len_bytes);
+        assert_eq!(u32::from_le_bytes(used_len_bytes), 0); // Nothing written
+    }
+
+    #[test]
+    fn rx_write_guest_failure() {
+        let mac = [0x02, 0x00, 0x00, 0x00, 0x00, 0x01];
+        let (mut dev, _tx_receiver, rx_sender) = VirtioNetDevice::new(mac);
+
+        let mem = MockMem::new(0x10000);
+        let mut q = VirtQueue::new(16);
+        q.configure(0, 0x1000, 0x2000);
+        q.set_ready(true);
+        mem.write_bytes(0x2000 + 2, &0u16.to_le_bytes());
+
+        // Out of bounds descriptor
+        write_desc(&mem, 0, 0x10000, 64, 2, 0); // VIRTQ_DESC_F_WRITE = 2
+        write_avail_entry(&mem, 0, 0);
+        set_avail_idx(&mem, 1);
+
+        rx_sender.send(vec![0u8; 14]).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        let _ = dev.poll_rx(&mut q, &mem);
+
+        let _ = dev.deliver_rx(&mut q, &mem);
+
+        // Fails to write, so total_written should be 0
+        let mut used_idx_bytes = [0u8; 2];
+        let _ = mem.read_guest(0x2000 + 2, &mut used_idx_bytes);
+        let used_idx = u16::from_le_bytes(used_idx_bytes);
+        assert_eq!(used_idx, 1);
+
+        let mut used_len_bytes = [0u8; 4];
+        let _ = mem.read_guest(0x2000 + 4 + 4, &mut used_len_bytes);
+        assert_eq!(u32::from_le_bytes(used_len_bytes), 0);
+    }
+
+    #[test]
+    fn rx_poll_returns_false_if_no_queues_or_ready() {
+        let mac = [0x02, 0x00, 0x00, 0x00, 0x00, 0x01];
+        let (mut dev, _tx_receiver, rx_sender) = VirtioNetDevice::new(mac);
+
+        let mem = MockMem::new(0x10000);
+        let mut q = VirtQueue::new(16);
+
+        rx_sender.send(vec![0u8; 14]).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(50));
+
+        // Queue not configured/ready
+        let has_data = dev.poll_rx(&mut q, &mem);
+        assert!(!has_data);
+    }
 }
