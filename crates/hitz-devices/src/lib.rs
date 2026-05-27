@@ -31,7 +31,6 @@
 //! let block_backend = VirtioBlockDevice::new(std::fs::File::open("/dev/null").unwrap()).unwrap();
 //! let mut block_device = VirtioMmioTransport::new(block_backend, std::sync::Arc::new(DummyMem), 5);
 //!
-
 //! // 3. Register devices with specific base addresses and sizes
 //! // Typical serial base is 0x3f8 with size 8
 //! # struct DummyMem;

@@ -1,4 +1,3 @@
-#![allow(dead_code, clippy::trivially_copy_pass_by_ref)]
 //! Networking for Hitz.
 //!
 //! # Abstract
@@ -50,6 +49,7 @@
 //!
 //! Parsing incorrectly formatted MAC addresses or invalid CIDR blocks will panic in certain
 //! parsing paths. See [`parse_mac`] and [`parse_cidr`] for details on expected formats.
+#![allow(dead_code, clippy::trivially_copy_pass_by_ref)]
 
 pub(crate) mod ethernet;
 pub(crate) mod wintun_io;

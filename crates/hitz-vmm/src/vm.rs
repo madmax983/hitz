@@ -378,6 +378,36 @@ fn cancel_all_vcpus<V: Vcpu>(handles: &[V::CancelHandle]) {
     clippy::needless_pass_by_value,
     clippy::expect_used
 )]
+/// Boots and runs a micro-VM.
+///
+/// # Abstract
+/// This is the main entry point for executing a VM. It configures the virtual
+/// machine's hardware, loads the kernel into guest memory, spawns vCPU threads,
+/// and manages the execution loop until the VM halts or encounters an error.
+///
+/// # The Hero's Journey
+/// ```rust,ignore
+/// # // Ignore because setting up a real hypervisor for a doctest is complex
+/// use hitz_api::VmConfig;
+/// use hitz_vmm::{boot_and_run, BootExtras};
+/// use hitz_whp::WhpHypervisor;
+/// use std::sync::{Arc, atomic::AtomicBool};
+/// use std::io;
+///
+/// // Assume config and hypervisor are initialized
+/// # let config = VmConfig { ..Default::default() };
+/// # let hypervisor = WhpHypervisor::new().unwrap();
+/// let stop_flag = Arc::new(AtomicBool::new(false));
+/// let extras = BootExtras::none();
+///
+/// let result = boot_and_run(
+///     &hypervisor,
+///     &config,
+///     io::sink(), // Discard serial output
+///     stop_flag,
+///     extras
+/// ).unwrap();
+/// ```
 pub fn boot_and_run<H: Hypervisor, W: Write + Send + 'static>(
     hypervisor: &H,
     config: &VmConfig,
