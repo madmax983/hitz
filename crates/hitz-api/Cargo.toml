@@ -25,6 +25,7 @@ classifier = ["diff"]
 carbon = []
 terraform = []
 
+mermaid = []
 sentinel = []
 efficiency = []
 fingerprint = []
