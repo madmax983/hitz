@@ -407,6 +407,35 @@ mod tests {
     }
 
     #[test]
+    fn process_queue_unknown_queue_does_not_panic() {
+        let mac = [0x02, 0x00, 0x00, 0x00, 0x00, 0x01];
+        let (mut dev, _tx, _rx) = VirtioNetDevice::new(mac);
+        let mut q = VirtQueue::new(16);
+        let mem = NoMem;
+
+        dev.process_queue(99, &mut q, &mem);
+    }
+
+    #[test]
+    fn write_config_is_noop() {
+        let mac = [0x02, 0x00, 0x00, 0x00, 0x00, 0x01];
+        let (mut dev, _tx, _rx) = VirtioNetDevice::new(mac);
+
+        dev.write_config(0, &[0xff, 0xff]);
+        assert_eq!(dev.mac, mac);
+    }
+
+    #[test]
+    fn deliver_rx_returns_false_if_no_pending() {
+        let mac = [0x02, 0x00, 0x00, 0x00, 0x00, 0x01];
+        let (mut dev, _tx, _rx) = VirtioNetDevice::new(mac);
+        let mut q = VirtQueue::new(16);
+        let mem = NoMem;
+
+        assert!(!dev.deliver_rx(&mut q, &mem));
+    }
+
+    #[test]
     fn havoc_net_tx_oom() {
         let mac = [0x02, 0x00, 0x00, 0x00, 0x00, 0x01];
         let (dev, _tx_receiver, _rx_sender) = VirtioNetDevice::new(mac);

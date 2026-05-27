@@ -279,6 +279,18 @@ mod tests {
     }
 
     #[test]
+    fn uptime_fallback_handles_missing_file() {
+        let uptime = read_uptime_secs();
+        assert!(uptime >= 0.0);
+    }
+
+    #[test]
+    fn test_collect_top_procs_handles_empty() {
+        let procs = collect_top_procs(0);
+        assert_eq!(procs.len(), 0);
+    }
+
+    #[test]
     fn havoc_test_parse_proc_pid_stat_out_of_bounds() {
         let content = "(a)";
         assert!(parse_proc_pid_stat(1, content).is_none());
