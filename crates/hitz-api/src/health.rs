@@ -72,6 +72,17 @@ pub enum HealthStatus {
 ///
 /// assert_eq!(report.status, HealthStatus::Warning);
 /// ```
+///
+/// ## Examples
+/// ```rust
+/// use hitz_api::{SystemHealth, HealthStatus};
+///
+/// let health = SystemHealth {
+///     status: HealthStatus::Healthy,
+///     reasons: vec![],
+/// };
+/// assert_eq!(health.status, HealthStatus::Healthy);
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SystemHealth {
     /// The aggregated health status.
@@ -109,6 +120,23 @@ pub struct SystemHealth {
 /// ```
 pub trait HealthCheck {
     /// Assesses the health of the entity and returns a `SystemHealth` report.
+    ///
+    /// ## Examples
+    /// ```rust
+    /// use hitz_api::{HealthCheck, MetricsSnapshot, CpuMetrics, MemoryMetrics, HealthStatus};
+    ///
+    /// let snap = MetricsSnapshot {
+    ///     timestamp_ms: 1000,
+    ///     cpu: CpuMetrics { total_pct: 10.0, per_core: vec![10.0], load_avg: [0.1, 0.1, 0.1] },
+    ///     memory: MemoryMetrics { total_bytes: 100, used_bytes: 10, free_bytes: 90, buffers_bytes: 0, cached_bytes: 0, swap_total: 0, swap_used: 0 },
+    ///     disks: vec![],
+    ///     networks: vec![],
+    ///     processes: vec![],
+    /// };
+    ///
+    /// let report = snap.assess_health();
+    /// assert_eq!(report.status, HealthStatus::Healthy);
+    /// ```
     fn assess_health(&self) -> SystemHealth;
 }
 

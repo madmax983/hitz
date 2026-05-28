@@ -175,6 +175,31 @@ impl SentinelRule {
     /// Extracts the target metric from the incoming `MetricsSnapshot` and applies
     /// the rule's defined mathematical operator and threshold. It returns `true` if
     /// the system is violating the configured bounds.
+    ///
+    /// ## Examples
+    /// ```rust
+    /// use hitz_api::{SentinelRule, SentinelCondition, MetricTarget, ConditionOperator, MetricsSnapshot, CpuMetrics, MemoryMetrics};
+    ///
+    /// let rule = SentinelRule {
+    ///     name: "CPU Spike".to_string(),
+    ///     condition: SentinelCondition {
+    ///         target: MetricTarget::CpuTotalPct,
+    ///         operator: ConditionOperator::GreaterThan,
+    ///         threshold: 50.0,
+    ///     },
+    /// };
+    ///
+    /// let snap = MetricsSnapshot {
+    ///     timestamp_ms: 1000,
+    ///     cpu: CpuMetrics { total_pct: 75.0, per_core: vec![75.0], load_avg: [1.0, 1.0, 1.0] },
+    ///     memory: MemoryMetrics { total_bytes: 0, used_bytes: 0, free_bytes: 0, buffers_bytes: 0, cached_bytes: 0, swap_total: 0, swap_used: 0 },
+    ///     disks: vec![],
+    ///     networks: vec![],
+    ///     processes: vec![],
+    /// };
+    ///
+    /// assert!(rule.evaluate(&snap));
+    /// ```
     #[must_use]
     pub fn evaluate(&self, snapshot: &MetricsSnapshot) -> bool {
         let value = match self.condition.target {

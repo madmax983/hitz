@@ -40,6 +40,22 @@ use crate::MetricsSnapshot;
 use serde::{Deserialize, Serialize};
 
 /// The computed resource imbalance score.
+///
+/// # Abstract
+/// This struct holds the mathematical results of a core-imbalance analysis,
+/// including the standard deviation across cores and a normalized score.
+///
+/// ## Examples
+/// ```rust
+/// use hitz_api::ImbalanceResult;
+///
+/// let result = ImbalanceResult {
+///     std_dev: 0.0,
+///     imbalance_score: 0.0,
+///     is_imbalanced: false,
+/// };
+/// assert!(!result.is_imbalanced);
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ImbalanceResult {
     /// Overall standard deviation of per-core utilization.
@@ -51,8 +67,29 @@ pub struct ImbalanceResult {
 }
 
 /// Trait to analyze core utilization imbalance.
+///
+/// # Abstract
+/// Types implementing this trait can look at multi-core telemetry and determine
+/// if the work is heavily skewed toward a single core (indicating a bottleneck).
 pub trait CoreImbalanceAnalyzer {
     /// Analyzes per-core utilization and computes an imbalance score.
+    ///
+    /// ## Examples
+    /// ```rust
+    /// use hitz_api::{CoreImbalanceAnalyzer, MetricsSnapshot, CpuMetrics, MemoryMetrics};
+    ///
+    /// let snap = MetricsSnapshot {
+    ///     timestamp_ms: 1000,
+    ///     cpu: CpuMetrics { total_pct: 100.0, per_core: vec![100.0, 100.0], load_avg: [2.0, 2.0, 2.0] },
+    ///     memory: MemoryMetrics { total_bytes: 0, used_bytes: 0, free_bytes: 0, buffers_bytes: 0, cached_bytes: 0, swap_total: 0, swap_used: 0 },
+    ///     disks: vec![],
+    ///     networks: vec![],
+    ///     processes: vec![],
+    /// };
+    ///
+    /// let result = snap.analyze_imbalance();
+    /// assert!(!result.is_imbalanced);
+    /// ```
     fn analyze_imbalance(&self) -> ImbalanceResult;
 }
 
