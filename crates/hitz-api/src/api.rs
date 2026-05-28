@@ -64,16 +64,6 @@ pub enum VmAction {
     Restart,
 }
 
-impl std::fmt::Display for VmAction {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let s = match self {
-            Self::Start => "start",
-            Self::Stop => "stop",
-            Self::Restart => "restart",
-        };
-        write!(f, "{s}")
-    }
-}
 
 impl VmAction {
     /// Returns the gerund form of the action (e.g., "Starting", "Stopping").

@@ -9,6 +9,8 @@
 // CLI binary — anyhow for top-level errors, expect on infallible ops.
 #![allow(clippy::expect_used)]
 
+pub mod display;
+
 mod analyzer;
 mod pipe_client;
 
@@ -1386,7 +1388,7 @@ async fn handle_vm_action(args: &VmIdArgs, action: VmAction) -> Result<()> {
         status,
         &resp,
         &format!("✓ Successfully {} VM {}", action.past_tense(), args.id),
-        &format!("Failed to {} VM {}", action, args.id),
+        &format!("Failed to {} VM {}", action, args.id),format!("Failed to {} VM {}", crate::display::DisplayVmAction(&action), args.id),
     );
     Ok(())
 }
@@ -1430,10 +1432,10 @@ async fn handle_vm_status(args: &VmIdArgs) -> Result<()> {
             let _ = table.load_preset(UTF8_FULL_CONDENSED);
 
             let state_cell = match info.state {
-                hitz_api::VmState::Running => Cell::new("Running").fg(Color::Green),
-                hitz_api::VmState::Stopped => Cell::new("Stopped").fg(Color::Yellow),
-                hitz_api::VmState::Failed => Cell::new("Failed").fg(Color::Red),
-                hitz_api::VmState::Created => Cell::new("Created").fg(Color::Cyan),
+                hitz_api::VmState::Running => Cell::new(crate::display::DisplayVmState(&info.state).to_string()).fg(Color::Green),
+                hitz_api::VmState::Stopped => Cell::new(crate::display::DisplayVmState(&info.state).to_string()).fg(Color::Yellow),
+                hitz_api::VmState::Failed => Cell::new(crate::display::DisplayVmState(&info.state).to_string()).fg(Color::Red),
+                hitz_api::VmState::Created => Cell::new(crate::display::DisplayVmState(&info.state).to_string()).fg(Color::Cyan),
             };
 
             let _ = table.add_row([
@@ -1567,10 +1569,10 @@ async fn handle_vm_list(args: &VmListArgs) -> Result<()> {
 
             for info in vms {
                 let state_cell = match info.state {
-                    hitz_api::VmState::Running => Cell::new("Running").fg(Color::Green),
-                    hitz_api::VmState::Stopped => Cell::new("Stopped").fg(Color::Yellow),
-                    hitz_api::VmState::Failed => Cell::new("Failed").fg(Color::Red),
-                    hitz_api::VmState::Created => Cell::new("Created").fg(Color::Cyan),
+                    hitz_api::VmState::Running => Cell::new(crate::display::DisplayVmState(&info.state).to_string()).fg(Color::Green),
+                    hitz_api::VmState::Stopped => Cell::new(crate::display::DisplayVmState(&info.state).to_string()).fg(Color::Yellow),
+                    hitz_api::VmState::Failed => Cell::new(crate::display::DisplayVmState(&info.state).to_string()).fg(Color::Red),
+                    hitz_api::VmState::Created => Cell::new(crate::display::DisplayVmState(&info.state).to_string()).fg(Color::Cyan),
                 };
                 // ⚡ Bolt Optimization: Replace `.unwrap_or_else(|| "-".to_string())` with `.as_deref().unwrap_or("-")`
                 // This eliminates an unnecessary `String` allocation on the hot path of formatting CLI output.
@@ -2499,12 +2501,13 @@ async fn handle_vm_dashboard(args: &VmListArgs) -> Result<()> {
                 f.render_widget(no_vms_msg, chunks[1]);
             } else {
                 let rows = vms.iter().map(|vm| {
-                    let state_str = match vm.state {
+                    let state_str = crate::display::DisplayVmState(&vm.state).to_string();
+                    /*
                         hitz_api::VmState::Running => "Running",
                         hitz_api::VmState::Stopped => "Stopped",
                         hitz_api::VmState::Failed => "Failed",
                         hitz_api::VmState::Created => "Created",
-                    };
+                    };*/
                     let state_color = match vm.state {
                         hitz_api::VmState::Running => Color::Green,
                         hitz_api::VmState::Stopped => Color::Yellow,
