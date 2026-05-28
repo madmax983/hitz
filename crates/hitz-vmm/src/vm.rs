@@ -257,6 +257,15 @@ pub fn validate_config(config: &VmConfig) -> Result<(), VmError> {
             path.display()
         )));
     }
+    if let hitz_api::GuestAgentMode::Custom(ref path) = config.guest_agent {
+        let _agent_path = SafePath::new(path)?;
+        if !path.exists() {
+            return Err(VmError::Config(format!(
+                "guest agent not found: {}",
+                path.display()
+            )));
+        }
+    }
     if config.ram_mib < MIN_RAM_MIB {
         return Err(VmError::Config(format!(
             "RAM must be at least {MIN_RAM_MIB} MiB, got {}",
@@ -782,6 +791,12 @@ mod tests {
         let err2 =
             validate_config(&config2).expect_err("should reject not found but not traversal");
         assert!(!err2.to_string().contains("path traversal detected"));
+
+        // Custom guest agent path traversal
+        let mut config3 = config2;
+        config3.guest_agent = hitz_api::GuestAgentMode::Custom(std::path::PathBuf::from("/etc/../shadow"));
+        let err3 = validate_config(&config3).expect_err("should reject path traversal");
+        assert!(err3.to_string().contains("path traversal detected"));
     }
     #[test]
     fn validate_config_table_driven() {
