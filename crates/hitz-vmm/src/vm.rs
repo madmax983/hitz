@@ -549,12 +549,11 @@ fn build_kernel_cmdline(
     Ok(())
 }
 
-fn setup_devices(
+fn setup_block_device(
     mmio_bus: &mut MmioBus,
     config: &VmConfig,
-    extras: &mut BootExtras,
     guest_mem_arc: &Arc<GuestMemory>,
-) -> Result<Option<hitz_net::NetIoHandle>, VmError> {
+) -> Result<(), VmError> {
     if let Some(ref disk_path) = config.disk_path {
         let disk_file = fs::File::open(disk_path)?;
         let block_dev = VirtioBlockDevice::new(disk_file)?;
@@ -562,8 +561,15 @@ fn setup_devices(
         let transport = VirtioMmioTransport::new(block_dev, mem, VIRTIO_IRQ_BASE);
         mmio_bus.register(VIRTIO_MMIO_BASE, VIRTIO_MMIO_SIZE, Box::new(transport));
     }
+    Ok(())
+}
 
-    let net_io_handle = if let Some(ref net_cfg) = config.net {
+fn setup_net_device(
+    mmio_bus: &mut MmioBus,
+    config: &VmConfig,
+    guest_mem_arc: &Arc<GuestMemory>,
+) -> Result<Option<hitz_net::NetIoHandle>, VmError> {
+    if let Some(ref net_cfg) = config.net {
         let guest_mac = if let Some(ref mac_str) = net_cfg.mac {
             parse_mac(mac_str).map_err(VmError::Config)?
         } else {
@@ -592,11 +598,18 @@ fn setup_devices(
         )
         .map_err(|e| VmError::Config(format!("network setup: {e}")))?;
 
-        Some(handle)
+        Ok(Some(handle))
     } else {
-        None
-    };
+        Ok(None)
+    }
+}
 
+fn setup_vsock_device(
+    mmio_bus: &mut MmioBus,
+    config: &VmConfig,
+    extras: &mut BootExtras,
+    guest_mem_arc: &Arc<GuestMemory>,
+) {
     if let Some((rx_receiver, tx_sender)) = extras.vsock_channels.take() {
         let vsock_dev = VirtioVsockDevice::with_channels(config.guest_cid, rx_receiver, tx_sender);
         let vsock_base = VIRTIO_MMIO_BASE + VIRTIO_MMIO_SIZE * 2;
@@ -604,7 +617,17 @@ fn setup_devices(
         let vsock_transport = VirtioMmioTransport::new(vsock_dev, vsock_mem, VIRTIO_IRQ_VSOCK);
         mmio_bus.register(vsock_base, VIRTIO_MMIO_SIZE, Box::new(vsock_transport));
     }
+}
 
+fn setup_devices(
+    mmio_bus: &mut MmioBus,
+    config: &VmConfig,
+    extras: &mut BootExtras,
+    guest_mem_arc: &Arc<GuestMemory>,
+) -> Result<Option<hitz_net::NetIoHandle>, VmError> {
+    setup_block_device(mmio_bus, config, guest_mem_arc)?;
+    let net_io_handle = setup_net_device(mmio_bus, config, guest_mem_arc)?;
+    setup_vsock_device(mmio_bus, config, extras, guest_mem_arc);
     Ok(net_io_handle)
 }
 
