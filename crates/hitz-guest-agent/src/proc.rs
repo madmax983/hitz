@@ -322,4 +322,31 @@ mod tests {
             " 8       0 sda 9999999999999999999 0 9999999999999999999 0 9999999999999999999 0 9999999999999999999\n",
         );
     }
+
+    #[test]
+    #[allow(clippy::float_cmp)]
+    fn cpu_pct_returns_zero_when_total_delta_is_zero() {
+        let sample = CpuSample {
+            user: 100,
+            nice: 0,
+            system: 50,
+            idle: 200,
+            iowait: 10,
+            irq: 0,
+            softirq: 0,
+        };
+        // prev and curr are the same, total_delta = 0
+        assert_eq!(cpu_pct(&sample, &sample), 0.0);
+    }
+
+    #[test]
+    fn parse_proc_net_dev_skips_loopback() {
+        let content = "Inter-|   Receive                                                |  Transmit\n\
+             face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed\n\
+             lo:    5000     40    0    0    0     0          0         0     2000      20    0    0    0     0       0          0\n\
+             eth0:    1000     10    0    0    0     0          0         0     500       5     0    0    0     0       0          0\n";
+        let metrics = parse_proc_net_dev(content);
+        assert_eq!(metrics.len(), 1);
+        assert_eq!(metrics[0].interface, "eth0");
+    }
 }
