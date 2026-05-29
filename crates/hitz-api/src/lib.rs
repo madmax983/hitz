@@ -78,6 +78,12 @@ mod sentinel;
 #[cfg(feature = "sentinel")]
 pub use sentinel::{ConditionOperator, MetricTarget, SentinelCondition, SentinelRule};
 
+#[cfg(feature = "sustainability")]
+/// Sustainability scoring module for combining efficiency and carbon estimates.
+mod sustainability;
+#[cfg(feature = "sustainability")]
+pub use sustainability::{SustainabilityReport, SustainabilityReporter};
+
 #[cfg(test)]
 #[allow(clippy::expect_used)]
 #[allow(clippy::unwrap_used)]
