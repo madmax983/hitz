@@ -8,7 +8,49 @@ use hitz_hal::GuestMemAccess;
 
 /// Trait implemented by MMIO-mapped devices (e.g. virtio-MMIO transport).
 ///
-/// All offsets are relative to the device's base GPA.
+/// # Abstract
+/// This trait defines the contract for any virtual hardware device that communicates
+/// with the guest operating system via Memory-Mapped I/O (MMIO). Implementing this
+/// trait allows a device to be plugged into the [`MmioBus`], where it will receive
+/// read and write requests whenever the guest accesses its assigned physical memory region.
+/// All offsets passed to these methods are relative to the device's base Guest Physical Address (GPA).
+///
+/// # The Hero's Journey
+///
+/// ```rust
+/// use hitz_devices::MmioDevice;
+/// use hitz_hal::GuestMemAccess;
+///
+/// // Create a simple counter device that increments every time it's read.
+/// struct CounterDevice {
+///     count: u32,
+/// }
+///
+/// impl MmioDevice for CounterDevice {
+///     fn mmio_read(&mut self, offset: u64, data: &mut [u8]) {
+///         if offset == 0 && data.len() >= 4 {
+///             data[..4].copy_from_slice(&self.count.to_le_bytes());
+///             self.count += 1;
+///         }
+///     }
+///
+///     fn mmio_write(&mut self, offset: u64, data: &[u8], _mem: &dyn GuestMemAccess) -> Option<u8> {
+///         if offset == 0 && data.len() >= 4 {
+///             let mut bytes = [0u8; 4];
+///             bytes.copy_from_slice(&data[..4]);
+///             self.count = u32::from_le_bytes(bytes);
+///         }
+///         None // No interrupt triggered
+///     }
+/// }
+///
+/// let mut dev = CounterDevice { count: 42 };
+/// let mut buf = [0u8; 4];
+/// dev.mmio_read(0, &mut buf);
+/// assert_eq!(u32::from_le_bytes(buf), 42);
+/// dev.mmio_read(0, &mut buf);
+/// assert_eq!(u32::from_le_bytes(buf), 43);
+/// ```
 pub trait MmioDevice: Send {
     /// Handle a guest read from the device.
     fn mmio_read(&mut self, offset: u64, data: &mut [u8]);
