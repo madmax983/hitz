@@ -285,6 +285,21 @@ mod tests {
     }
 
     #[test]
+    fn parse_proc_pid_stat_missing_fields_should_return_none() {
+        let content = "123 (my_process) S 1 1 1 1 1 1 1 1 1 1 100 200";
+        assert!(
+            parse_proc_pid_stat(123, content).is_none(),
+            "Should gracefully handle missing rss field"
+        );
+
+        let content_no_state = "123 (my_process)";
+        assert!(
+            parse_proc_pid_stat(123, content_no_state).is_none(),
+            "Should gracefully handle missing state field"
+        );
+    }
+
+    #[test]
     #[allow(clippy::float_cmp)]
     fn test_parse_load_avg() {
         assert_eq!(parse_load_avg("1.23 4.56 7.89"), [1.23, 4.56, 7.89]);
@@ -317,7 +332,8 @@ mod tests {
 
         // Since cpu_pct calculation involves uptime, we can't easily assert the exact
         // value without mocking uptime. But we can assert the other fields.
-        let metrics = parse_proc_pid_stat(123, content).unwrap();
+        #[allow(clippy::expect_used)]
+        let metrics = parse_proc_pid_stat(123, content).expect("should parse valid stat");
 
         assert_eq!(metrics.pid, 123);
         assert_eq!(metrics.name, "my_process");
@@ -326,7 +342,9 @@ mod tests {
 
         // Test parsing with an empty name
         let content_empty_name = "123 () S 1 1 1 1 1 1 1 1 1 1 100 200 1 1 1 1 1 1 1 1 50";
-        let metrics_empty_name = parse_proc_pid_stat(123, content_empty_name).unwrap();
+        #[allow(clippy::expect_used)]
+        let metrics_empty_name =
+            parse_proc_pid_stat(123, content_empty_name).expect("should parse empty name stat");
         assert_eq!(metrics_empty_name.name, "");
 
         // Test parsing failure due to missing fields

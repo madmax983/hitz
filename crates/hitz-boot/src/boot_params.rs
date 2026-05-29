@@ -347,6 +347,25 @@ mod tests {
     }
 
     #[test]
+    fn as_bytes_returns_correct_length_and_content() {
+        let mut bp = build_boot_params(128 * 1024 * 1024, Gpa::new(0x2_0000))
+            .expect("build_boot_params should work");
+        bp.acpi_rsdp_addr = 0xDEAD_BEEF;
+
+        let bytes = bp.as_bytes();
+        assert_eq!(bytes.len(), 4096);
+
+        // Offset of acpi_rsdp_addr is 0x070
+        let offset = 0x070;
+        let rsdp_addr = u64::from_le_bytes(
+            bytes[offset..offset + 8]
+                .try_into()
+                .expect("slice should be 8 bytes"),
+        );
+        assert_eq!(rsdp_addr, 0xDEAD_BEEF);
+    }
+
+    #[test]
     fn e820_entry_size() {
         assert_eq!(size_of::<BootE820Entry>(), 20);
     }
