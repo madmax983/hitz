@@ -1225,6 +1225,11 @@ fn format_error_response(status: hyper::StatusCode, resp: &str, error_prefix: &s
                             let _ = write!(acc, ", ");
                         }
                         let _ = write!(acc, "{k}: {val}");
+                    } else {
+                        if !acc.is_empty() {
+                            let _ = write!(acc, ", ");
+                        }
+                        let _ = write!(acc, "{k}: {val}");
                     }
                     acc
                 })
