@@ -39,7 +39,6 @@ use loom::sync::{Arc, Mutex};
 use std::sync::{Arc, Mutex};
 
 use tokio::sync::Notify;
-use tokio::sync::watch;
 
 /// Default ring buffer capacity (64 KiB).
 const DEFAULT_CAPACITY: usize = 64 * 1024;
@@ -64,8 +63,7 @@ struct Inner {
 #[derive(Clone)]
 pub struct SerialBuf {
     inner: Arc<Mutex<Inner>>,
-    notify_tx: tokio::sync::watch::Sender<()>,
-    notify_rx: tokio::sync::watch::Receiver<()>,
+    notify: Arc<Notify>,
 }
 
 impl SerialBuf {
@@ -93,7 +91,6 @@ impl SerialBuf {
     #[must_use]
     pub fn with_capacity(capacity: usize) -> Self {
         assert!(capacity > 0, "capacity must be greater than 0");
-        let (notify_tx, notify_rx) = tokio::sync::watch::channel(());
         Self {
             inner: Arc::new(Mutex::new(Inner {
                 buf: vec![0u8; capacity],
@@ -101,8 +98,7 @@ impl SerialBuf {
                 total_written: 0,
                 closed: false,
             })),
-            notify_tx,
-            notify_rx,
+            notify: Arc::new(Notify::new()),
         }
     }
 
@@ -121,7 +117,7 @@ impl SerialBuf {
         let read_pos = self.inner.lock().total_written;
         SerialReader {
             inner: self.inner.clone(),
-            notify_rx: self.notify_rx.clone(),
+            notify: self.notify.clone(),
             read_pos,
         }
     }
@@ -140,7 +136,7 @@ impl SerialBuf {
             let mut inner = self.inner.lock();
             inner.closed = true;
         }
-        let _ = self.notify_tx.send(());
+        self.notify.notify_waiters();
     }
 }
 
@@ -193,7 +189,7 @@ impl Write for SerialBuf {
         }
         inner.total_written += len as u64;
         drop(inner);
-        let _ = self.notify_tx.send(());
+        self.notify.notify_waiters();
         Ok(len)
     }
 
@@ -208,7 +204,7 @@ impl Write for SerialBuf {
 /// the reader skips ahead to the oldest available data.
 pub struct SerialReader {
     inner: Arc<Mutex<Inner>>,
-    notify_rx: tokio::sync::watch::Receiver<()>,
+    notify: Arc<Notify>,
     /// Monotonic byte offset this reader has consumed up to.
     read_pos: u64,
 }
@@ -221,6 +217,7 @@ impl SerialReader {
     pub async fn read_chunk(&mut self) -> Option<Vec<u8>> {
         // ⚡ Bolt Optimization: Eliminated tokio::sync::watch::Receiver cloning inside the read loop.
         loop {
+            let notified = self.notify.notified();
             {
                 #[cfg(not(loom))]
                 let Ok(inner) = self.inner.lock() else {
@@ -266,7 +263,7 @@ impl SerialReader {
                 }
             }
             // Park until the writer pushes more data or closes.
-            let _ = self.notify_rx.changed().await;
+            notified.await;
         }
     }
 }
