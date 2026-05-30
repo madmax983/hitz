@@ -4,7 +4,7 @@
 //! This module provides a synthetic [`VmSimulator`] that produces realistic,
 //! time-series telemetry data without requiring an actual micro-VM to be running.
 //! It is useful for testing, continuous integration, and validating alerting
-//! thresholds (e.g., via the [`health`](crate::health) module).
+//! thresholds (e.g., via the health module).
 //!
 //! # The Hero's Journey
 //!
@@ -34,6 +34,15 @@ use crate::{CpuMetrics, MemoryMetrics, MetricsSnapshot};
 /// a profile, developers can reliably recreate specific stress conditions
 /// (like resource exhaustion or CPU pinning) to ensure their telemetry
 /// pipelines and alerting systems react appropriately.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::simulator::WorkloadProfile;
+///
+/// let profile = WorkloadProfile::CpuSpike;
+/// assert_eq!(profile, WorkloadProfile::CpuSpike);
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WorkloadProfile {
     /// Simulates a sudden, aggressive spike in CPU usage, eventually reaching
@@ -53,6 +62,16 @@ pub enum WorkloadProfile {
 /// tailored to the specific [`WorkloadProfile`] provided at creation. Because
 /// it implements the standard library's `Iterator` trait, you can easily compose
 /// it with other iterator adapters.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::simulator::{VmSimulator, WorkloadProfile};
+///
+/// let mut sim = VmSimulator::new(WorkloadProfile::Idle);
+/// let snap = sim.next().unwrap();
+/// assert!(snap.cpu.total_pct < 10.0);
+/// ```
 #[derive(Debug)]
 pub struct VmSimulator {
     profile: WorkloadProfile,
