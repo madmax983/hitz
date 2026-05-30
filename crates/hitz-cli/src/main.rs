@@ -988,6 +988,43 @@ fn run_daemon(args: &DaemonStartArgs) -> Result<()> {
     result
 }
 
+// ── UI Formatting ──
+
+struct VmStateDisplay<'a>(&'a hitz_api::VmState);
+
+impl<'a> VmStateDisplay<'a> {
+    fn as_str(&self) -> &'static str {
+        match self.0 {
+            hitz_api::VmState::Running => "Running",
+            hitz_api::VmState::Stopped => "Stopped",
+            hitz_api::VmState::Failed => "Failed",
+            hitz_api::VmState::Created => "Created",
+        }
+    }
+
+    fn to_comfy_color(&self) -> comfy_table::Color {
+        match self.0 {
+            hitz_api::VmState::Running => comfy_table::Color::Green,
+            hitz_api::VmState::Stopped => comfy_table::Color::Yellow,
+            hitz_api::VmState::Failed => comfy_table::Color::Red,
+            hitz_api::VmState::Created => comfy_table::Color::Cyan,
+        }
+    }
+
+    fn to_comfy_cell(&self) -> comfy_table::Cell {
+        comfy_table::Cell::new(self.as_str()).fg(self.to_comfy_color())
+    }
+
+    fn to_ratatui_color(&self) -> ratatui::style::Color {
+        match self.0 {
+            hitz_api::VmState::Running => ratatui::style::Color::Green,
+            hitz_api::VmState::Stopped => ratatui::style::Color::Yellow,
+            hitz_api::VmState::Failed => ratatui::style::Color::Red,
+            hitz_api::VmState::Created => ratatui::style::Color::Cyan,
+        }
+    }
+}
+
 // ── Metrics formatting ──
 
 /// Format a [`hitz_api::MetricsSnapshot`] into a human-readable string for CLI display.
@@ -1429,12 +1466,7 @@ async fn handle_vm_status(args: &VmIdArgs) -> Result<()> {
             let mut table = Table::new();
             let _ = table.load_preset(UTF8_FULL_CONDENSED);
 
-            let state_cell = match info.state {
-                hitz_api::VmState::Running => Cell::new("Running").fg(Color::Green),
-                hitz_api::VmState::Stopped => Cell::new("Stopped").fg(Color::Yellow),
-                hitz_api::VmState::Failed => Cell::new("Failed").fg(Color::Red),
-                hitz_api::VmState::Created => Cell::new("Created").fg(Color::Cyan),
-            };
+            let state_cell = VmStateDisplay(&info.state).to_comfy_cell();
 
             let _ = table.add_row([
                 Cell::new("ID:").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
@@ -1566,12 +1598,7 @@ async fn handle_vm_list(args: &VmListArgs) -> Result<()> {
             ]);
 
             for info in vms {
-                let state_cell = match info.state {
-                    hitz_api::VmState::Running => Cell::new("Running").fg(Color::Green),
-                    hitz_api::VmState::Stopped => Cell::new("Stopped").fg(Color::Yellow),
-                    hitz_api::VmState::Failed => Cell::new("Failed").fg(Color::Red),
-                    hitz_api::VmState::Created => Cell::new("Created").fg(Color::Cyan),
-                };
+                let state_cell = VmStateDisplay(&info.state).to_comfy_cell();
                 // ⚡ Bolt Optimization: Replace `.unwrap_or_else(|| "-".to_string())` with `.as_deref().unwrap_or("-")`
                 // This eliminates an unnecessary `String` allocation on the hot path of formatting CLI output.
                 let exit_reason = info.exit_reason.as_deref().unwrap_or("-");
@@ -2499,18 +2526,9 @@ async fn handle_vm_dashboard(args: &VmListArgs) -> Result<()> {
                 f.render_widget(no_vms_msg, chunks[1]);
             } else {
                 let rows = vms.iter().map(|vm| {
-                    let state_str = match vm.state {
-                        hitz_api::VmState::Running => "Running",
-                        hitz_api::VmState::Stopped => "Stopped",
-                        hitz_api::VmState::Failed => "Failed",
-                        hitz_api::VmState::Created => "Created",
-                    };
-                    let state_color = match vm.state {
-                        hitz_api::VmState::Running => Color::Green,
-                        hitz_api::VmState::Stopped => Color::Yellow,
-                        hitz_api::VmState::Failed => Color::Red,
-                        hitz_api::VmState::Created => Color::Cyan,
-                    };
+                    let state_disp = VmStateDisplay(&vm.state);
+                    let state_str = state_disp.as_str();
+                    let state_color = state_disp.to_ratatui_color();
                     let exit_reason = vm.exit_reason.as_deref().unwrap_or("-");
 
                     // ⚡ Bolt Optimization:
