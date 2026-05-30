@@ -39,7 +39,7 @@ fn now_ms() -> u64 {
 fn read_file_into(path: &str, buf: &mut String) {
     use std::io::Read;
     buf.clear();
-    let _ = std::fs::File::open(path).and_then(|mut f| f.read_to_string(buf));
+    let _ = std::fs::File::open(path).and_then(|f| f.take(65_536).read_to_string(buf));
 }
 
 fn collect_snapshot(buf: &mut String) -> MetricsSnapshot {
@@ -129,10 +129,10 @@ fn collect_top_procs(n: usize) -> Vec<hitz_api::ProcMetrics> {
 
             stat_buf.clear();
 
-            let Ok(mut f) = std::fs::File::open(&path_buf) else {
+            let Ok(f) = std::fs::File::open(&path_buf) else {
                 continue;
             };
-            if f.read_to_string(&mut stat_buf).is_err() {
+            if f.take(4096).read_to_string(&mut stat_buf).is_err() {
                 continue;
             }
             let Some(p) = parse_proc_pid_stat(pid, &stat_buf) else {
@@ -155,7 +155,11 @@ fn collect_top_procs(n: usize) -> Vec<hitz_api::ProcMetrics> {
 ///
 /// Returns `1.0` as a safe fallback if the file is unreadable (e.g. on Windows).
 fn read_uptime_secs() -> f64 {
-    std::fs::read_to_string("/proc/uptime")
+    use std::io::Read;
+    let mut buf = String::with_capacity(256);
+    std::fs::File::open("/proc/uptime")
+        .and_then(|f| f.take(256).read_to_string(&mut buf))
+        .map(|_| buf)
         .ok()
         .and_then(|s| s.split_ascii_whitespace().next()?.parse::<f64>().ok())
         .unwrap_or(1.0)
@@ -293,6 +297,18 @@ mod tests {
         assert_eq!(parse_load_avg(""), [0.0, 0.0, 0.0]);
         assert_eq!(parse_load_avg("invalid"), [0.0, 0.0, 0.0]);
         assert_eq!(parse_load_avg("1.23 invalid 7.89"), [1.23, 0.0, 7.89]);
+    }
+
+    #[test]
+    fn warden_test_exploit_memory_exhaustion_dos() {
+        use std::io::Write;
+        let mut f = tempfile::NamedTempFile::new().unwrap();
+        // write 100 KB
+        let data = vec![b'x'; 100 * 1024];
+        f.write_all(&data).unwrap();
+        let mut buf = String::new();
+        read_file_into(f.path().to_str().unwrap(), &mut buf);
+        assert!(buf.len() <= 65_536, "read_file_into buffer was not capped! size: {}", buf.len());
     }
 
     #[test]
