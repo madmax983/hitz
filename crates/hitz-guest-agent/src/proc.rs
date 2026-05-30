@@ -284,6 +284,49 @@ mod tests {
         assert!((pct - 25.0_f32).abs() < 1.0);
     }
 
+    #[test]
+    fn should_return_zero_when_total_delta_is_zero() {
+        let a = CpuSample {
+            user: 1000,
+            nice: 0,
+            system: 200,
+            idle: 8800,
+            iowait: 0,
+            irq: 0,
+            softirq: 0,
+        };
+        let pct = cpu_pct(&a, &a);
+        assert!((pct - 0.0_f32).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn parse_meminfo_should_return_none_when_total_is_missing() {
+        let missing_total = "MemFree:         131072 kB\n\
+                             Buffers:          10240 kB\n";
+        assert!(parse_proc_meminfo(missing_total).is_none());
+    }
+
+    #[test]
+    fn parse_net_dev_should_skip_loopback_interface() {
+        let content = "Inter-|   Receive                                                |  Transmit\n\
+             face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed\n\
+             lo:    100      10    0    0    0     0          0         0      100       10    0    0    0     0       0          0\n\
+             eth0:    5000     40    0    0    0     0          0         0     2000      20    0    0    0     0       0          0\n";
+        let nets = parse_proc_net_dev(content);
+        assert_eq!(nets.len(), 1);
+        assert_eq!(nets[0].interface, "eth0");
+    }
+
+    #[test]
+    fn parse_diskstats_should_skip_invalid_lines() {
+        let content = "   8   0 vda 100 0 800 20 50 0 400 10 0 30 30\n\
+                       invalid line with missing fields\n\
+                       8   1 vdb 100\n";
+        let disks = parse_proc_diskstats(content);
+        assert_eq!(disks.len(), 1);
+        assert_eq!(disks[0].name, "vda");
+    }
+
     use proptest::prelude::*;
 
     proptest! {
