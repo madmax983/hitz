@@ -34,8 +34,39 @@ pub enum WorkloadClass {
 }
 
 /// Trait for objects that can classify their workload.
+///
+/// # Abstract
+/// Provides a unified interface for evaluating telemetry to categorize
+/// the current behavior of a system into distinct workload classes.
 pub trait WorkloadClassifier {
     /// Classifies the workload based on the current state and a rate-of-change diff.
+    ///
+    /// # Abstract
+    /// Analyzes the absolute point-in-time metrics alongside the relative rate of change
+    /// to determine if a system is idle, compute-bound, memory-bound, or I/O heavy.
+    ///
+    /// # Details
+    /// This is essential for scheduling decisions and triggering proactive scaling events.
+    ///
+    /// ## Examples
+    ///
+    /// ```rust
+    /// use hitz_api::{WorkloadClass, WorkloadClassifier, MetricsSnapshot, MetricsDiff, CpuMetrics, MemoryMetrics};
+    ///
+    /// let snap = MetricsSnapshot {
+    ///     timestamp_ms: 1000,
+    ///     cpu: CpuMetrics { total_pct: 95.0, per_core: vec![95.0], load_avg: [2.0, 1.5, 1.0] },
+    ///     memory: MemoryMetrics { total_bytes: 1024, used_bytes: 512, free_bytes: 512, buffers_bytes: 0, cached_bytes: 0, swap_total: 0, swap_used: 0 },
+    ///     disks: vec![],
+    ///     networks: vec![],
+    ///     processes: vec![],
+    /// };
+    ///
+    /// let diff = MetricsDiff { elapsed_secs: 1.0, disks: vec![], networks: vec![] };
+    ///
+    /// let class = snap.classify_workload(&diff);
+    /// assert_eq!(class, WorkloadClass::ComputeBound);
+    /// ```
     fn classify_workload(&self, diff: &MetricsDiff) -> WorkloadClass;
 }
 

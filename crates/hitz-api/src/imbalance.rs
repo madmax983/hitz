@@ -51,8 +51,37 @@ pub struct ImbalanceResult {
 }
 
 /// Trait to analyze core utilization imbalance.
+///
+/// # Abstract
+/// Provides a mechanism to evaluate the distribution of work across multiple virtual CPUs.
 pub trait CoreImbalanceAnalyzer {
     /// Analyzes per-core utilization and computes an imbalance score.
+    ///
+    /// # Abstract
+    /// Calculates the standard deviation of CPU usage across all cores to determine
+    /// if a workload is bottlenecked on a single thread.
+    ///
+    /// # Details
+    /// An imbalanced workload often indicates inefficient multi-threading or a single
+    /// hot process, which can lead to scaling recommendations.
+    ///
+    /// ## Examples
+    ///
+    /// ```rust
+    /// use hitz_api::{CoreImbalanceAnalyzer, MetricsSnapshot, CpuMetrics, MemoryMetrics};
+    ///
+    /// let snap = MetricsSnapshot {
+    ///     timestamp_ms: 1000,
+    ///     cpu: CpuMetrics { total_pct: 25.0, per_core: vec![100.0, 0.0, 0.0, 0.0], load_avg: [1.0, 0.5, 0.2] },
+    ///     memory: MemoryMetrics { total_bytes: 1024, used_bytes: 512, free_bytes: 512, buffers_bytes: 0, cached_bytes: 0, swap_total: 0, swap_used: 0 },
+    ///     disks: vec![],
+    ///     networks: vec![],
+    ///     processes: vec![],
+    /// };
+    ///
+    /// let result = snap.analyze_imbalance();
+    /// assert!(result.is_imbalanced);
+    /// ```
     fn analyze_imbalance(&self) -> ImbalanceResult;
 }
 

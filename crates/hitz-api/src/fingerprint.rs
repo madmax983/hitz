@@ -47,8 +47,37 @@ pub struct VmFingerprint {
 }
 
 /// Trait to generate a fingerprint.
+///
+/// # Abstract
+/// Provides the ability to condense a complex, continuous metrics state into a
+/// discrete categorical identifier string.
 pub trait FingerprintGenerator {
     /// Generates a fingerprint based on current state.
+    ///
+    /// # Abstract
+    /// Computes a string representing the "shape" of the workload at a given point in time.
+    ///
+    /// # Details
+    /// This allows for caching and rapid pattern matching of similar workloads across
+    /// a fleet of VMs.
+    ///
+    /// ## Examples
+    ///
+    /// ```rust
+    /// use hitz_api::{FingerprintGenerator, MetricsSnapshot, CpuMetrics, MemoryMetrics};
+    ///
+    /// let snap = MetricsSnapshot {
+    ///     timestamp_ms: 1000,
+    ///     cpu: CpuMetrics { total_pct: 10.0, per_core: vec![10.0], load_avg: [0.1, 0.1, 0.1] },
+    ///     memory: MemoryMetrics { total_bytes: 1000, used_bytes: 100, free_bytes: 900, buffers_bytes: 0, cached_bytes: 0, swap_total: 0, swap_used: 0 },
+    ///     disks: vec![],
+    ///     networks: vec![],
+    ///     processes: vec![],
+    /// };
+    ///
+    /// let fingerprint = snap.generate_fingerprint();
+    /// assert_eq!(fingerprint.id, "FP-C1-R1-D0-N0");
+    /// ```
     fn generate_fingerprint(&self) -> VmFingerprint;
 }
 

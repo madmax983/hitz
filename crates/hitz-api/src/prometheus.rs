@@ -33,8 +33,37 @@
 use crate::MetricsSnapshot;
 
 /// Trait to convert metrics into Prometheus text exposition format.
+///
+/// # Abstract
+/// Enables the serialization of internal telemetry types into the standard
+/// text-based format expected by Prometheus scrapers.
 pub trait ToPrometheus {
     /// Convert the metrics snapshot to a Prometheus text string, tagging with the given `vm_id`.
+    ///
+    /// # Abstract
+    /// Generates a multiline string containing all relevant gauges and counters from a snapshot.
+    ///
+    /// # Details
+    /// Every metric generated is tagged with a `vm_id` label so that fleet-wide
+    /// metrics can be properly aggregated and attributed.
+    ///
+    /// ## Examples
+    ///
+    /// ```rust
+    /// use hitz_api::{ToPrometheus, MetricsSnapshot, CpuMetrics, MemoryMetrics};
+    ///
+    /// let snap = MetricsSnapshot {
+    ///     timestamp_ms: 1000,
+    ///     cpu: CpuMetrics { total_pct: 12.5, per_core: vec![12.5], load_avg: [0.1, 0.1, 0.1] },
+    ///     memory: MemoryMetrics { total_bytes: 1024, used_bytes: 512, free_bytes: 512, buffers_bytes: 0, cached_bytes: 0, swap_total: 0, swap_used: 0 },
+    ///     disks: vec![],
+    ///     networks: vec![],
+    ///     processes: vec![],
+    /// };
+    ///
+    /// let prom_text = snap.to_prometheus("my_vm");
+    /// assert!(prom_text.contains("hitz_cpu_total_pct{vm_id=\"my_vm\"} 12.5 1000"));
+    /// ```
     fn to_prometheus(&self, vm_id: &str) -> String;
 }
 
