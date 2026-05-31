@@ -842,9 +842,10 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::expect_used)]
     fn havoc_blk_read_readonly_desc() {
         let f = create_temp_disk(1);
-        let mut dev = VirtioBlockDevice::new(f).unwrap();
+        let mut dev = VirtioBlockDevice::new(f).expect("Failed to create mock block device");
         let mem = MockMem::new(0x10000);
         let mut q = setup_queue(&mem);
 
@@ -860,9 +861,10 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::expect_used)]
     fn havoc_blk_write_writable_desc() {
         let f = create_temp_disk(1);
-        let mut dev = VirtioBlockDevice::new(f).unwrap();
+        let mut dev = VirtioBlockDevice::new(f).expect("Failed to create mock block device");
         let mem = MockMem::new(0x10000);
         let mut q = setup_queue(&mem);
 
@@ -881,6 +883,7 @@ mod tests {
 
     proptest! {
         #[test]
+        #[allow(clippy::expect_used)]
         fn havoc_fuzz_block_process_queue(
             desc_len in 0u32..=100_000,
             sector in 0u64..100,
@@ -889,7 +892,7 @@ mod tests {
             status_writable in any::<bool>(),
         ) {
             let f = create_temp_disk(2);
-            let mut dev = VirtioBlockDevice::new(f).unwrap();
+            let mut dev = VirtioBlockDevice::new(f).expect("Failed to create mock block device");
             let mem = MockMem::new(0x20000);
             let mut q = setup_queue(&mem);
 

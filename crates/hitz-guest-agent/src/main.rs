@@ -317,7 +317,8 @@ mod tests {
 
         // Since cpu_pct calculation involves uptime, we can't easily assert the exact
         // value without mocking uptime. But we can assert the other fields.
-        let metrics = parse_proc_pid_stat(123, content).unwrap();
+        #[allow(clippy::expect_used)]
+        let metrics = parse_proc_pid_stat(123, content).expect("Failed to parse proc pid stat");
 
         assert_eq!(metrics.pid, 123);
         assert_eq!(metrics.name, "my_process");
@@ -326,7 +327,8 @@ mod tests {
 
         // Test parsing with an empty name
         let content_empty_name = "123 () S 1 1 1 1 1 1 1 1 1 1 100 200 1 1 1 1 1 1 1 1 50";
-        let metrics_empty_name = parse_proc_pid_stat(123, content_empty_name).unwrap();
+        #[allow(clippy::expect_used)]
+        let metrics_empty_name = parse_proc_pid_stat(123, content_empty_name).expect("Failed to parse proc pid stat");
         assert_eq!(metrics_empty_name.name, "");
 
         // Test parsing failure due to missing fields
