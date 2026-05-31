@@ -111,6 +111,13 @@ fn collect_top_procs(n: usize) -> Vec<hitz_api::ProcMetrics> {
     let mut path_buf = String::with_capacity(32);
     let mut stat_buf = String::with_capacity(1024);
 
+    #[allow(
+        clippy::cast_precision_loss,
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss
+    )]
+    let uptime_ticks = (read_uptime_secs() * 100.0) as u64;
+
     if let Ok(entries) = std::fs::read_dir("/proc") {
         use std::fmt::Write;
         use std::io::Read;
@@ -135,19 +142,34 @@ fn collect_top_procs(n: usize) -> Vec<hitz_api::ProcMetrics> {
             if f.read_to_string(&mut stat_buf).is_err() {
                 continue;
             }
-            let Some(p) = parse_proc_pid_stat(pid, &stat_buf) else {
+            let Some(p) = parse_proc_pid_stat(pid, &stat_buf, uptime_ticks) else {
                 continue;
             };
 
             procs.push(p);
         }
     }
-    procs.sort_by(|a, b| {
-        b.cpu_pct
-            .partial_cmp(&a.cpu_pct)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
-    procs.truncate(n);
+
+    if procs.len() > n {
+        let (top, _, _) = procs.select_nth_unstable_by(n, |a, b| {
+            b.cpu_pct
+                .partial_cmp(&a.cpu_pct)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        top.sort_by(|a, b| {
+            b.cpu_pct
+                .partial_cmp(&a.cpu_pct)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        procs.truncate(n);
+    } else {
+        procs.sort_by(|a, b| {
+            b.cpu_pct
+                .partial_cmp(&a.cpu_pct)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+    }
+
     procs
 }
 
@@ -161,7 +183,11 @@ fn read_uptime_secs() -> f64 {
         .unwrap_or(1.0)
 }
 
-fn parse_proc_pid_stat(pid: u32, content: &str) -> Option<hitz_api::ProcMetrics> {
+fn parse_proc_pid_stat(
+    pid: u32,
+    content: &str,
+    uptime_ticks: u64,
+) -> Option<hitz_api::ProcMetrics> {
     let open = content.find('(')?;
     let close = content.rfind(')')?;
     let name = content.get(open + 1..close)?.to_string();
@@ -185,12 +211,6 @@ fn parse_proc_pid_stat(pid: u32, content: &str) -> Option<hitz_api::ProcMetrics>
     // USER_HZ = 100 on all Linux targets.
     // This is a lifetime average, not a current-window percentage.
     // Future: implement two-sample differential for accurate current usage.
-    #[allow(
-        clippy::cast_precision_loss,
-        clippy::cast_possible_truncation,
-        clippy::cast_sign_loss
-    )]
-    let uptime_ticks = (read_uptime_secs() * 100.0) as u64;
     #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
     let cpu_pct: f32 = if uptime_ticks == 0 {
         0.0_f32
@@ -274,14 +294,14 @@ mod tests {
     proptest! {
         #[test]
         fn havoc_fuzz_parse_proc_pid_stat(s in ".*\\(.*\\).*") {
-            let _ = parse_proc_pid_stat(1, &s);
+            let _ = parse_proc_pid_stat(1, &s, 100_000);
         }
     }
 
     #[test]
     fn havoc_test_parse_proc_pid_stat_out_of_bounds() {
         let content = "(a)";
-        assert!(parse_proc_pid_stat(1, content).is_none());
+        assert!(parse_proc_pid_stat(1, content, 100_000).is_none());
     }
 
     #[test]
@@ -317,7 +337,7 @@ mod tests {
 
         // Since cpu_pct calculation involves uptime, we can't easily assert the exact
         // value without mocking uptime. But we can assert the other fields.
-        let metrics = parse_proc_pid_stat(123, content).unwrap();
+        let metrics = parse_proc_pid_stat(123, content, 100_000).unwrap();
 
         assert_eq!(metrics.pid, 123);
         assert_eq!(metrics.name, "my_process");
@@ -326,11 +346,11 @@ mod tests {
 
         // Test parsing with an empty name
         let content_empty_name = "123 () S 1 1 1 1 1 1 1 1 1 1 100 200 1 1 1 1 1 1 1 1 50";
-        let metrics_empty_name = parse_proc_pid_stat(123, content_empty_name).unwrap();
+        let metrics_empty_name = parse_proc_pid_stat(123, content_empty_name, 100_000).unwrap();
         assert_eq!(metrics_empty_name.name, "");
 
         // Test parsing failure due to missing fields
         let content_short = "123 (short) S 1";
-        assert!(parse_proc_pid_stat(123, content_short).is_none());
+        assert!(parse_proc_pid_stat(123, content_short, 100_000).is_none());
     }
 }
