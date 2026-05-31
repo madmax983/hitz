@@ -172,4 +172,13 @@ mod tests {
         assert_eq!(result.imbalance_score, 0.0);
         assert!(!result.is_imbalanced);
     }
+
+    #[test]
+    fn should_handle_empty_per_core_without_panic() {
+        let snap = dummy_snapshot(0.0, vec![]);
+        let result = snap.analyze_imbalance();
+        assert_eq!(result.std_dev, 0.0);
+        assert_eq!(result.imbalance_score, 0.0);
+        assert!(!result.is_imbalanced);
+    }
 }
