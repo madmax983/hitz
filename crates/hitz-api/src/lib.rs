@@ -493,3 +493,9 @@ pub use rightsizer::{ResizeRecommendation, RightSizer};
 mod terraform;
 #[cfg(feature = "terraform")]
 pub use terraform::ToTerraform;
+
+#[cfg(feature = "ecosizer")]
+/// Ecological rightsizing module, combining rightsizer and carbon estimates.
+pub mod eco_advisor;
+#[cfg(feature = "ecosizer")]
+pub use eco_advisor::{EcoAdvisor, EcoRecommendation};
