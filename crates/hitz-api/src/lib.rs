@@ -493,3 +493,7 @@ pub use rightsizer::{ResizeRecommendation, RightSizer};
 mod terraform;
 #[cfg(feature = "terraform")]
 pub use terraform::ToTerraform;
+
+#[cfg(feature = "carbon_forecast")]
+/// Carbon forecasting module.
+pub mod carbon_forecast;
