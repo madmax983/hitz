@@ -292,3 +292,23 @@ pub struct ApiError {
     /// A human-readable, descriptive error message explaining the failure.
     pub message: String,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_vm_action_display_and_forms() {
+        assert_eq!(VmAction::Start.to_string(), "start");
+        assert_eq!(VmAction::Start.gerund(), "Starting");
+        assert_eq!(VmAction::Start.past_tense(), "started");
+
+        assert_eq!(VmAction::Stop.to_string(), "stop");
+        assert_eq!(VmAction::Stop.gerund(), "Stopping");
+        assert_eq!(VmAction::Stop.past_tense(), "stopped");
+
+        assert_eq!(VmAction::Restart.to_string(), "restart");
+        assert_eq!(VmAction::Restart.gerund(), "Restarting");
+        assert_eq!(VmAction::Restart.past_tense(), "restarted");
+    }
+}
