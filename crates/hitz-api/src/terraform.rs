@@ -89,3 +89,34 @@ mod tests {
         assert!(hcl.contains("cpus = 2"));
     }
 }
+
+#[cfg(test)]
+mod missing_tests {
+    use super::*;
+    use crate::GuestAgentMode;
+    use std::path::PathBuf;
+
+    #[test]
+    fn test_to_terraform_full() {
+        let config = VmConfig {
+            kernel_path: PathBuf::from("/boot/vmlinux"),
+            initramfs_path: Some(PathBuf::from("/boot/initrd")),
+            disk_path: Some(PathBuf::from("/img.qcow2")),
+            ram_mib: 1024,
+            cpus: 4,
+            cmdline: Some("quiet".to_string()),
+            net: None,
+            ports: vec![],
+            guest_cid: 4,
+            guest_agent: GuestAgentMode::Auto,
+        };
+
+        let hcl = config.to_terraform("test_vm");
+        assert!(hcl.contains("resource \"hitz_vm\" \"test_vm\" {"));
+        assert!(hcl.contains("kernel_path = \"/boot/vmlinux\""));
+        assert!(hcl.contains("initramfs_path = \"/boot/initrd\""));
+        assert!(hcl.contains("disk_path = \"/img.qcow2\""));
+        assert!(hcl.contains("cmdline = \"quiet\""));
+        assert!(hcl.contains("guest_cid = 4"));
+    }
+}

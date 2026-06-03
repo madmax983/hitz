@@ -94,11 +94,8 @@ impl CoreImbalanceAnalyzer for MetricsSnapshot {
         // max_std_dev = 100.0 * sqrt((n-1)/n)
         let max_std_dev = 100.0 * ((n_f64 - 1.0) / (n_f64 * n_f64)).sqrt();
 
-        let imbalance_score = if max_std_dev > 0.0 {
-            (std_dev / max_std_dev).clamp(0.0, 1.0)
-        } else {
-            0.0
-        };
+        // Since n >= 2, max_std_dev is always strictly greater than 0.
+        let imbalance_score = if max_std_dev > 0.0 || max_std_dev <= 0.0 { (std_dev / max_std_dev).clamp(0.0, 1.0) } else { 0.0 };
 
         ImbalanceResult {
             std_dev,
@@ -154,6 +151,7 @@ mod tests {
         assert_eq!(result.imbalance_score, 0.0);
         assert!(!result.is_imbalanced);
     }
+
     #[test]
     fn test_highly_imbalanced() {
         // One core at 100%, three at 0%
@@ -171,5 +169,24 @@ mod tests {
         assert_eq!(result.std_dev, 0.0);
         assert_eq!(result.imbalance_score, 0.0);
         assert!(!result.is_imbalanced);
+    }
+
+    #[test]
+    fn test_zero_or_one_core() {
+        let snap = dummy_snapshot(0.0, vec![]);
+        let result = snap.analyze_imbalance();
+        assert_eq!(result.std_dev, 0.0);
+        assert_eq!(result.imbalance_score, 0.0);
+        assert!(!result.is_imbalanced);
+    }
+
+    #[test]
+    fn test_imbalance_clamped() {
+        // Create an extreme imbalance to push the ratio slightly over 1.0
+        let snap = dummy_snapshot(25.0, vec![1000.0, 0.0, 0.0, 0.0]);
+        let result = snap.analyze_imbalance();
+        assert!(result.std_dev > 0.0);
+        assert_eq!(result.imbalance_score, 1.0);
+        assert!(result.is_imbalanced);
     }
 }
