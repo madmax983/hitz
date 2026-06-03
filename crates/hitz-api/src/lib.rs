@@ -48,6 +48,12 @@ pub mod simulator;
 #[cfg(feature = "simulator")]
 pub use simulator::{VmSimulator, WorkloadProfile};
 
+#[cfg(feature = "cost")]
+/// Cloud cost estimator.
+pub mod cost;
+#[cfg(feature = "cost")]
+pub use cost::{CloudPricing, CostEstimator};
+
 #[cfg(feature = "diff")]
 /// Diff module for calculating rates of change between telemetry snapshots.
 mod diff;
