@@ -54,6 +54,24 @@ use crate::{MetricsSnapshot, VmConfig};
 use serde::{Deserialize, Serialize};
 
 /// Specific actionable recommendation for resizing a VM.
+///
+/// # Abstract
+/// Represents a discrete suggestion to modify a VM's resource allocation,
+/// such as increasing or decreasing virtual CPUs or RAM.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::ResizeRecommendation;
+///
+/// let rec = ResizeRecommendation::ScaleDownCpu {
+///     current: 4,
+///     suggested: 2,
+///     reason: "CPU consistently underutilized".to_string(),
+/// };
+///
+/// assert!(matches!(rec, ResizeRecommendation::ScaleDownCpu { .. }));
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ResizeRecommendation {
     /// Suggests increasing the CPU count.
@@ -95,6 +113,42 @@ pub enum ResizeRecommendation {
 }
 
 /// Trait for objects that can evaluate metrics and configuration to recommend resizing.
+///
+/// # Abstract
+/// Provides an interface to analyze a system's current telemetry against its
+/// configuration blueprint to generate actionable rightsizing recommendations.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::{RightSizer, VmConfig, GuestAgentMode, MetricsSnapshot, CpuMetrics, MemoryMetrics};
+/// use std::path::PathBuf;
+///
+/// let config = VmConfig {
+///     kernel_path: PathBuf::from("vmlinux"),
+///     initramfs_path: None,
+///     disk_path: None,
+///     ram_mib: 1024,
+///     cpus: 4,
+///     cmdline: None,
+///     net: None,
+///     ports: vec![],
+///     guest_cid: 3,
+///     guest_agent: GuestAgentMode::Auto,
+/// };
+///
+/// let snap = MetricsSnapshot {
+///     timestamp_ms: 1000,
+///     cpu: CpuMetrics { total_pct: 5.0, per_core: vec![5.0; 4], load_avg: [0.1, 0.1, 0.1] },
+///     memory: MemoryMetrics { total_bytes: 1024 * 1024 * 1024, used_bytes: 100 * 1024 * 1024, free_bytes: 900 * 1024 * 1024, buffers_bytes: 0, cached_bytes: 0, swap_total: 0, swap_used: 0 },
+///     disks: vec![],
+///     networks: vec![],
+///     processes: vec![],
+/// };
+///
+/// let recommendations = snap.recommend_sizing(&config);
+/// assert!(!recommendations.is_empty());
+/// ```
 pub trait RightSizer {
     /// Analyzes current metrics against the VM's configuration and returns recommendations.
     fn recommend_sizing(&self, config: &VmConfig) -> Vec<ResizeRecommendation>;

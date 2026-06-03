@@ -37,7 +37,8 @@ use serde::{Deserialize, Serialize};
 /// An enum representing the three states of being for a micro-VM:
 /// perfectly fine, starting to sweat, and actively melting down.
 ///
-/// # The Hero's Journey
+/// ## Examples
+///
 /// ```rust
 /// use hitz_api::HealthStatus;
 ///
@@ -72,6 +73,23 @@ pub enum HealthStatus {
 ///
 /// assert_eq!(report.status, HealthStatus::Warning);
 /// ```
+///
+/// # Abstract
+/// Represents the overall status of the system alongside human-readable
+/// reasons if the status is anything other than perfectly healthy.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::{SystemHealth, HealthStatus};
+///
+/// let health = SystemHealth {
+///     status: HealthStatus::Critical,
+///     reasons: vec!["CPU maxed out!".to_string()],
+/// };
+///
+/// assert_eq!(health.status, HealthStatus::Critical);
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SystemHealth {
     /// The aggregated health status.
@@ -88,7 +106,8 @@ pub struct SystemHealth {
 /// should implement this trait. It provides a standard interface for
 /// getting a [`SystemHealth`] report.
 ///
-/// # The Hero's Journey
+/// ## Examples
+///
 /// ```rust
 /// use hitz_api::{HealthCheck, SystemHealth, HealthStatus};
 ///

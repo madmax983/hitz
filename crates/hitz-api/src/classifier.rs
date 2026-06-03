@@ -8,19 +8,40 @@
 //! # The Hero's Journey
 //!
 //! ```rust
-//! use hitz_api::{WorkloadClass, WorkloadClassifier, MetricsSnapshot, MetricsDiff};
+//! use hitz_api::{WorkloadClass, WorkloadClassifier, MetricsSnapshot, MetricsDiff, CpuMetrics, MemoryMetrics};
 //!
-//! // Assume we have a snapshot showing 95% CPU usage and a diff showing low I/O
-//! // let snap: MetricsSnapshot = ...;
-//! // let diff: MetricsDiff = ...;
-//! // let class = snap.classify_workload(&diff);
-//! // assert_eq!(class, WorkloadClass::ComputeBound);
+//! let snap = MetricsSnapshot {
+//!     timestamp_ms: 1000,
+//!     cpu: CpuMetrics { total_pct: 95.0, per_core: vec![95.0], load_avg: [0.1, 0.1, 0.1] },
+//!     memory: MemoryMetrics { total_bytes: 1024, used_bytes: 512, free_bytes: 512, buffers_bytes: 0, cached_bytes: 0, swap_total: 0, swap_used: 0 },
+//!     disks: vec![],
+//!     networks: vec![],
+//!     processes: vec![],
+//! };
+//!
+//! let diff = MetricsDiff { elapsed_secs: 1.0, disks: vec![], networks: vec![] };
+//!
+//! let class = snap.classify_workload(&diff);
+//! assert_eq!(class, WorkloadClass::ComputeBound);
 //! ```
 
 use crate::{MetricsDiff, MetricsSnapshot};
 use serde::{Deserialize, Serialize};
 
 /// The categorized type of workload running on the VM.
+///
+/// # Abstract
+/// Represents the distinct performance profiles a VM might exhibit based on
+/// its current telemetry. This is useful for clustering and rightsizing.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::WorkloadClass;
+///
+/// let class = WorkloadClass::ComputeBound;
+/// assert_eq!(class, WorkloadClass::ComputeBound);
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum WorkloadClass {
     /// The VM is heavily utilizing the CPU.
@@ -34,6 +55,30 @@ pub enum WorkloadClass {
 }
 
 /// Trait for objects that can classify their workload.
+///
+/// # Abstract
+/// Provides a unified interface to determine the performance profile of a system
+/// by combining its current state and its recent rate of change.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::{WorkloadClassifier, WorkloadClass, MetricsSnapshot, MetricsDiff, CpuMetrics, MemoryMetrics};
+///
+/// let snap = MetricsSnapshot {
+///     timestamp_ms: 1000,
+///     cpu: CpuMetrics { total_pct: 10.0, per_core: vec![10.0], load_avg: [0.1, 0.1, 0.1] },
+///     memory: MemoryMetrics { total_bytes: 1024, used_bytes: 512, free_bytes: 512, buffers_bytes: 0, cached_bytes: 0, swap_total: 0, swap_used: 0 },
+///     disks: vec![],
+///     networks: vec![],
+///     processes: vec![],
+/// };
+///
+/// let diff = MetricsDiff { elapsed_secs: 1.0, disks: vec![], networks: vec![] };
+///
+/// let class = snap.classify_workload(&diff);
+/// assert_eq!(class, WorkloadClass::Idle);
+/// ```
 pub trait WorkloadClassifier {
     /// Classifies the workload based on the current state and a rate-of-change diff.
     fn classify_workload(&self, diff: &MetricsDiff) -> WorkloadClass;
