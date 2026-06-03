@@ -159,6 +159,43 @@ impl VirtioBlockDevice {
         total_written
     }
 
+    fn check_bounds_and_get_offset(&self, sector: u64, len: u32, op_name: &str) -> Result<u64, u8> {
+        if len > 16_777_216 {
+            // Max 16MB per request to prevent OOM
+            return Err(VIRTIO_BLK_S_IOERR);
+        }
+
+        let data_len = u64::from(len);
+        let capacity_bytes = self.capacity.checked_mul(SECTOR_SIZE).unwrap_or(0);
+
+        // Bounds check.
+        if sector >= self.capacity {
+            tracing::warn!(
+                sector,
+                len,
+                capacity = self.capacity,
+                "{} out of bounds",
+                op_name
+            );
+            return Err(VIRTIO_BLK_S_IOERR);
+        }
+
+        let byte_offset = sector * SECTOR_SIZE;
+
+        if byte_offset.saturating_add(data_len) > capacity_bytes {
+            tracing::warn!(
+                sector,
+                len,
+                capacity = self.capacity,
+                "{} out of bounds",
+                op_name
+            );
+            return Err(VIRTIO_BLK_S_IOERR);
+        }
+
+        Ok(byte_offset)
+    }
+
     /// Handle a read request: disk -> guest memory.
     #[allow(clippy::cast_possible_truncation)]
     fn handle_read(
@@ -169,26 +206,10 @@ impl VirtioBlockDevice {
         mem: &dyn GuestMemAccess,
         total_written: &mut u32,
     ) -> u8 {
-        if len > 16_777_216 {
-            // Max 16MB per request to prevent OOM
-            return VIRTIO_BLK_S_IOERR;
-        }
-
-        let data_len = u64::from(len);
-        let capacity_bytes = self.capacity.checked_mul(SECTOR_SIZE).unwrap_or(0);
-
-        // Bounds check.
-        if sector >= self.capacity {
-            tracing::warn!(sector, len, capacity = self.capacity, "read out of bounds");
-            return VIRTIO_BLK_S_IOERR;
-        }
-
-        let byte_offset = sector * SECTOR_SIZE;
-
-        if byte_offset.saturating_add(data_len) > capacity_bytes {
-            tracing::warn!(sector, len, capacity = self.capacity, "read out of bounds");
-            return VIRTIO_BLK_S_IOERR;
-        }
+        let byte_offset = match self.check_bounds_and_get_offset(sector, len, "read") {
+            Ok(offset) => offset,
+            Err(e) => return e,
+        };
 
         if self.disk.seek(SeekFrom::Start(byte_offset)).is_err() {
             return VIRTIO_BLK_S_IOERR;
@@ -210,26 +231,10 @@ impl VirtioBlockDevice {
     /// Handle a write request: guest memory -> disk.
     #[allow(clippy::cast_possible_truncation)]
     fn handle_write(&mut self, sector: u64, gpa: u64, len: u32, mem: &dyn GuestMemAccess) -> u8 {
-        if len > 16_777_216 {
-            // Max 16MB per request to prevent OOM
-            return VIRTIO_BLK_S_IOERR;
-        }
-
-        let data_len = u64::from(len);
-        let capacity_bytes = self.capacity.checked_mul(SECTOR_SIZE).unwrap_or(0);
-
-        // Bounds check.
-        if sector >= self.capacity {
-            tracing::warn!(sector, len, capacity = self.capacity, "write out of bounds");
-            return VIRTIO_BLK_S_IOERR;
-        }
-
-        let byte_offset = sector * SECTOR_SIZE;
-
-        if byte_offset.saturating_add(data_len) > capacity_bytes {
-            tracing::warn!(sector, len, capacity = self.capacity, "write out of bounds");
-            return VIRTIO_BLK_S_IOERR;
-        }
+        let byte_offset = match self.check_bounds_and_get_offset(sector, len, "write") {
+            Ok(offset) => offset,
+            Err(e) => return e,
+        };
 
         let mut buf = vec![0u8; len as usize];
         if mem.read_guest(gpa, &mut buf).is_err() {
