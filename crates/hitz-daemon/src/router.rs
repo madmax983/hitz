@@ -54,10 +54,11 @@ pub async fn route<H>(
 where
     H: Hypervisor + Send + Sync + 'static,
 {
-    // ⚡ Bolt Optimization: Avoid cloning the HTTP method.
-    // It's cheaper to borrow it or let it remain bound to the request.
-    let method = req.method().clone();
-    let path = req.uri().path().to_string();
+    // ⚡ Bolt Optimization: Avoid cloning the HTTP method and path strings.
+    // We deconstruct the request to borrow parts cheaply and pass the body to sub-handlers.
+    let (parts, body) = req.into_parts();
+    let method = parts.method;
+    let path = parts.uri.path();
 
     let span = tracing::info_span!(
         "daemon.request",
@@ -67,7 +68,7 @@ where
     );
 
     let result = async {
-        match (&method, path.as_str()) {
+        match (&method, path) {
             (&Method::GET, "/vms") => handle_list(manager),
             _ if path.starts_with("/vms/") => {
                 let mut segments = path.splitn(4, '/');
@@ -75,7 +76,7 @@ where
                 match segments.nth(2) {
                     Some(id) if !id.is_empty() => {
                         let suffix = segments.next();
-                        route_vm(req, &method, id, suffix, manager).await
+                        route_vm(body, &method, id, suffix, manager).await
                     }
                     _ => Ok(error_response(StatusCode::BAD_REQUEST, "missing VM ID")),
                 }
@@ -94,7 +95,7 @@ where
 }
 
 async fn route_vm<H>(
-    req: Request<Incoming>,
+    body: Incoming,
     method: &Method,
     id: &str,
     suffix: Option<&str>,
@@ -104,13 +105,13 @@ where
     H: Hypervisor + Send + Sync + 'static,
 {
     match (method, suffix) {
-        (&Method::PUT, None) => handle_create(req, id, manager).await,
+        (&Method::PUT, None) => handle_create(body, id, manager).await,
         (&Method::GET, None) => handle_get(id, manager),
         (&Method::GET, Some("serial")) => handle_serial(id, manager),
         (&Method::GET, Some("metrics")) => handle_metrics(id, manager),
         (&Method::DELETE, None) => handle_delete(id, manager),
-        (&Method::POST, Some("action")) => handle_action(req, id, manager).await,
-        (&Method::POST, Some("clone")) => handle_clone(req, id, manager).await,
+        (&Method::POST, Some("action")) => handle_action(body, id, manager).await,
+        (&Method::POST, Some("clone")) => handle_clone(body, id, manager).await,
         _ => Ok(error_response(
             StatusCode::METHOD_NOT_ALLOWED,
             "method not allowed",
@@ -119,19 +120,18 @@ where
 }
 
 async fn handle_create<H>(
-    req: Request<Incoming>,
+    body: Incoming,
     id: &str,
     manager: &VmManager<H>,
 ) -> Result<Response<BoxBody<Bytes, Infallible>>, DaemonError>
 where
     H: Hypervisor + Send + Sync + 'static,
 {
-    let body = req
-        .into_body()
+    let collected = body
         .collect()
         .await
         .map_err(|e| DaemonError::Internal(format!("failed to read request body: {e}")))?;
-    let create_req: CreateVmRequest = serde_json::from_slice(&body.to_bytes())
+    let create_req: CreateVmRequest = serde_json::from_slice(&collected.to_bytes())
         .map_err(|e| DaemonError::Internal(format!("invalid JSON: {e}")))?;
 
     let info = manager.create_vm(id.to_string(), &create_req.config)?;
@@ -174,19 +174,18 @@ where
 }
 
 async fn handle_action<H>(
-    req: Request<Incoming>,
+    body: Incoming,
     id: &str,
     manager: &VmManager<H>,
 ) -> Result<Response<BoxBody<Bytes, Infallible>>, DaemonError>
 where
     H: Hypervisor + Send + Sync + 'static,
 {
-    let body = req
-        .into_body()
+    let collected = body
         .collect()
         .await
         .map_err(|e| DaemonError::Internal(format!("failed to read request body: {e}")))?;
-    let action_req: ActionVmRequest = serde_json::from_slice(&body.to_bytes())
+    let action_req: ActionVmRequest = serde_json::from_slice(&collected.to_bytes())
         .map_err(|e| DaemonError::Internal(format!("invalid JSON: {e}")))?;
 
     let info = match action_req.action {
@@ -198,19 +197,18 @@ where
 }
 
 async fn handle_clone<H>(
-    req: Request<Incoming>,
+    body: Incoming,
     id: &str,
     manager: &VmManager<H>,
 ) -> Result<Response<BoxBody<Bytes, Infallible>>, DaemonError>
 where
     H: Hypervisor + Send + Sync + 'static,
 {
-    let body = req
-        .into_body()
+    let collected = body
         .collect()
         .await
         .map_err(|e| DaemonError::Internal(format!("failed to read request body: {e}")))?;
-    let clone_req: CloneVmRequest = serde_json::from_slice(&body.to_bytes())
+    let clone_req: CloneVmRequest = serde_json::from_slice(&collected.to_bytes())
         .map_err(|e| DaemonError::Internal(format!("invalid JSON: {e}")))?;
 
     let info = manager.clone_vm(id, &clone_req.dest_id)?;
