@@ -40,6 +40,25 @@ use crate::MetricsSnapshot;
 use serde::{Deserialize, Serialize};
 
 /// The computed resource imbalance score.
+///
+/// # Abstract
+/// This struct represents the verdict of an imbalance analysis, highlighting whether a
+/// multi-core VM is suffering from single-threaded bottlenecks (high imbalance) or is
+/// properly distributing its workload across all available cores.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::ImbalanceResult;
+///
+/// let result = ImbalanceResult {
+///     std_dev: 43.3,
+///     imbalance_score: 0.86,
+///     is_imbalanced: true,
+/// };
+///
+/// assert!(result.is_imbalanced);
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ImbalanceResult {
     /// Overall standard deviation of per-core utilization.
@@ -51,8 +70,35 @@ pub struct ImbalanceResult {
 }
 
 /// Trait to analyze core utilization imbalance.
+///
+/// # Abstract
+/// Implemented by objects capable of reviewing their own resource distribution
+/// across multiple processing units to detect inefficiencies.
 pub trait CoreImbalanceAnalyzer {
     /// Analyzes per-core utilization and computes an imbalance score.
+    ///
+    /// # Abstract
+    /// Evaluates the variance in CPU load across all available cores. A high score
+    /// indicates that some cores are heavily loaded while others are idle, suggesting
+    /// a potential single-threaded bottleneck in the workload.
+    ///
+    /// ## Examples
+    ///
+    /// ```rust
+    /// use hitz_api::{CoreImbalanceAnalyzer, ImbalanceResult, MetricsSnapshot, CpuMetrics, MemoryMetrics};
+    ///
+    /// let snap = MetricsSnapshot {
+    ///     timestamp_ms: 1000,
+    ///     cpu: CpuMetrics { total_pct: 25.0, per_core: vec![100.0, 0.0, 0.0, 0.0], load_avg: [1.0, 0.5, 0.2] },
+    ///     memory: MemoryMetrics { total_bytes: 1024, used_bytes: 512, free_bytes: 512, buffers_bytes: 0, cached_bytes: 0, swap_total: 0, swap_used: 0 },
+    ///     disks: vec![],
+    ///     networks: vec![],
+    ///     processes: vec![],
+    /// };
+    ///
+    /// let result = snap.analyze_imbalance();
+    /// assert!(result.is_imbalanced);
+    /// ```
     fn analyze_imbalance(&self) -> ImbalanceResult;
 }
 
