@@ -322,4 +322,20 @@ mod tests {
             " 8       0 sda 9999999999999999999 0 9999999999999999999 0 9999999999999999999 0 9999999999999999999\n",
         );
     }
+
+    #[test]
+    fn test_cpu_utilisation_zero_delta() {
+        let a = CpuSample {
+            user: 1000,
+            ..Default::default()
+        };
+        let pct = cpu_pct(&a, &a);
+        assert!((pct - 0.0_f32).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_parse_proc_meminfo_missing_total() {
+        let content = "MemFree: 1000 kB\nBuffers: 100 kB\n";
+        assert!(parse_proc_meminfo(content).is_none());
+    }
 }
