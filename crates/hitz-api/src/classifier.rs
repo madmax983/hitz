@@ -34,6 +34,29 @@ pub enum WorkloadClass {
 }
 
 /// Trait for objects that can classify their workload.
+///
+/// # Abstract
+/// This trait provides a standardized interface for categorizing the current behavior
+/// of a VM (e.g., [`WorkloadClass::ComputeBound`]) based on its state and rate of change.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::{WorkloadClass, WorkloadClassifier, MetricsSnapshot, MetricsDiff, CpuMetrics, MemoryMetrics};
+///
+/// let snap = MetricsSnapshot {
+///     timestamp_ms: 1000,
+///     cpu: CpuMetrics { total_pct: 95.0, per_core: vec![95.0], load_avg: [1.0, 1.0, 1.0] },
+///     memory: MemoryMetrics { total_bytes: 1024, used_bytes: 512, free_bytes: 512, buffers_bytes: 0, cached_bytes: 0, swap_total: 0, swap_used: 0 },
+///     disks: vec![],
+///     networks: vec![],
+///     processes: vec![],
+/// };
+///
+/// let diff = MetricsDiff { elapsed_secs: 1.0, disks: vec![], networks: vec![] };
+/// let class = snap.classify_workload(&diff);
+/// assert_eq!(class, WorkloadClass::ComputeBound);
+/// ```
 pub trait WorkloadClassifier {
     /// Classifies the workload based on the current state and a rate-of-change diff.
     fn classify_workload(&self, diff: &MetricsDiff) -> WorkloadClass;
