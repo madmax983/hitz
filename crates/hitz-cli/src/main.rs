@@ -1212,19 +1212,19 @@ fn format_error_response(status: hyper::StatusCode, resp: &str, error_prefix: &s
                     use std::fmt::Write;
                     if let Some(s) = val.as_str() {
                         if !acc.is_empty() {
-                            let _ = write!(acc, ", ");
+                            let _ = write!(acc, "\n");
                         }
-                        let _ = write!(acc, "{k}: {s}");
+                        let _ = write!(acc, "{} {}", format!("{k}:").cyan(), s);
                     } else if let Some(n) = val.as_number() {
                         if !acc.is_empty() {
-                            let _ = write!(acc, ", ");
+                            let _ = write!(acc, "\n");
                         }
-                        let _ = write!(acc, "{k}: {n}");
+                        let _ = write!(acc, "{} {}", format!("{k}:").cyan(), n);
                     } else if val.is_boolean() || val.is_null() {
                         if !acc.is_empty() {
-                            let _ = write!(acc, ", ");
+                            let _ = write!(acc, "\n");
                         }
-                        let _ = write!(acc, "{k}: {val}");
+                        let _ = write!(acc, "{} {}", format!("{k}:").cyan(), val);
                     }
                     acc
                 })
@@ -1255,8 +1255,27 @@ fn format_error_response(status: hyper::StatusCode, resp: &str, error_prefix: &s
 
 fn print_error_response(status: hyper::StatusCode, resp: &str, error_prefix: &str) {
     use crossterm::style::Stylize;
-    let msg = format_error_response(status, resp, error_prefix);
-    println!("\r\x1b[2K{}", msg.red());
+    let raw_msg = format_error_response(status, resp, error_prefix);
+    // Strip the clear-line escape and process the message to implement Visual Hierarchy.
+    let content = raw_msg.trim_start_matches("\r\x1b[2K");
+
+    // Check if the message matches our standard prefix format "✗ [Prefix]: [Details]"
+    // or "✗ [Prefix] ([Status]): [Details]"
+    if let Some((prefix, details)) = content.split_once(": ") {
+        // We know it starts with "✗ " based on format_error_response
+        let prefix_styled = prefix.red().bold();
+        let details_styled = details.white(); // Important info stands out
+
+        // Use a clean multi-line display with visual hierarchy
+        println!("\r\x1b[2K{}", prefix_styled);
+        println!("  {}", "↳".dark_grey());
+        for line in details_styled.to_string().lines() {
+            println!("    {}", line);
+        }
+    } else {
+        // Fallback for unexpected formats
+        println!("\r\x1b[2K{}", content.red().bold());
+    }
 }
 
 fn print_action_result(
