@@ -1,0 +1,158 @@
+<<<<<<< SEARCH
+fn format_error_response(status: hyper::StatusCode, resp: &str, error_prefix: &str) -> String {
+    let msg = if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(resp) {
+        format!("✗ {error_prefix}: {}", err.message)
+    } else if let Ok(v) = serde_json::from_str::<serde_json::Value>(resp) {
+        if let Some(msg) = v.get("message").and_then(|m| m.as_str()) {
+            format!("✗ {error_prefix}: {}", msg)
+        } else if let Some(err) = v.get("error").and_then(|e| e.as_str()) {
+            format!("✗ {error_prefix}: {}", err)
+        } else {
+            // ⚡ Bolt Optimization: Replace intermediate `Vec` heap allocations and `.join(...)`
+            // with an iterator chain using `.fold(String::new(), ...)` to eliminate
+            // intermediate heap allocations and multiple `format!` calls when formatting CLI error responses.
+            let parts_str = v.as_object().map_or_else(String::new, |obj| {
+                obj.iter().fold(String::new(), |mut acc, (k, val)| {
+                    use std::fmt::Write;
+                    if let Some(s) = val.as_str() {
+                        if !acc.is_empty() {
+                            let _ = write!(acc, ", ");
+                        }
+                        let _ = write!(acc, "{k}: {s}");
+                    } else if let Some(n) = val.as_number() {
+                        if !acc.is_empty() {
+                            let _ = write!(acc, ", ");
+                        }
+                        let _ = write!(acc, "{k}: {n}");
+                    } else if val.is_boolean() || val.is_null() {
+                        if !acc.is_empty() {
+                            let _ = write!(acc, ", ");
+                        }
+                        let _ = write!(acc, "{k}: {val}");
+                    }
+                    acc
+                })
+            });
+            if parts_str.is_empty() {
+                format!("✗ {error_prefix} ({status})")
+            } else {
+                format!("✗ {error_prefix} ({status}): {parts_str}")
+            }
+        }
+    } else {
+        let clean = resp.trim();
+        if clean.is_empty() {
+            format!("✗ {error_prefix} ({status})")
+        } else {
+            let max_len = 200;
+            let display_text = if clean.chars().count() > max_len {
+                let truncated: String = clean.chars().take(max_len).collect();
+                format!("{}...", truncated)
+            } else {
+                clean.to_string()
+            };
+            format!("✗ {error_prefix} ({status}): {display_text}")
+        }
+    };
+    format!("\r\x1b[2K{}", msg)
+}
+
+fn print_error_response(status: hyper::StatusCode, resp: &str, error_prefix: &str) {
+    use crossterm::style::Stylize;
+    let msg = format_error_response(status, resp, error_prefix);
+    println!("\r\x1b[2K{}", msg.red());
+}
+=======
+fn parse_error_details(resp: &str) -> Option<String> {
+    if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(resp) {
+        Some(err.message)
+    } else if let Ok(v) = serde_json::from_str::<serde_json::Value>(resp) {
+        if let Some(msg) = v.get("message").and_then(|m| m.as_str()) {
+            Some(msg.to_string())
+        } else if let Some(err) = v.get("error").and_then(|e| e.as_str()) {
+            Some(err.to_string())
+        } else {
+            let parts_str = v.as_object().map_or_else(String::new, |obj| {
+                obj.iter().fold(String::new(), |mut acc, (k, val)| {
+                    use std::fmt::Write;
+                    if let Some(s) = val.as_str() {
+                        if !acc.is_empty() {
+                            let _ = write!(acc, ", ");
+                        }
+                        let _ = write!(acc, "{k}: {s}");
+                    } else if let Some(n) = val.as_number() {
+                        if !acc.is_empty() {
+                            let _ = write!(acc, ", ");
+                        }
+                        let _ = write!(acc, "{k}: {n}");
+                    } else if val.is_boolean() || val.is_null() {
+                        if !acc.is_empty() {
+                            let _ = write!(acc, ", ");
+                        }
+                        let _ = write!(acc, "{k}: {val}");
+                    }
+                    acc
+                })
+            });
+            if parts_str.is_empty() {
+                None
+            } else {
+                Some(parts_str)
+            }
+        }
+    } else {
+        let clean = resp.trim();
+        if clean.is_empty() {
+            None
+        } else {
+            Some(clean.to_string())
+        }
+    }
+}
+
+fn format_error_response(status: hyper::StatusCode, resp: &str, error_prefix: &str) -> String {
+    let details = parse_error_details(resp);
+    let msg = if let Some(d) = details {
+        let max_len = 200;
+        let display_text = if d.chars().count() > max_len {
+            let truncated: String = d.chars().take(max_len).collect();
+            format!("{}...", truncated)
+        } else {
+            d
+        };
+        format!("✗ {error_prefix} ({status}): {display_text}")
+    } else {
+        format!("✗ {error_prefix} ({status})")
+    };
+    format!("\r\x1b[2K{}", msg)
+}
+
+fn print_error_response(status: hyper::StatusCode, resp: &str, error_prefix: &str) {
+    use comfy_table::presets::UTF8_FULL_CONDENSED;
+    use comfy_table::{Cell, Color, Table};
+
+    let mut table = Table::new();
+    let _ = table.load_preset(UTF8_FULL_CONDENSED);
+
+    let title = format!(" ✗ {} ", error_prefix);
+    let status_str = status.to_string();
+
+    let details = parse_error_details(resp).unwrap_or_else(|| "No additional details provided.".to_string());
+
+    let _ = table.add_row([
+        Cell::new("Status").fg(Color::Cyan).add_attribute(comfy_table::Attribute::Bold),
+        Cell::new(status_str).fg(Color::Red),
+    ]);
+    let _ = table.add_row([
+        Cell::new("Details").fg(Color::Cyan).add_attribute(comfy_table::Attribute::Bold),
+        Cell::new(details).fg(Color::Yellow),
+    ]);
+
+    let mut wrapper = Table::new();
+    let _ = wrapper.load_preset(UTF8_FULL_CONDENSED);
+    let _ = wrapper.set_header([Cell::new(title).fg(Color::Red).add_attribute(comfy_table::Attribute::Bold)]);
+    let _ = wrapper.add_row([Cell::new(table.to_string())]);
+
+    println!("\r\x1b[2K\n{}", wrapper);
+}
+>>>>>>> REPLACE
