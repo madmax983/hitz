@@ -306,3 +306,41 @@ mod tests {
         assert_eq!(GuestAgentMode::default(), GuestAgentMode::Auto);
     }
 }
+#[cfg(test)]
+mod additional_tests {
+    use super::*;
+
+    #[test]
+    fn test_guest_agent_mode_custom_path() {
+        let custom_path = PathBuf::from("/custom/path");
+        let mode = GuestAgentMode::Custom(custom_path.clone());
+        match mode {
+            GuestAgentMode::Custom(path) => assert_eq!(path, custom_path),
+            _ => panic!("Expected Custom mode"),
+        }
+    }
+
+    #[test]
+    fn test_net_config_fields() {
+        let net_config = NetConfig {
+            mac: Some("AA:BB:CC:DD:EE:FF".to_string()),
+            host_ip: "10.0.0.1/24".to_string(),
+            guest_ip: "10.0.0.2/24".to_string(),
+            adapter_name: Some("hitz-test".to_string()),
+        };
+        assert_eq!(net_config.mac, Some("AA:BB:CC:DD:EE:FF".to_string()));
+        assert_eq!(net_config.host_ip, "10.0.0.1/24");
+        assert_eq!(net_config.guest_ip, "10.0.0.2/24");
+        assert_eq!(net_config.adapter_name, Some("hitz-test".to_string()));
+    }
+
+    #[test]
+    fn test_port_forward_fields() {
+        let pf = PortForward {
+            host_port: 8080,
+            guest_port: 80,
+        };
+        assert_eq!(pf.host_port, 8080);
+        assert_eq!(pf.guest_port, 80);
+    }
+}
