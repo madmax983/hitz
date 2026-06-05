@@ -104,3 +104,37 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_vmerror_from_memerror() {
+        let err = MemError::OutOfBounds {
+            gpa: 0x3000,
+            len: 256,
+        };
+        let vm_err = crate::error::VmError::Memory(err);
+        assert!(vm_err.to_string().contains("GPA 0x3000"));
+    }
+
+    #[test]
+    fn test_invalid_size_format() {
+        let err = MemError::InvalidSize {
+            gpa: 0x1000,
+            size: 4096,
+        };
+        assert_eq!(
+            err.to_string(),
+            "invalid size 4096 bytes at GPA 0x1000"
+        );
+    }
+
+    #[test]
+    fn test_vmerror_from_halerror() {
+        let hal_err = hitz_hal::HalError::CreatePartition("dummy".to_string());
+        let vm_err = crate::error::VmError::from(hal_err);
+        assert!(vm_err.to_string().contains("dummy"));
+    }
+}
