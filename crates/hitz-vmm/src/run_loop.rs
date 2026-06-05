@@ -257,6 +257,12 @@ fn handle_mmio<V: Vcpu, W: Write>(
             bytes = ?bytes_slice,
             "undecodable MMIO instruction, skipping"
         );
+        if mmio.instruction_len == 0 {
+            return Err(HalError::VcpuRun(format!(
+                "undecodable MMIO instruction at GPA {:#x} and WHP provided 0 instruction_len",
+                mmio.gpa.as_u64()
+            )));
+        }
         // Last resort: use WHP's instruction_len (may be 0).
         return advance_rip(vcpu, mmio.instruction_len);
     };
