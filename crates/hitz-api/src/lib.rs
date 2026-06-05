@@ -493,3 +493,9 @@ pub use rightsizer::{ResizeRecommendation, RightSizer};
 mod terraform;
 #[cfg(feature = "terraform")]
 pub use terraform::ToTerraform;
+
+#[cfg(feature = "cost")]
+/// Cost estimator module for projecting VM execution expenses.
+pub mod cost;
+#[cfg(feature = "cost")]
+pub use cost::{CloudPricing, CostEstimator};
