@@ -13,6 +13,7 @@ use hitz_api::{ActionVmRequest, ApiError, CloneVmRequest, CreateVmRequest, VmAct
 use hitz_hal::Hypervisor;
 use http_body_util::combinators::BoxBody;
 use http_body_util::{BodyExt, Full};
+use http_body_util::Limited;
 use hyper::body::{Body, Frame};
 use hyper::{Method, Request, Response, StatusCode, body::Incoming};
 use tracing::Instrument as _;
@@ -126,8 +127,8 @@ async fn handle_create<H>(
 where
     H: Hypervisor + Send + Sync + 'static,
 {
-    let body = req
-        .into_body()
+    // Capped Reader: Prevent memory exhaustion DoS from massive JSON payloads
+    let body = Limited::new(req.into_body(), 2 * 1024 * 1024)
         .collect()
         .await
         .map_err(|e| DaemonError::Internal(format!("failed to read request body: {e}")))?;
@@ -181,8 +182,8 @@ async fn handle_action<H>(
 where
     H: Hypervisor + Send + Sync + 'static,
 {
-    let body = req
-        .into_body()
+    // Capped Reader: Prevent memory exhaustion DoS from massive JSON payloads
+    let body = Limited::new(req.into_body(), 2 * 1024 * 1024)
         .collect()
         .await
         .map_err(|e| DaemonError::Internal(format!("failed to read request body: {e}")))?;
@@ -205,8 +206,8 @@ async fn handle_clone<H>(
 where
     H: Hypervisor + Send + Sync + 'static,
 {
-    let body = req
-        .into_body()
+    // Capped Reader: Prevent memory exhaustion DoS from massive JSON payloads
+    let body = Limited::new(req.into_body(), 2 * 1024 * 1024)
         .collect()
         .await
         .map_err(|e| DaemonError::Internal(format!("failed to read request body: {e}")))?;

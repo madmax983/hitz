@@ -191,7 +191,7 @@ impl Write for SerialBuf {
             inner.buf[..remaining].copy_from_slice(&data_to_write[space_to_end..]);
             inner.write_pos = remaining;
         }
-        inner.total_written += len as u64;
+        inner.total_written = inner.total_written.saturating_add(len as u64);
         drop(inner);
         let _ = self.notify_tx.send(());
         Ok(len)
