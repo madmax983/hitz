@@ -917,4 +917,48 @@ mod tests {
             dev.process_queue(0, &mut q, &mem);
         }
     }
+
+    #[test]
+    fn missing_status_descriptor() {
+        let f = create_temp_disk(2);
+        let mut dev = VirtioBlockDevice::new(f).unwrap();
+        let mem = MockMem::new(0x10000);
+        let mut q = setup_queue(&mem);
+
+        // Manually create a 2-descriptor chain (header, data, but NO status)
+        write_desc(&mem, 0, HDR_GPA, 16, 1, 1); // F_NEXT to desc 1
+        write_blk_header(&mem, HDR_GPA, VIRTIO_BLK_T_IN, 0);
+
+        write_desc(&mem, 1, DATA_GPA, 512, 2, 0); // F_WRITE, but NO F_NEXT
+
+        write_avail_entry(&mem, 0, 0);
+        set_avail_idx(&mem, 1);
+
+        // Process queue should return without panic
+        dev.process_queue(0, &mut q, &mem);
+    }
+
+    #[test]
+    fn write_readonly_disk_fails() {
+        let _f = create_temp_disk(2);
+
+        // Create a NamedTempFile and make it 2 sectors large
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        let zeros = [0u8; 1024];
+        std::fs::write(tmp.path(), zeros).unwrap();
+
+        // Open the same file but read-only
+        let ro_file = std::fs::OpenOptions::new().read(true).open(tmp.path()).unwrap();
+        let mut dev = VirtioBlockDevice::new(ro_file).unwrap();
+
+        let mem = MockMem::new(0x10000);
+        let mut q = setup_queue(&mem);
+
+        setup_request_chain(&mem, 0, VIRTIO_BLK_T_OUT, 0, 512, false);
+
+        dev.process_queue(0, &mut q, &mem);
+
+        let status = mem.read_bytes(STATUS_GPA, 1);
+        assert_eq!(status[0], VIRTIO_BLK_S_IOERR);
+    }
 }
