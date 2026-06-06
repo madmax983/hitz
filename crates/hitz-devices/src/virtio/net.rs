@@ -425,4 +425,47 @@ mod tests {
 
         dev.process_tx(&mut q, &mem);
     }
+
+    #[test]
+    fn deliver_rx_writes_to_guest_memory() {
+        let mac = [0x02, 0x00, 0x00, 0x00, 0x00, 0x01];
+        let (mut dev, _tx_receiver, _rx_sender) = VirtioNetDevice::new(mac);
+
+        let mem = MockMem::new(0x10000);
+        let mut q = VirtQueue::new(16);
+        q.configure(0, 0x1000, 0x2000);
+        q.set_ready(true);
+        set_avail_idx(&mem, 0);
+        mem.write_bytes(0x2000 + 2, &0u16.to_le_bytes());
+
+        let test_frame = vec![0xBB; 64];
+        dev.rx_pending.push_back(test_frame.clone());
+
+        // Create a writable descriptor for RX
+        // VIRTQ_DESC_F_WRITE = 2
+        write_desc(&mem, 0, 0x4000, 100, 2, 0);
+        write_avail_entry(&mem, 0, 0);
+        set_avail_idx(&mem, 1);
+
+        let delivered = dev.poll_rx(&mut q, &mem);
+        assert!(delivered);
+
+        // Verify it was drained
+        assert!(dev.rx_pending.is_empty());
+
+        // Verify header and payload were written to guest memory
+        let mut written_buf = vec![0u8; 12 + 64];
+        mem.read_guest(0x4000, &mut written_buf).unwrap();
+
+        let header = &written_buf[..12];
+        let payload = &written_buf[12..];
+
+        assert_eq!(header, &[0u8; 12]);
+        assert_eq!(payload, &test_frame);
+
+        // Verify used ring was updated
+        let mut used_idx_buf = [0u8; 2];
+        mem.read_guest(0x2000 + 2, &mut used_idx_buf).unwrap();
+        assert_eq!(u16::from_le_bytes(used_idx_buf), 1);
+    }
 }
