@@ -178,7 +178,7 @@ pub struct IoPortExit {
 ///
 /// # The Fine Print
 /// Ensure `rflags` has the reserved bit 1 set (0x2) as mandated by x86 architecture.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct StandardRegs {
     /// Instruction pointer.
     pub rip: u64,
@@ -238,7 +238,7 @@ pub struct StandardRegs {
 ///
 /// # The Fine Print
 /// `type_` and other flags correspond to the standard x86 segment descriptor format.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct SegmentDescriptor {
     /// Base address.
     pub base: u64,
@@ -281,7 +281,7 @@ pub struct SegmentDescriptor {
 ///
 /// # The Fine Print
 /// `limit` is the size of the table minus 1, in bytes.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct DescriptorTable {
     /// Base address.
     pub base: u64,
@@ -307,7 +307,7 @@ pub struct DescriptorTable {
 /// # The Fine Print
 /// These registers represent the architectural configuration. Incorrect values
 /// will result in an immediate triple fault upon guest entry.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct SpecialRegs {
     /// CR0 — contains PE (protection enable), PG (paging), etc.
     pub cr0: u64,

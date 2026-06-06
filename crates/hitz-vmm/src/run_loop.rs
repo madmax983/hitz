@@ -383,8 +383,8 @@ fn handle_io_port<V: Vcpu, W: Write>(
 /// # impl Vcpu for DummyVcpu {
 /// #     type CancelHandle = ();
 /// #     fn run(&mut self) -> Result<VcpuExit, HalError> { Ok(VcpuExit::Halt) }
-/// #     fn get_regs(&self) -> Result<StandardRegs, HalError> { Ok(self.regs.clone()) }
-/// #     fn set_regs(&mut self, regs: &StandardRegs) -> Result<(), HalError> { self.regs = regs.clone(); Ok(()) }
+/// #     fn get_regs(&self) -> Result<StandardRegs, HalError> { Ok(self.regs) }
+/// #     fn set_regs(&mut self, regs: &StandardRegs) -> Result<(), HalError> { self.regs = *regs; Ok(()) }
 /// #     fn get_sregs(&self) -> Result<SpecialRegs, HalError> { Ok(SpecialRegs::default()) }
 /// #     fn set_sregs(&mut self, _sregs: &SpecialRegs) -> Result<(), HalError> { Ok(()) }
 /// #     fn inject_interrupt(&mut self, _vector: u8) -> Result<(), HalError> { Ok(()) }
@@ -421,8 +421,8 @@ pub(crate) fn advance_rip<V: Vcpu>(vcpu: &mut V, instruction_len: u8) -> Result<
 /// # impl Vcpu for DummyVcpu {
 /// #     type CancelHandle = ();
 /// #     fn run(&mut self) -> Result<VcpuExit, HalError> { Ok(VcpuExit::Halt) }
-/// #     fn get_regs(&self) -> Result<StandardRegs, HalError> { Ok(self.regs.clone()) }
-/// #     fn set_regs(&mut self, regs: &StandardRegs) -> Result<(), HalError> { self.regs = regs.clone(); Ok(()) }
+/// #     fn get_regs(&self) -> Result<StandardRegs, HalError> { Ok(self.regs) }
+/// #     fn set_regs(&mut self, regs: &StandardRegs) -> Result<(), HalError> { self.regs = *regs; Ok(()) }
 /// #     fn get_sregs(&self) -> Result<SpecialRegs, HalError> { Ok(SpecialRegs::default()) }
 /// #     fn set_sregs(&mut self, _sregs: &SpecialRegs) -> Result<(), HalError> { Ok(()) }
 /// #     fn inject_interrupt(&mut self, _vector: u8) -> Result<(), HalError> { Ok(()) }
@@ -598,17 +598,17 @@ mod tests {
             res
         }
         fn get_regs(&self) -> Result<hitz_hal::StandardRegs, HalError> {
-            Ok(self.regs.clone())
+            Ok(self.regs)
         }
         fn set_regs(&mut self, regs: &hitz_hal::StandardRegs) -> Result<(), HalError> {
-            self.regs = regs.clone();
+            self.regs = *regs;
             Ok(())
         }
         fn get_sregs(&self) -> Result<hitz_hal::SpecialRegs, HalError> {
-            Ok(self.sregs.clone())
+            Ok(self.sregs)
         }
         fn set_sregs(&mut self, sregs: &hitz_hal::SpecialRegs) -> Result<(), HalError> {
-            self.sregs = sregs.clone();
+            self.sregs = *sregs;
             Ok(())
         }
         fn inject_interrupt(&mut self, _vector: u8) -> Result<(), HalError> {
