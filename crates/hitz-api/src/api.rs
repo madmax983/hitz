@@ -76,7 +76,22 @@ impl std::fmt::Display for VmAction {
 }
 
 impl VmAction {
-    /// Returns the gerund form of the action (e.g., "Starting", "Stopping").
+    /// Converts the action into its gerund (present participle) form.
+    ///
+    /// # Abstract
+    /// Translates a discrete enum variant into a continuous action string
+    /// (e.g., "Starting"). This is primarily used by the CLI to provide
+    /// real-time, human-friendly feedback while waiting for the daemon
+    /// to complete a request.
+    ///
+    /// ## Examples
+    ///
+    /// ```rust
+    /// use hitz_api::VmAction;
+    ///
+    /// let action = VmAction::Restart;
+    /// assert_eq!(action.gerund(), "Restarting");
+    /// ```
     #[must_use]
     pub const fn gerund(&self) -> &'static str {
         match self {
@@ -86,7 +101,22 @@ impl VmAction {
         }
     }
 
-    /// Returns the past tense form of the action (e.g., "started", "stopped").
+    /// Converts the action into its past tense form.
+    ///
+    /// # Abstract
+    /// Translates a discrete enum variant into a completed action string
+    /// (e.g., "started"). This is primarily used by the CLI to confirm
+    /// to the user that a requested lifecycle change was successfully
+    /// executed by the daemon.
+    ///
+    /// ## Examples
+    ///
+    /// ```rust
+    /// use hitz_api::VmAction;
+    ///
+    /// let action = VmAction::Stop;
+    /// assert_eq!(action.past_tense(), "stopped");
+    /// ```
     #[must_use]
     pub const fn past_tense(&self) -> &'static str {
         match self {

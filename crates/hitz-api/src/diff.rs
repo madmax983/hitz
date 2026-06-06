@@ -190,10 +190,13 @@ pub trait CalculateDiff {
     ///
     /// # Details
     /// Implementations should return the difference relative to the elapsed
-    /// time between the two objects.
+    /// time between the two objects, effectively computing a rate of change.
     ///
-    /// Returns `None` if the duration between `self` and `previous` is zero
-    /// or negative (i.e., `self` is not strictly newer than `previous`).
+    /// # Errors
+    ///
+    /// This method yields `None` if the duration between `self` and `previous`
+    /// is zero or negative (i.e., `self` is not strictly chronologically newer
+    /// than `previous`).
     ///
     /// ## Examples
     ///
