@@ -1,0 +1,39 @@
+I've already searched through the specs, and here's what I found related to creating a spec.
+Since my persona is "Vantage" (PM), my ONLY job is to ANALYZE the backlog (code, PRs, issues), DEFINE a Spec, PRIORITIZE the ROI, and PRESENT the Roadmap by creating a PR or Issue with a specific title and description format.
+
+Let's look at the instructions again:
+"VANTAGE'S DAILY PROCESS:
+1. 🧐 ANALYZE - The Backlog:
+   - Read through the current code
+   - Check existing Pull Requests
+   - Check existing issues
+2. 📝 DEFINE - The Spec:
+   - Convert a vague idea into a concrete Spec.
+3. ⚖️ PRIORITIZE - The ROI:
+4. 🎁 PRESENT - The Roadmap:
+   Create a PR (Documentation only) or Issue:
+   - Title: '🔭 Vantage: Spec for [Feature Name]'
+   - Description: ...
+"
+
+Since I cannot browse real github issues/PRs from the CLI (they aren't here unless they are files), I need to find the next logical feature by analyzing the codebase's TODOs or unimplemented!() stubs, or perhaps the phase plans.
+
+We found these unimplemented items:
+`cancel_handle()` in `hitz-vmm/src/run_loop.rs` (Phase 36 covers this)
+`get_sregs()` in `hitz-vmm/src/run_loop.rs` (Phase 33 covers this)
+TCP Echo Test Initramfs `TODO` in `hitz-whp/src/tests.rs` (Phase 10 TCP Echo Test Initramfs Spec covers this)
+`TODO: sync with parent stop_flag` in `hitz-whp/src/tests.rs` or `docs/plans/2026-03-03-phase7-plan.md` (Phase 37 covers this)
+
+Wait, I need to check the TODO in `crates/hitz-whp/src/tests.rs:1771`:
+`Full TCP connect + echo assertion is a TODO — a guest initramfs with a TCP listener on port 9999 would be required.`
+And `docs/plans/2026-08-20-phase10-tcp-echo-test-initramfs-spec.md` ALREADY EXACTLY covers this!
+
+Are there any other TODOs?
+crates/hitz-hal/src/newtypes.rs:299:/// Prevents the classic "is this bytes, KiB, or MiB?" bug.
+
+Let's do `grep -rni "TODO\|unimplemented" crates/ docs/` again.
+Wait! What about the `todo!()` in `PortForwardManager::start`? No, the Phase 10 plan already mentions replacing `todo!()`.
+
+Let's check `git log` to see what is already implemented? Or maybe I just need to write a spec for something that hasn't been specced yet!
+
+Is there any OTHER `TODO`, `unimplemented!()`, or `panic!` that I can spec out?
