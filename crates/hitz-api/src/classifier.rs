@@ -21,6 +21,15 @@ use crate::{MetricsDiff, MetricsSnapshot};
 use serde::{Deserialize, Serialize};
 
 /// The categorized type of workload running on the VM.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::WorkloadClass;
+///
+/// let class = WorkloadClass::ComputeBound;
+/// assert_eq!(class, WorkloadClass::ComputeBound);
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum WorkloadClass {
     /// The VM is heavily utilizing the CPU.
@@ -36,6 +45,25 @@ pub enum WorkloadClass {
 /// Trait for objects that can classify their workload.
 pub trait WorkloadClassifier {
     /// Classifies the workload based on the current state and a rate-of-change diff.
+    ///
+    /// ## Examples
+    ///
+    /// ```rust
+    /// use hitz_api::{WorkloadClass, WorkloadClassifier, MetricsSnapshot, MetricsDiff};
+    /// use hitz_api::{CpuMetrics, MemoryMetrics};
+    ///
+    /// let snap = MetricsSnapshot {
+    ///     timestamp_ms: 1000,
+    ///     cpu: CpuMetrics { total_pct: 90.0, per_core: vec![90.0], load_avg: [0.1, 0.1, 0.1] },
+    ///     memory: MemoryMetrics { total_bytes: 1024, used_bytes: 512, free_bytes: 512, buffers_bytes: 0, cached_bytes: 0, swap_total: 0, swap_used: 0 },
+    ///     disks: vec![],
+    ///     networks: vec![],
+    ///     processes: vec![],
+    /// };
+    /// let diff = MetricsDiff { elapsed_secs: 1.0, disks: vec![], networks: vec![] };
+    ///
+    /// assert_eq!(snap.classify_workload(&diff), WorkloadClass::ComputeBound);
+    /// ```
     fn classify_workload(&self, diff: &MetricsDiff) -> WorkloadClass;
 }
 
