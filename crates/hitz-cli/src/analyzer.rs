@@ -1,5 +1,14 @@
+//! VM metrics analyzer and insight generator.
+//!
+//! # Abstract
+//! This module analyzes raw `MetricsSnapshot` data against the current `VmInfo` to produce actionable insights.
+
 use hitz_api::{MetricsSnapshot, VmInfo};
 
+/// Represents the severity of a resource insight.
+///
+/// # Abstract
+/// Defines the level of urgency for an identified issue.
 #[derive(Debug, PartialEq, Eq)]
 pub enum WarningLevel {
     Info,
@@ -17,12 +26,70 @@ impl std::fmt::Display for WarningLevel {
     }
 }
 
+/// An actionable observation about the VM's current state.
+///
+/// # Abstract
+/// Pairs a specific severity level with a descriptive message.
 #[derive(Debug, PartialEq, Eq)]
 pub struct ResourceInsight {
+    /// The severity of the insight.
     pub level: WarningLevel,
+    /// A descriptive message explaining the insight.
     pub message: String,
 }
 
+/// Analyzes a VM's metrics and configuration to generate actionable insights.
+///
+/// # Abstract
+/// Takes raw metrics and configuration data and returns a list of insights.
+///
+/// # The Hero's Journey
+/// ```rust
+/// # use hitz_cli::analyzer::{ResourceInsight, WarningLevel, analyze_vm};
+/// # use hitz_api::{MetricsSnapshot, VmInfo, VmConfig, VmState, CpuMetrics, MemoryMetrics, DEFAULT_CPUS, DEFAULT_GUEST_CID, GuestAgentMode};
+/// # use std::path::PathBuf;
+/// #
+/// let info = VmInfo {
+///     id: "test".into(),
+///     state: VmState::Running,
+///     config: VmConfig {
+///         kernel_path: PathBuf::from(""),
+///         initramfs_path: None,
+///         disk_path: None,
+///         ram_mib: 1024,
+///         cpus: DEFAULT_CPUS,
+///         cmdline: None,
+///         net: None,
+///         ports: vec![],
+///         guest_cid: DEFAULT_GUEST_CID,
+///         guest_agent: GuestAgentMode::Disabled,
+///     },
+///     exit_reason: None,
+/// };
+///
+/// let mut metrics = MetricsSnapshot {
+///     timestamp_ms: 0,
+///     cpu: CpuMetrics { total_pct: 95.0, per_core: vec![], load_avg: [0.0; 3] },
+///     memory: MemoryMetrics {
+///         total_bytes: 1024 * 1024 * 1024,
+///         used_bytes: 0,
+///         free_bytes: 0,
+///         buffers_bytes: 0,
+///         cached_bytes: 0,
+///         swap_total: 0,
+///         swap_used: 0,
+///     },
+///     disks: vec![],
+///     networks: vec![],
+///     processes: vec![],
+/// };
+///
+/// let insights = analyze_vm(&info, &metrics);
+/// assert_eq!(insights[0].level, WarningLevel::Critical);
+/// ```
+///
+/// # Details
+/// Evaluates CPU, memory utilization, and network errors.
 pub fn analyze_vm(info: &VmInfo, metrics: &MetricsSnapshot) -> Vec<ResourceInsight> {
     // ⚡ Bolt Optimization: Pre-allocate capacity for up to 4 potential insights
     // (CPU, Memory, Swap, Network) to avoid dynamic heap reallocations.

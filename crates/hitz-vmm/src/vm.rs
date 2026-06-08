@@ -282,6 +282,12 @@ fn cancel_all_vcpus<V: Vcpu>(handles: &[V::CancelHandle]) {
     }
 }
 
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::too_many_lines,
+    clippy::needless_pass_by_value,
+    clippy::expect_used
+)]
 /// Boot a Linux kernel and run the VM to completion.
 ///
 /// This is the main entry point for the VMM. It:
@@ -372,12 +378,6 @@ fn cancel_all_vcpus<V: Vcpu>(handles: &[V::CancelHandle]) {
 /// ## Panics
 /// Panics if a vCPU thread or the watchdog thread cannot be spawned
 /// (OS resource exhaustion).
-#[allow(
-    clippy::cast_possible_truncation,
-    clippy::too_many_lines,
-    clippy::needless_pass_by_value,
-    clippy::expect_used
-)]
 pub fn boot_and_run<H: Hypervisor, W: Write + Send + 'static>(
     hypervisor: &H,
     config: &VmConfig,
