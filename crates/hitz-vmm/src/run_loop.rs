@@ -166,7 +166,9 @@ fn poll_devices<V: Vcpu, W: Write>(
     let pending_vector = devs.mmio_bus.poll_devices();
     drop(devs);
 
-    let Some(vector) = pending_vector else { return Ok(()); };
+    let Some(vector) = pending_vector else {
+        return Ok(());
+    };
     if vcpu.inject_interrupt(vector).is_err() {
         *pending_irq = Some(vector);
         vcpu.request_interrupt_window()?;
@@ -183,37 +185,31 @@ fn dispatch_exit<V: Vcpu, W: Write>(
     pending_irq: &mut Option<u8>,
     exit_counter: &Counter<u64>,
 ) -> Result<Option<ExitReason>, HalError> {
+    record_exit(exit_counter, exit.label());
+
     match exit {
         VcpuExit::IoPort(io) => {
-            record_exit(exit_counter, "IoPort");
             let mut devs = devices.lock().expect("device lock poisoned");
             handle_io_port(vcpu, &mut devs.serial, &io)?;
             Ok(None)
         }
-        VcpuExit::Halt => {
-            record_exit(exit_counter, "Halt");
-            Ok(Some(ExitReason::Halt))
-        }
-        VcpuExit::Shutdown => {
-            record_exit(exit_counter, "Shutdown");
-            Ok(Some(ExitReason::Shutdown))
-        }
+        VcpuExit::Halt => Ok(Some(ExitReason::Halt)),
+        VcpuExit::Shutdown => Ok(Some(ExitReason::Shutdown)),
         VcpuExit::Mmio(mmio) => {
-            record_exit(exit_counter, "Mmio");
             handle_mmio(vcpu, devices, mem, &mmio, pending_irq)?;
             Ok(None)
         }
         VcpuExit::InterruptWindow => {
-            record_exit(exit_counter, "InterruptWindow");
             // Guest is now interruptible. WHP auto-clears the
             // deliverability notification after this exit fires.
-            let Some(vector) = pending_irq.take() else { return Ok(None); };
+            let Some(vector) = pending_irq.take() else {
+                return Ok(None);
+            };
             vcpu.inject_interrupt(vector)?;
             tracing::debug!(vector, "deferred interrupt injected via interrupt window");
             Ok(None)
         }
         VcpuExit::Canceled => {
-            record_exit(exit_counter, "Canceled");
             // vCPU run was canceled (e.g. by another thread).
             // If we have a pending IRQ, re-request the interrupt window
             // so we get notified once the guest becomes interruptible.
@@ -222,12 +218,9 @@ fn dispatch_exit<V: Vcpu, W: Write>(
             }
             Ok(None)
         }
-        VcpuExit::Unknown(code) => {
-            record_exit(exit_counter, "Unexpected");
-            Ok(Some(ExitReason::Unexpected(format!(
-                "unknown vCPU exit reason: {code:#x}"
-            ))))
-        }
+        VcpuExit::Unknown(code) => Ok(Some(ExitReason::Unexpected(format!(
+            "unknown vCPU exit reason: {code:#x}"
+        )))),
     }
 }
 
@@ -320,7 +313,9 @@ fn handle_mmio_write<V: Vcpu, W: Write>(
     };
     advance_rip(vcpu, instr_len)?;
 
-    let Some(vector) = irq else { return Ok(()); };
+    let Some(vector) = irq else {
+        return Ok(());
+    };
     // Try to inject immediately. If the guest has IF=0
     // (interrupts disabled) or is in interrupt shadow,
     // WHP rejects the injection — stash the IRQ and

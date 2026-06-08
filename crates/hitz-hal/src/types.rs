@@ -67,6 +67,22 @@ pub enum VcpuExit {
     Unknown(u32),
 }
 
+impl VcpuExit {
+    /// Returns a static string label representing the exit reason.
+    #[must_use]
+    pub const fn label(&self) -> &'static str {
+        match self {
+            Self::IoPort(_) => "IoPort",
+            Self::Halt => "Halt",
+            Self::Shutdown => "Shutdown",
+            Self::Mmio(_) => "Mmio",
+            Self::InterruptWindow => "InterruptWindow",
+            Self::Canceled => "Canceled",
+            Self::Unknown(_) => "Unexpected",
+        }
+    }
+}
+
 /// Details of an MMIO exit.
 ///
 /// # Abstract
