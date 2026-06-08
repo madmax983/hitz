@@ -89,16 +89,18 @@ pub fn decode_mmio_instruction(bytes: &[u8]) -> Option<DecodedMmio> {
     parse_sib_and_disp(bytes, modrm, &mut pos)?;
 
     // -- 5. Opcode-specific decoding --------------------------------------------
+    let rex_w = (rex >> 3) & 1;
     match opcode {
         // MOV r/m, r (write) or MOV r, r/m (read) — 8/32-bit variants
         0x88..=0x8B => Some(decode_mov_r_rm(
             opcode,
             has_operand_size_prefix,
+            rex_w,
             reg_field,
             pos,
         )),
         // MOV r/m32, imm32
-        0xC7 => decode_mov_rm_imm(bytes, has_operand_size_prefix, modrm, pos),
+        0xC7 => decode_mov_rm_imm(bytes, has_operand_size_prefix, rex_w, modrm, pos),
         _ => None,
     }
 }
@@ -148,11 +150,14 @@ fn parse_sib_and_disp(bytes: &[u8], modrm: u8, pos: &mut usize) -> Option<()> {
 const fn decode_mov_r_rm(
     opcode: u8,
     has_operand_size_prefix: bool,
+    rex_w: u8,
     reg_field: u8,
     pos: usize,
 ) -> DecodedMmio {
     let size = if opcode & 1 == 0 {
         1 // 0x88, 0x8A = byte
+    } else if rex_w == 1 {
+        8
     } else if has_operand_size_prefix {
         2
     } else {
@@ -170,6 +175,7 @@ const fn decode_mov_r_rm(
 const fn decode_mov_rm_imm(
     bytes: &[u8],
     has_operand_size_prefix: bool,
+    rex_w: u8,
     modrm: u8,
     mut pos: usize,
 ) -> Option<DecodedMmio> {
@@ -190,9 +196,15 @@ const fn decode_mov_rm_imm(
     };
     pos += imm_size;
 
+    let size = if rex_w == 1 {
+        8
+    } else {
+        imm_size as u8
+    };
+
     Some(DecodedMmio {
         register: 0, // C7 /0 uses an immediate, not a register source
-        size: imm_size as u8,
+        size,
         immediate: Some(imm),
         instruction_len: pos as u8,
     })
