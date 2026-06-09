@@ -493,3 +493,9 @@ pub use rightsizer::{ResizeRecommendation, RightSizer};
 mod terraform;
 #[cfg(feature = "terraform")]
 pub use terraform::ToTerraform;
+
+#[cfg(feature = "cost")]
+/// Cost estimator for micro-VMs.
+mod cost;
+#[cfg(feature = "cost")]
+pub use cost::{CostEstimator, PricingFactors};
