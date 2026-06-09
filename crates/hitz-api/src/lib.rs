@@ -48,35 +48,9 @@ pub mod simulator;
 #[cfg(feature = "simulator")]
 pub use simulator::{VmSimulator, WorkloadProfile};
 
-#[cfg(feature = "diff")]
-/// Diff module for calculating rates of change between telemetry snapshots.
-mod diff;
-#[cfg(feature = "diff")]
-pub use diff::{CalculateDiff, DiskRate, MetricsDiff, NetRate};
-
-#[cfg(feature = "classifier")]
-/// Classifier module for determining workload type.
-mod classifier;
-#[cfg(feature = "classifier")]
-pub use classifier::{WorkloadClass, WorkloadClassifier};
-
-#[cfg(feature = "prometheus")]
-/// Prometheus module for converting metrics to Prometheus text format.
-mod prometheus;
-#[cfg(feature = "prometheus")]
-pub use prometheus::ToPrometheus;
-
-#[cfg(feature = "carbon")]
-/// Carbon footprint estimation module.
-mod carbon;
-#[cfg(feature = "carbon")]
-pub use carbon::{CarbonEstimator, EmissionFactors};
-
-#[cfg(feature = "sentinel")]
-/// Sentinel module for defining rules based on metrics.
-mod sentinel;
-#[cfg(feature = "sentinel")]
-pub use sentinel::{ConditionOperator, MetricTarget, SentinelCondition, SentinelRule};
+/// Grouped telemetry analysis modules (diffing, fingerprinting, rightsizing, etc).
+pub mod telemetry;
+pub use telemetry::*;
 
 #[cfg(test)]
 #[allow(clippy::expect_used)]
@@ -464,29 +438,6 @@ mod tests {
         assert_eq!(snap, decoded_json);
     }
 }
-#[cfg(feature = "efficiency")]
-/// Efficiency scoring module for evaluating resource usage.
-mod efficiency;
-#[cfg(feature = "efficiency")]
-pub use efficiency::{EfficiencyScore, EfficiencyScorer};
-
-#[cfg(feature = "fingerprint")]
-/// Fingerprinting module for categorizing VM workload behavior.
-mod fingerprint;
-#[cfg(feature = "fingerprint")]
-pub use fingerprint::{FingerprintGenerator, VmFingerprint};
-
-#[cfg(feature = "imbalance")]
-/// Imbalance scoring module for evaluating per-core CPU utilization imbalance.
-mod imbalance;
-#[cfg(feature = "imbalance")]
-pub use imbalance::{CoreImbalanceAnalyzer, ImbalanceResult};
-
-#[cfg(feature = "rightsizer")]
-/// Rightsizing module for analyzing metrics and suggesting config changes.
-mod rightsizer;
-#[cfg(feature = "rightsizer")]
-pub use rightsizer::{ResizeRecommendation, RightSizer};
 
 #[cfg(feature = "terraform")]
 /// Terraform HCL generation module.
