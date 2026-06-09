@@ -505,11 +505,15 @@ fn setup_guest_memory(
 }
 
 fn build_kernel_cmdline(
-    guest_mem: &mut GuestMemory,
+    guest_mem: &GuestMemory,
     config: &VmConfig,
     extras: &BootExtras,
 ) -> Result<(), VmError> {
-    let mut cmdline = config.effective_cmdline().to_string();
+    // ⚡ Bolt Optimization:
+    // We pre-allocate the `cmdline` string to a generous capacity to avoid
+    // intermediate heap reallocations when dynamically appending network and vsock arguments.
+    let mut cmdline = String::with_capacity(256);
+    cmdline.push_str(config.effective_cmdline());
 
     if config.net.is_some() {
         let net_base = VIRTIO_MMIO_BASE + VIRTIO_MMIO_SIZE;
