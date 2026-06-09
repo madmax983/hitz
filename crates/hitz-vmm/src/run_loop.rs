@@ -23,6 +23,26 @@ use crate::mmio_decode;
 const PIC_PORTS: [u16; 4] = [0x20, 0x21, 0xA0, 0xA1];
 
 /// Reason the run loop terminated.
+///
+/// # Abstract
+/// This enum captures the exact cause of why the virtual CPU stopped executing.
+/// It distinguishes between normal conditions (like a guest requesting a halt)
+/// and administrative actions (like the user cancelling the VM).
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_vmm::ExitReason;
+///
+/// let reason = ExitReason::Halt;
+///
+/// match reason {
+///     ExitReason::Halt => println!("The guest went to sleep."),
+///     ExitReason::Shutdown => println!("The guest is shutting down."),
+///     ExitReason::Canceled => println!("The VM was forcefully stopped."),
+///     ExitReason::Unexpected(ref msg) => println!("Something went wrong: {}", msg),
+/// }
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExitReason {
     /// Guest executed HLT.
@@ -37,8 +57,28 @@ pub enum ExitReason {
 
 /// Devices shared across all vCPU threads.
 ///
+/// # Abstract
+/// This struct holds the peripheral devices that are shared among all virtual CPUs
+/// in the micro-VM. To prevent data races, it is typically wrapped in a `Mutex`.
+///
 /// Each vCPU locks this only during I/O exits (microseconds per lock).
 /// Compute-bound guests experience zero contention.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_vmm::SharedDevices;
+/// use hitz_devices::{MmioBus, SerialDevice};
+/// use std::sync::Mutex;
+///
+/// let devices = Mutex::new(SharedDevices {
+///     serial: SerialDevice::new(std::io::sink()),
+///     mmio_bus: MmioBus::new(),
+/// });
+///
+/// // vCPUs can lock the devices to perform I/O
+/// let guard = devices.lock().unwrap();
+/// ```
 pub struct SharedDevices<W: Write> {
     /// Serial console (COM1).
     pub serial: SerialDevice<W>,
