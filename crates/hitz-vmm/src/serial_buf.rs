@@ -31,6 +31,8 @@
 //! * **Overwriting**: When the ring is full, the oldest bytes are silently overwritten.
 //! * **Closing**: Once `close()` is called, all new readers and pending `read_next` calls will return `None`.
 
+#![allow(unexpected_cfgs, unused_imports)]
+
 use std::io::{self, Write};
 
 #[cfg(loom)]

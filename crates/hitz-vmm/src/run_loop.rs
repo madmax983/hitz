@@ -166,7 +166,9 @@ fn poll_devices<V: Vcpu, W: Write>(
     let pending_vector = devs.mmio_bus.poll_devices();
     drop(devs);
 
-    let Some(vector) = pending_vector else { return Ok(()); };
+    let Some(vector) = pending_vector else {
+        return Ok(());
+    };
     if vcpu.inject_interrupt(vector).is_err() {
         *pending_irq = Some(vector);
         vcpu.request_interrupt_window()?;
@@ -186,8 +188,10 @@ fn dispatch_exit<V: Vcpu, W: Write>(
     match exit {
         VcpuExit::IoPort(io) => {
             record_exit(exit_counter, "IoPort");
-            let mut devs = devices.lock().expect("device lock poisoned");
-            handle_io_port(vcpu, &mut devs.serial, &io)?;
+            {
+                let mut devs = devices.lock().expect("device lock poisoned");
+                handle_io_port(vcpu, &mut devs.serial, &io)?;
+            }
             Ok(None)
         }
         VcpuExit::Halt => {
@@ -207,7 +211,9 @@ fn dispatch_exit<V: Vcpu, W: Write>(
             record_exit(exit_counter, "InterruptWindow");
             // Guest is now interruptible. WHP auto-clears the
             // deliverability notification after this exit fires.
-            let Some(vector) = pending_irq.take() else { return Ok(None); };
+            let Some(vector) = pending_irq.take() else {
+                return Ok(None);
+            };
             vcpu.inject_interrupt(vector)?;
             tracing::debug!(vector, "deferred interrupt injected via interrupt window");
             Ok(None)
@@ -272,6 +278,7 @@ fn handle_mmio<V: Vcpu, W: Write>(
     }
 }
 
+#[allow(clippy::expect_used)]
 fn handle_mmio_read<V: Vcpu, W: Write>(
     vcpu: &mut V,
     devices: &Mutex<SharedDevices<W>>,
@@ -294,6 +301,7 @@ fn handle_mmio_read<V: Vcpu, W: Write>(
     vcpu.set_regs(&regs)
 }
 
+#[allow(clippy::expect_used)]
 fn handle_mmio_write<V: Vcpu, W: Write>(
     vcpu: &mut V,
     devices: &Mutex<SharedDevices<W>>,
@@ -320,7 +328,9 @@ fn handle_mmio_write<V: Vcpu, W: Write>(
     };
     advance_rip(vcpu, instr_len)?;
 
-    let Some(vector) = irq else { return Ok(()); };
+    let Some(vector) = irq else {
+        return Ok(());
+    };
     // Try to inject immediately. If the guest has IF=0
     // (interrupts disabled) or is in interrupt shadow,
     // WHP rejects the injection — stash the IRQ and

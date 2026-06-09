@@ -396,7 +396,7 @@ pub fn boot_and_run<H: Hypervisor, W: Write + Send + 'static>(
     let pml4_gpa = setup_guest_memory(&mut guest_mem, config, ram_bytes, gib_count)?;
 
     // ── 8. Write command line ──
-    build_kernel_cmdline(&mut guest_mem, config, &extras)?;
+    build_kernel_cmdline(&guest_mem, config, &extras)?;
 
     // ── 9. Write GDT ──
     boot_regs::write_gdt(&guest_mem)?;
@@ -433,10 +433,7 @@ pub fn boot_and_run<H: Hypervisor, W: Write + Send + 'static>(
     let exit_reason = if vcpus.len() == 1 {
         // ⚡ Bolt Optimization: Eliminated `.to_string()` allocation on error path.
         let single_vcpu = vcpus.pop().ok_or_else(|| {
-            std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "vcpus array is unexpectedly empty when it should have 1 element",
-            )
+            std::io::Error::other("vcpus array is unexpectedly empty when it should have 1 element")
         })?;
         run_single_vcpu::<H>(single_vcpu, devices, guest_mem_arc, stop_flag)?
     } else {
@@ -505,7 +502,7 @@ fn setup_guest_memory(
 }
 
 fn build_kernel_cmdline(
-    guest_mem: &mut GuestMemory,
+    guest_mem: &GuestMemory,
     config: &VmConfig,
     extras: &BootExtras,
 ) -> Result<(), VmError> {
@@ -608,6 +605,7 @@ fn setup_devices(
     Ok(net_io_handle)
 }
 
+#[allow(clippy::needless_pass_by_value, clippy::expect_used)]
 fn run_single_vcpu<H: Hypervisor>(
     mut vcpu: <H::Partition as Partition>::Vcpu,
     devices: Arc<Mutex<SharedDevices<impl Write + Send + 'static>>>,
@@ -633,6 +631,11 @@ fn run_single_vcpu<H: Hypervisor>(
     Ok(exit_reason)
 }
 
+#[allow(
+    clippy::needless_pass_by_value,
+    clippy::expect_used,
+    clippy::unnecessary_wraps
+)]
 fn run_multi_vcpu<H: Hypervisor>(
     vcpus: Vec<<H::Partition as Partition>::Vcpu>,
     devices: Arc<Mutex<SharedDevices<impl Write + Send + 'static>>>,
