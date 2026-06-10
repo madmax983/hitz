@@ -66,6 +66,7 @@ impl Trigger for NoopTrigger {
 ///   but Hitz uses a `NoopTrigger` to avoid injecting unnecessary interrupts since it's
 ///   synchronous and fast.
 pub struct SerialDevice<W: Write> {
+    /// The underlying `vm-superio` 8250 UART implementation.
     inner: Serial<NoopTrigger, NoEvents, W>,
 }
 

@@ -75,6 +75,7 @@ struct MmioSlot {
 /// Devices must not overlap. Attempting to register overlapping address ranges
 /// will cause a panic to prevent unpredictable routing and memory corruption.
 pub struct MmioBus {
+    /// A collection of registered MMIO slots, sorted by base address.
     slots: Vec<MmioSlot>,
 }
 
@@ -110,6 +111,7 @@ impl MmioBus {
         self.slots.sort_by_key(|s| s.base);
     }
 
+    /// Finds the corresponding slot for the given physical address using binary search.
     fn find_slot(&mut self, gpa: u64) -> Option<&mut MmioSlot> {
         // ⚡ Bolt Optimization: Replace O(N) linear scan with O(log N) binary search.
         // This significantly reduces VM exit latency when many MMIO devices (like virtio) are registered.
