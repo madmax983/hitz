@@ -296,27 +296,6 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_proc_pid_stat_complex_names() {
-        // Name with spaces and parentheses: "(my (complex) process)"
-        let content = "123 (my (complex) process) S 1 1 1 1 1 1 1 1 1 1 100 200 1 1 1 1 1 1 1 1 50";
-        let metrics = parse_proc_pid_stat(123, content).unwrap();
-
-        assert_eq!(metrics.pid, 123);
-        assert_eq!(metrics.name, "my (complex) process");
-        assert_eq!(metrics.state, 'S');
-        assert_eq!(metrics.rss_bytes, 50 * 4096);
-
-        // Name with unclosed parenthesis (should still parse if there is a closing one at the end)
-        let content2 = "123 (my (process) S 1 1 1 1 1 1 1 1 1 1 100 200 1 1 1 1 1 1 1 1 50";
-        let metrics2 = parse_proc_pid_stat(123, content2).unwrap();
-        assert_eq!(metrics2.name, "my (process");
-
-        // Invalid numbers
-        let content_invalid_num = "123 (my_process) S 1 1 1 1 1 1 1 1 1 1 abc 200 1 1 1 1 1 1 1 1 50";
-        assert!(parse_proc_pid_stat(123, content_invalid_num).is_none());
-    }
-
-    #[test]
     fn test_parse_proc_pid_stat() {
         // A well-formed /proc/[pid]/stat line.
         // We only care about:
