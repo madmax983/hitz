@@ -493,3 +493,9 @@ pub use rightsizer::{ResizeRecommendation, RightSizer};
 mod terraform;
 #[cfg(feature = "terraform")]
 pub use terraform::ToTerraform;
+
+#[cfg(feature = "eco_grade")]
+/// Eco-Grading module.
+mod eco_grade;
+#[cfg(feature = "eco_grade")]
+pub use eco_grade::{EcoGrade, EcoGrader};
