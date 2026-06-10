@@ -322,4 +322,45 @@ mod tests {
             " 8       0 sda 9999999999999999999 0 9999999999999999999 0 9999999999999999999 0 9999999999999999999\n",
         );
     }
+
+    #[test]
+    fn should_return_none_when_memtotal_missing() {
+        let mem = parse_proc_meminfo("MemFree: 131072 kB\nBuffers: 10240 kB\n");
+        assert!(mem.is_none(), "Expected None when MemTotal is missing");
+    }
+
+    #[test]
+    fn should_ignore_loopback_interface_in_net_dev() {
+        let content = "Inter-|   Receive                                                |  Transmit\n\
+             face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed\n\
+             lo:      1000      10    0    0    0     0          0         0      1000      10    0    0    0     0       0          0\n\
+             eth0:    5000      40    0    0    0     0          0         0      2000      20    0    0    0     0       0          0\n";
+        let nets = parse_proc_net_dev(content);
+        assert_eq!(nets.len(), 1);
+        assert_eq!(nets[0].interface, "eth0");
+    }
+
+    #[test]
+    fn should_handle_incomplete_proc_stat_lines() {
+        // Missing fields should default to 0 gracefully
+        let stats = parse_proc_stat_sample("cpu 12345 678\n");
+        assert_eq!(stats.len(), 1);
+        assert_eq!(stats[0].user, 12345);
+        assert_eq!(stats[0].nice, 678);
+        assert_eq!(stats[0].system, 0); // Defaults to 0
+    }
+
+    #[test]
+    fn should_return_zero_cpu_pct_when_total_delta_is_zero() {
+        let prev = CpuSample {
+            user: 100,
+            ..Default::default()
+        };
+        let curr = CpuSample {
+            user: 100,
+            ..Default::default()
+        };
+        let pct = cpu_pct(&prev, &curr);
+        assert!((pct - 0.0).abs() < f32::EPSILON);
+    }
 }
