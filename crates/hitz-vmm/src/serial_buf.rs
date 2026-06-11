@@ -266,7 +266,9 @@ impl SerialReader {
                 }
             }
             // Park until the writer pushes more data or closes.
-            let _ = self.notify_rx.changed().await;
+            if self.notify_rx.changed().await.is_err() {
+                return None;
+            }
         }
     }
 }
@@ -342,6 +344,25 @@ mod tests {
                 .expect("timeout");
 
             assert!(result.is_none(), "closed buffer should return None");
+        });
+    }
+
+    #[test]
+    fn havoc_reader_spin_on_drop() {
+        let rt = test_rt();
+        rt.block_on(async {
+            let buf = SerialBuf::new();
+            let mut reader = buf.reader();
+
+            // Drop the writer WITHOUT calling close()
+            drop(buf);
+
+            // Now call read_chunk.
+            // If it busy-loops, it will hang. We use a timeout to detect hang vs fast return.
+            let result = tokio::time::timeout(Duration::from_millis(100), reader.read_chunk()).await;
+
+            // We expect the reader to realize the writer is dead and return None.
+            assert_eq!(result.unwrap(), None, "Reader should return None when writer is dropped");
         });
     }
 
