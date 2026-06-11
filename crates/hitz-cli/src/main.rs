@@ -350,6 +350,8 @@ enum VmCommand {
     Analyze(VmIdArgs),
     /// Replay metrics recording and output a timeline of health state changes.
     Timeline(VmTimelineArgs),
+    /// Export the VM configuration as Terraform HCL.
+    ExportTerraform(VmIdArgs),
 }
 
 /// Arguments for `vm clone`.
@@ -2258,8 +2260,47 @@ fn run_vm_command(cmd: VmCommand) -> Result<()> {
             VmCommand::Record(args) => handle_vm_record(&args).await,
             VmCommand::Analyze(args) => handle_vm_analyze(&args).await,
             VmCommand::Timeline(args) => handle_vm_timeline(&args),
+            VmCommand::ExportTerraform(args) => handle_vm_export_terraform(&args).await,
         }
     })
+}
+
+async fn handle_vm_export_terraform(args: &VmIdArgs) -> Result<()> {
+    use crossterm::style::Stylize;
+    use hitz_api::ToTerraform;
+    use std::io::Write;
+
+    print!(
+        "{}",
+        format!("⏳ Generating Terraform HCL for VM '{}'...", args.id).cyan()
+    );
+    let _ = std::io::stdout().flush();
+
+    let (status, resp) = pipe_client::pipe_request(
+        &args.pipe,
+        args.tcp,
+        Method::GET,
+        &format!("/vms/{}", args.id),
+        None,
+    )
+    .await?;
+
+    if status.is_success() {
+        print!("\r\x1b[2K");
+        let info: hitz_api::VmInfo =
+            serde_json::from_str(&resp).context("failed to parse VM info")?;
+        let hcl = info.config.to_terraform(&info.id);
+        println!("{}", "✓ Terraform HCL configuration:".green().bold());
+        println!("{hcl}");
+    } else {
+        print!("\r\x1b[2K");
+        print_error_response(
+            status,
+            &resp,
+            &format!("Failed to get VM {} info", args.id),
+        );
+    }
+    Ok(())
 }
 
 #[allow(clippy::too_many_lines)]
@@ -2945,6 +2986,17 @@ mod top_tests {
     fn run_vm_timeline_command_definition_compiles() {
         let _args = crate::VmTimelineArgs {
             in_file: PathBuf::from("metrics.jsonl"),
+        };
+        assert!(true);
+    }
+
+    #[test]
+    #[allow(clippy::assertions_on_constants)]
+    fn run_vm_export_terraform_command_definition_compiles() {
+        let _args = crate::VmIdArgs {
+            id: "test".to_string(),
+            pipe: "pipe".to_string(),
+            tcp: None,
         };
         assert!(true);
     }

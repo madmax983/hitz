@@ -1,4 +1,7 @@
-use hitz_api::{MetricsSnapshot, VmInfo};
+use hitz_api::{
+    CarbonEstimator, EfficiencyScorer, EmissionFactors, MetricsSnapshot, ResizeRecommendation,
+    RightSizer, VmInfo,
+};
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum WarningLevel {
@@ -101,6 +104,63 @@ pub fn analyze_vm(info: &VmInfo, metrics: &MetricsSnapshot) -> Vec<ResourceInsig
             level: WarningLevel::Warning,
             message: format!("Network errors detected (RX: {rx_errs}, TX: {tx_errs})"),
         });
+    }
+
+    // Efficiency Score
+    let efficiency = metrics.calculate_efficiency();
+    let eff_level = if efficiency.score < 50.0 {
+        WarningLevel::Warning
+    } else {
+        WarningLevel::Info
+    };
+    insights.push(ResourceInsight {
+        level: eff_level,
+        message: format!("Efficiency Score: {:.1}/100.0", efficiency.score),
+    });
+    for insight in efficiency.insights {
+        insights.push(ResourceInsight {
+            level: WarningLevel::Info,
+            message: format!("Efficiency Insight: {insight}"),
+        });
+    }
+
+    // Carbon Footprint Estimation
+    let factors = EmissionFactors::new(400.0); // Assuming 400 gCO2eq/kWh for average dirty grid
+    let emissions = metrics.estimate_carbon(&factors, info.config.cpus);
+    insights.push(ResourceInsight {
+        level: WarningLevel::Info,
+        message: format!("Estimated Carbon Footprint: {emissions:.2} mg CO2/sec"),
+    });
+
+    // Rightsizing Recommendations
+    let resize_recs = metrics.recommend_sizing(&info.config);
+    for rec in resize_recs {
+        match rec {
+            ResizeRecommendation::ScaleUpCpu { current, suggested, reason } => {
+                insights.push(ResourceInsight {
+                    level: WarningLevel::Warning,
+                    message: format!("Resize (CPU): Scale up from {current} to {suggested} vCPUs. {reason}"),
+                });
+            }
+            ResizeRecommendation::ScaleDownCpu { current, suggested, reason } => {
+                insights.push(ResourceInsight {
+                    level: WarningLevel::Info,
+                    message: format!("Resize (CPU): Scale down from {current} to {suggested} vCPUs. {reason}"),
+                });
+            }
+            ResizeRecommendation::ScaleUpRam { current_mib, suggested_mib, reason } => {
+                insights.push(ResourceInsight {
+                    level: WarningLevel::Warning,
+                    message: format!("Resize (RAM): Scale up from {current_mib} MiB to {suggested_mib} MiB. {reason}"),
+                });
+            }
+            ResizeRecommendation::ScaleDownRam { current_mib, suggested_mib, reason } => {
+                insights.push(ResourceInsight {
+                    level: WarningLevel::Info,
+                    message: format!("Resize (RAM): Scale down from {current_mib} MiB to {suggested_mib} MiB. {reason}"),
+                });
+            }
+        }
     }
 
     insights
