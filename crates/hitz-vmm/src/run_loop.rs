@@ -1,5 +1,11 @@
-//! vCPU run loop — dispatches exits to devices and advances RIP.
+//! vCPU Run Loop and Exit Dispatcher.
 //!
+//! # Abstract
+//! This module orchestrates the core execution loop for a virtual CPU. It is responsible
+//! for entering the guest via the HAL, catching virtualization exits (like I/O ports or MMIO),
+//! dispatching those exits to the appropriate emulated devices, and advancing the instruction pointer.
+//!
+//! # Details
 //! WHP does **not** auto-advance RIP on I/O port or MMIO exits. The VMM
 //! must read the current registers, add `instruction_len` to RIP, and
 //! write them back before re-entering the guest. Without this, the guest

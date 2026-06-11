@@ -1,6 +1,29 @@
-//! VMM error types.
+//! Error definitions for the Virtual Machine Manager (VMM).
+//!
+//! # Abstract
+//! This module encapsulates the distinct failure modes that can occur while managing
+//! a micro-VM's lifecycle, specifically focusing on guest memory access and boundary
+//! violations.
+//!
+//! # The Hero's Journey
+//!
+//! ```rust
+//! use hitz_vmm::MemError;
+//!
+//! let err = MemError::NotMapped { gpa: 0x2000, len: 128 };
+//!
+//! // If a guest tries to access memory we never gave it, we catch it!
+//! match err {
+//!     MemError::NotMapped { gpa, len } => println!("Access violation at {gpa:#x}"),
+//!     _ => (),
+//! }
+//! ```
 
 /// Errors arising from guest memory operations.
+///
+/// # Details
+/// These errors typically occur during the setup of the VM's physical address space
+/// or when device emulators attempt to read/write guest RAM.
 #[derive(Debug, thiserror::Error)]
 pub enum MemError {
     /// Invalid size requested for memory region.

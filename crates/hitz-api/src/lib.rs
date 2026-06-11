@@ -1,6 +1,8 @@
 //! REST API types for Hitz.
 //!
+//! # Abstract
 //! This crate serves as the central vocabulary for the Hitz micro-VM manager.
+//!
 //! It defines the pure data structures used for communicating between the
 //! command-line interface, the background daemon, and the guest agents running
 //! inside the micro-VMs.
@@ -15,6 +17,14 @@
 //! * **Lifecycle**: [`VmState`] and [`VmAction`] track and control the VM's status.
 //! * **Metrics**: [`MetricsSnapshot`] and its sub-types (like [`CpuMetrics`]) form the
 //!   wire protocol over vsock for extracting real-time telemetry from the guest.
+//!
+//! # The Hero's Journey
+//!
+//! ```rust
+//! use hitz_api::VmState;
+//!
+//! let state = VmState::Running;
+//! ```
 
 /// API structures for interacting with the background daemon.
 mod api;
@@ -38,7 +48,7 @@ pub use metrics::{
 
 #[cfg(feature = "health_check")]
 /// Health assessment module for evaluating system telemetry.
-mod health;
+pub mod health;
 #[cfg(feature = "health_check")]
 pub use health::{HealthCheck, HealthStatus, SystemHealth};
 
