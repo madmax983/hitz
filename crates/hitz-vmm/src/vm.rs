@@ -68,7 +68,9 @@ const MIN_RAM_MIB: u32 = 2;
 ///
 /// The daemon creates both pairs before `spawn_blocking`, retaining the
 /// host-facing ends and passing the device-facing ends here.
-pub struct BootExtras {
+pub struct BootExtras// ⚡ Bolt Optimization: Pre-allocate `handles` vector to avoid reallocation during VM boot.
+    let mut handles = Vec::with_capacity(num_vcpus);
+    for (idx, mut vcpu) in vcpus.into_iter().enumerate() {
     /// Device-facing vsock channel ends:
     /// - `.0`: receiver for host→guest RX packets (device reads from this)
     /// - `.1`: sender for guest→host TX packets (device writes to this)
@@ -706,8 +708,48 @@ fn run_multi_vcpu<H: Hypervisor>(
                     let _ = tx.send(exit);
                 })
                 .expect("spawn vcpu thread")
-        })
-        .collect();
+        handles.push(
+            std::thread::Builder::new()
+                .name(format!("vcpu-{idx}"))
+                .spawn(move || {
+                    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        run_loop::run_vcpu_loop(&mut vcpu, &devs, &*mem, &stop)
+                    }));
+
+                    match &result {
+                        Ok(
+                            Ok(ExitReason::Halt | ExitReason::Shutdown | ExitReason::Unexpected(_))
+                            | Err(_),
+                        )
+                        | Err(_) => {
+                            stop.store(true, Ordering::Relaxed);
+                            cancel_all_vcpus::<<H::Partition as Partition>::Vcpu>(&cancel_handles);
+                        }
+                        Ok(Ok(ExitReason::Canceled)) => {}
+                    }
+
+                    let exit = match result {
+                        Ok(r) => r,
+                        Err(payload) => {
+                            let msg = payload.downcast_ref::<&str>().map_or_else(
+                                || {
+                                    payload
+                                        .downcast_ref::<String>()
+                                        .map_or_else(|| "unknown panic".to_string(), Clone::clone)
+                                },
+                                |s| (*s).to_string(),
+                            );
+                            Ok(ExitReason::Unexpected(format!(
+                                "vCPU {idx} panicked: {msg}"
+                            )))
+                        }
+                    };
+
+                    let _ = tx.send(exit);
+                })
+                .expect("spawn vcpu thread"),
+        );
+    }
 
     drop(exit_tx);
 
