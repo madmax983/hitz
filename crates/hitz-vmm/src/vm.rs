@@ -657,16 +657,17 @@ fn run_multi_vcpu<H: Hypervisor>(
             .expect("spawn watchdog thread")
     };
 
-    let handles: Vec<_> = vcpus
-        .into_iter()
-        .enumerate()
-        .map(|(idx, mut vcpu)| {
-            let devs = Arc::clone(&devices);
-            let mem = Arc::clone(&guest_mem_arc);
-            let stop = Arc::clone(&stop_flag);
-            let cancel_handles = Arc::clone(&shared_handles);
-            let tx = exit_tx.clone();
+    // ⚡ Bolt Optimization: Replace `.collect::<Vec<_>>()` on thread handles
+    // with an explicit `for` loop and `Vec::with_capacity` to prevent reallocation.
+    let mut handles = Vec::with_capacity(num_vcpus);
+    for (idx, mut vcpu) in vcpus.into_iter().enumerate() {
+        let devs = Arc::clone(&devices);
+        let mem = Arc::clone(&guest_mem_arc);
+        let stop = Arc::clone(&stop_flag);
+        let cancel_handles = Arc::clone(&shared_handles);
+        let tx = exit_tx.clone();
 
+        handles.push(
             std::thread::Builder::new()
                 .name(format!("vcpu-{idx}"))
                 .spawn(move || {
@@ -706,8 +707,8 @@ fn run_multi_vcpu<H: Hypervisor>(
                     let _ = tx.send(exit);
                 })
                 .expect("spawn vcpu thread")
-        })
-        .collect();
+        );
+    }
 
     drop(exit_tx);
 
