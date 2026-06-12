@@ -42,6 +42,9 @@ use serde::{Deserialize, Serialize};
 /// Represents the result of evaluating a system's resource usage, containing both a
 /// numerical score and actionable insights.
 ///
+/// This struct exists to provide a standardized report card format that can be easily
+/// serialized to JSON and consumed by a dashboard or CLI.
+///
 /// ## Examples
 ///
 /// ```rust
@@ -63,11 +66,15 @@ pub struct EfficiencyScore {
 }
 
 /// Trait to calculate efficiency.
+///
+/// This exists to decouple the specific penalty-scoring logic from the raw data models.
 pub trait EfficiencyScorer {
     /// Calculates efficiency from metrics.
     ///
     /// # Abstract
     /// Evaluates the current resource usage and returns an [`EfficiencyScore`].
+    ///
+    /// It exists to convert raw metric arrays into a single, human-readable 0-100 score.
     ///
     /// ## Examples
     ///

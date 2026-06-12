@@ -54,6 +54,28 @@ use crate::{MetricsSnapshot, VmConfig};
 use serde::{Deserialize, Serialize};
 
 /// Specific actionable recommendation for resizing a VM.
+///
+/// This enum exists to provide strongly-typed, actionable advice to the user.
+/// Rather than just returning "VM is bad", it returns exact numbers for how to fix the scaling issues.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::ResizeRecommendation;
+///
+/// let rec = ResizeRecommendation::ScaleUpCpu {
+///     current: 2,
+///     suggested: 4,
+///     reason: "High CPU usage".to_string(),
+/// };
+///
+/// match rec {
+///     ResizeRecommendation::ScaleUpCpu { suggested, .. } => {
+///         assert_eq!(suggested, 4);
+///     }
+///     _ => panic!("Expected ScaleUpCpu"),
+/// }
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ResizeRecommendation {
     /// Suggests increasing the CPU count.
@@ -95,8 +117,86 @@ pub enum ResizeRecommendation {
 }
 
 /// Trait for objects that can evaluate metrics and configuration to recommend resizing.
+///
+/// This exists to decouple the complex heuristic analysis from the telemetry data structures.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::{RightSizer, ResizeRecommendation, VmConfig, GuestAgentMode};
+/// use std::path::PathBuf;
+///
+/// struct MockAnalyzer;
+/// impl RightSizer for MockAnalyzer {
+///     fn recommend_sizing(&self, config: &VmConfig) -> Vec<ResizeRecommendation> {
+///         vec![]
+///     }
+/// }
+///
+/// let analyzer = MockAnalyzer;
+/// let config = VmConfig {
+///     kernel_path: PathBuf::from("vmlinux"),
+///     initramfs_path: None,
+///     disk_path: None,
+///     ram_mib: 1024,
+///     cpus: 4,
+///     cmdline: None,
+///     net: None,
+///     ports: vec![],
+///     guest_cid: 3,
+///     guest_agent: GuestAgentMode::Auto,
+/// };
+/// assert!(analyzer.recommend_sizing(&config).is_empty());
+/// ```
 pub trait RightSizer {
     /// Analyzes current metrics against the VM's configuration and returns recommendations.
+    ///
+    /// This method performs the actual math, comparing CPU load and RAM thresholds against allocated limits.
+    /// It exists so the CLI can proactively tell users they are wasting money on idle VMs.
+    ///
+    /// ## Examples
+    ///
+    /// ```rust
+    /// use hitz_api::{RightSizer, ResizeRecommendation, VmConfig, MetricsSnapshot, CpuMetrics, MemoryMetrics, GuestAgentMode};
+    /// use std::path::PathBuf;
+    ///
+    /// let config = VmConfig {
+    ///     kernel_path: PathBuf::from("vmlinux"),
+    ///     initramfs_path: None,
+    ///     disk_path: None,
+    ///     ram_mib: 1024,
+    ///     cpus: 4,
+    ///     cmdline: None,
+    ///     net: None,
+    ///     ports: vec![],
+    ///     guest_cid: 3,
+    ///     guest_agent: GuestAgentMode::Auto,
+    /// };
+    ///
+    /// let snap = MetricsSnapshot {
+    ///     timestamp_ms: 1000,
+    ///     cpu: CpuMetrics {
+    ///         total_pct: 5.0,
+    ///         per_core: vec![5.0; 4],
+    ///         load_avg: [0.1, 0.1, 0.1],
+    ///     },
+    ///     memory: MemoryMetrics {
+    ///         total_bytes: 1024 * 1024 * 1024,
+    ///         used_bytes: 100 * 1024 * 1024,
+    ///         free_bytes: 900 * 1024 * 1024,
+    ///         buffers_bytes: 0,
+    ///         cached_bytes: 0,
+    ///         swap_total: 0,
+    ///         swap_used: 0,
+    ///     },
+    ///     disks: vec![],
+    ///     networks: vec![],
+    ///     processes: vec![],
+    /// };
+    ///
+    /// let recommendations = snap.recommend_sizing(&config);
+    /// assert!(recommendations.len() > 0);
+    /// ```
     fn recommend_sizing(&self, config: &VmConfig) -> Vec<ResizeRecommendation>;
 }
 

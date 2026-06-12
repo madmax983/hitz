@@ -40,6 +40,20 @@ use crate::MetricsSnapshot;
 use serde::{Deserialize, Serialize};
 
 /// A discrete identifier for a VM's resource usage profile.
+///
+/// This structure exists so we can map a VM's real-time resource utilization to a static string.
+/// This acts as a caching key or classification label for automated scaling decisions.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::VmFingerprint;
+///
+/// let fp = VmFingerprint {
+///     id: "FP-C9-R4-D0-N0".to_string(),
+/// };
+/// assert_eq!(fp.id, "FP-C9-R4-D0-N0");
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct VmFingerprint {
     /// The formatted fingerprint string (e.g., "FP-C9-R4-D0-N0").
@@ -47,8 +61,61 @@ pub struct VmFingerprint {
 }
 
 /// Trait to generate a fingerprint.
+///
+/// This trait isolates the calculation of a fingerprint from the raw metrics structures.
+/// It exists so that we can easily swap out the fingerprint generation logic or mock it in tests.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::{FingerprintGenerator, VmFingerprint};
+///
+/// struct MockVm;
+/// impl FingerprintGenerator for MockVm {
+///     fn generate_fingerprint(&self) -> VmFingerprint {
+///         VmFingerprint { id: "FP-MOCK".to_string() }
+///     }
+/// }
+///
+/// let vm = MockVm;
+/// assert_eq!(vm.generate_fingerprint().id, "FP-MOCK");
+/// ```
 pub trait FingerprintGenerator {
     /// Generates a fingerprint based on current state.
+    ///
+    /// This function transforms continuous metrics arrays into a single, hashed string.
+    /// It exists because we need a fast, comparable string representation of the VM's state,
+    /// rather than re-computing CPU and memory percentages for every rule evaluation.
+    ///
+    /// ## Examples
+    ///
+    /// ```rust
+    /// use hitz_api::{FingerprintGenerator, MetricsSnapshot, CpuMetrics, MemoryMetrics};
+    ///
+    /// let snap = MetricsSnapshot {
+    ///     timestamp_ms: 1000,
+    ///     cpu: CpuMetrics {
+    ///         total_pct: 95.0,
+    ///         per_core: vec![95.0],
+    ///         load_avg: [0.1, 0.1, 0.1],
+    ///     },
+    ///     memory: MemoryMetrics {
+    ///         total_bytes: 1000,
+    ///         used_bytes: 400,
+    ///         free_bytes: 600,
+    ///         buffers_bytes: 0,
+    ///         cached_bytes: 0,
+    ///         swap_total: 0,
+    ///         swap_used: 0,
+    ///     },
+    ///     disks: vec![],
+    ///     networks: vec![],
+    ///     processes: vec![],
+    /// };
+    ///
+    /// let fingerprint = snap.generate_fingerprint();
+    /// assert_eq!(fingerprint.id, "FP-C9-R4-D0-N0");
+    /// ```
     fn generate_fingerprint(&self) -> VmFingerprint;
 }
 

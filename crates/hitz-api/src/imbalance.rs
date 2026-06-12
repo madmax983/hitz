@@ -40,6 +40,23 @@ use crate::MetricsSnapshot;
 use serde::{Deserialize, Serialize};
 
 /// The computed resource imbalance score.
+///
+/// This exists to quantify the variance in per-core CPU utilization across a VM.
+/// It acts as the final report card indicating whether a multi-core VM is actually
+/// taking advantage of all its allocated cores or acting like a single-threaded bottleneck.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::ImbalanceResult;
+///
+/// let result = ImbalanceResult {
+///     std_dev: 42.5,
+///     imbalance_score: 0.8,
+///     is_imbalanced: true,
+/// };
+/// assert!(result.is_imbalanced);
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ImbalanceResult {
     /// Overall standard deviation of per-core utilization.
@@ -51,8 +68,65 @@ pub struct ImbalanceResult {
 }
 
 /// Trait to analyze core utilization imbalance.
+///
+/// This trait exists to decouple the complex statistical math (standard deviation)
+/// from the raw data structures, allowing easy testability and extension for other types of metrics.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::{CoreImbalanceAnalyzer, ImbalanceResult};
+///
+/// struct MockVm;
+/// impl CoreImbalanceAnalyzer for MockVm {
+///     fn analyze_imbalance(&self) -> ImbalanceResult {
+///         ImbalanceResult {
+///             std_dev: 0.0,
+///             imbalance_score: 0.0,
+///             is_imbalanced: false,
+///         }
+///     }
+/// }
+///
+/// let vm = MockVm;
+/// assert!(!vm.analyze_imbalance().is_imbalanced);
+/// ```
 pub trait CoreImbalanceAnalyzer {
     /// Analyzes per-core utilization and computes an imbalance score.
+    ///
+    /// This method converts a list of CPU core percentages into a single standard deviation score.
+    /// It exists to provide a 0.0 to 1.0 normalization that the rules engine can easily threshold.
+    ///
+    /// ## Examples
+    ///
+    /// ```rust
+    /// use hitz_api::{CoreImbalanceAnalyzer, MetricsSnapshot, CpuMetrics, MemoryMetrics};
+    ///
+    /// let snap = MetricsSnapshot {
+    ///     timestamp_ms: 1000,
+    ///     cpu: CpuMetrics {
+    ///         total_pct: 25.0,
+    ///         per_core: vec![100.0, 0.0, 0.0, 0.0],
+    ///         load_avg: [1.0, 0.5, 0.2],
+    ///     },
+    ///     memory: MemoryMetrics {
+    ///         total_bytes: 1024 * 1024 * 1024,
+    ///         used_bytes: 512 * 1024 * 1024,
+    ///         free_bytes: 512 * 1024 * 1024,
+    ///         buffers_bytes: 0,
+    ///         cached_bytes: 0,
+    ///         swap_total: 0,
+    ///         swap_used: 0,
+    ///     },
+    ///     disks: vec![],
+    ///     networks: vec![],
+    ///     processes: vec![],
+    /// };
+    ///
+    /// let result = snap.analyze_imbalance();
+    /// assert!(result.is_imbalanced);
+    /// assert!(result.imbalance_score > 0.5);
+    /// ```
     fn analyze_imbalance(&self) -> ImbalanceResult;
 }
 
