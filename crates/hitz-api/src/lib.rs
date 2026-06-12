@@ -493,3 +493,9 @@ pub use rightsizer::{ResizeRecommendation, RightSizer};
 mod terraform;
 #[cfg(feature = "terraform")]
 pub use terraform::ToTerraform;
+
+#[cfg(feature = "finops")]
+/// Financial Operations (Cloud Economics) module for estimating VM costs.
+mod finops;
+#[cfg(feature = "finops")]
+pub use finops::{CostAnalysis, CostEstimator, PricingModel};
