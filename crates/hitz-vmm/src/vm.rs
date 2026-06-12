@@ -564,11 +564,11 @@ fn setup_devices(
     }
 
     let net_io_handle = if let Some(ref net_cfg) = config.net {
-        let guest_mac = if let Some(ref mac_str) = net_cfg.mac {
-            parse_mac(mac_str).map_err(VmError::Config)?
-        } else {
-            random_mac()
-        };
+        let guest_mac = net_cfg
+            .mac
+            .as_ref()
+            .map_or_else(|| Ok(random_mac()), |mac_str| parse_mac(mac_str))
+            .map_err(VmError::Config)?;
 
         let gateway_mac: [u8; 6] = [0xAA, 0xBB, 0xCC, 0x00, 0x00, 0x01];
         let (gateway_ip, _) = parse_cidr(&net_cfg.host_ip).map_err(VmError::Config)?;

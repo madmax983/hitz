@@ -127,12 +127,13 @@ impl MmioBus {
     ///
     /// If no device is registered at `gpa`, `data` is filled with `0xFF`.
     pub fn read(&mut self, gpa: u64, data: &mut [u8]) {
-        let Some(slot) = self.find_slot(gpa) else {
-            data.fill(0xFF);
+        if let Some(slot) = self.find_slot(gpa) {
+            let offset = gpa - slot.base;
+            slot.device.mmio_read(offset, data);
             return;
-        };
-        let offset = gpa - slot.base;
-        slot.device.mmio_read(offset, data);
+        }
+        // No device — return all-ones (standard "nothing here" response).
+        data.fill(0xFF);
     }
 
     /// Dispatch a guest write to the device owning `gpa`.
