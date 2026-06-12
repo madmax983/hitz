@@ -100,7 +100,11 @@ impl StateStore {
                 continue;
             };
 
-            let Ok(config_json) = std::fs::read_to_string(path.join("config.json")) else {
+            use std::io::Read;
+            let mut config_json = String::new();
+            let Ok(_) = std::fs::File::open(path.join("config.json"))
+                .and_then(|f| f.take(10 * 1024 * 1024).read_to_string(&mut config_json))
+            else {
                 tracing::warn!(vm_id = %id, "missing config.json — skipping");
                 continue;
             };
@@ -131,7 +135,11 @@ impl StateStore {
     }
 
     fn load_raw_state(&self, id: &str) -> Option<PersistedState> {
-        let json = std::fs::read_to_string(self.vm_dir(id).join("state.json")).ok()?;
+        use std::io::Read;
+        let mut json = String::new();
+        std::fs::File::open(self.vm_dir(id).join("state.json"))
+            .and_then(|f| f.take(10 * 1024 * 1024).read_to_string(&mut json))
+            .ok()?;
         serde_json::from_str(&json).ok()
     }
 }

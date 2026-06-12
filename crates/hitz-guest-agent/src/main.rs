@@ -39,7 +39,7 @@ fn now_ms() -> u64 {
 fn read_file_into(path: &str, buf: &mut String) {
     use std::io::Read;
     buf.clear();
-    let _ = std::fs::File::open(path).and_then(|mut f| f.read_to_string(buf));
+    let _ = std::fs::File::open(path).and_then(|f| f.take(1024 * 1024).read_to_string(buf));
 }
 
 fn collect_snapshot(buf: &mut String) -> MetricsSnapshot {
@@ -129,10 +129,10 @@ fn collect_top_procs(n: usize) -> Vec<hitz_api::ProcMetrics> {
 
             stat_buf.clear();
 
-            let Ok(mut f) = std::fs::File::open(&path_buf) else {
+            let Ok(f) = std::fs::File::open(&path_buf) else {
                 continue;
             };
-            if f.read_to_string(&mut stat_buf).is_err() {
+            if f.take(1024 * 1024).read_to_string(&mut stat_buf).is_err() {
                 continue;
             }
             let Some(p) = parse_proc_pid_stat(pid, &stat_buf) else {
@@ -155,9 +155,12 @@ fn collect_top_procs(n: usize) -> Vec<hitz_api::ProcMetrics> {
 ///
 /// Returns `1.0` as a safe fallback if the file is unreadable (e.g. on Windows).
 fn read_uptime_secs() -> f64 {
-    std::fs::read_to_string("/proc/uptime")
+    use std::io::Read;
+    let mut s = String::new();
+    std::fs::File::open("/proc/uptime")
+        .and_then(|f| f.take(1024).read_to_string(&mut s))
         .ok()
-        .and_then(|s| s.split_ascii_whitespace().next()?.parse::<f64>().ok())
+        .and_then(|_| s.split_ascii_whitespace().next()?.parse::<f64>().ok())
         .unwrap_or(1.0)
 }
 
