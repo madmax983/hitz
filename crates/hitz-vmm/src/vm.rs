@@ -396,7 +396,7 @@ pub fn boot_and_run<H: Hypervisor, W: Write + Send + 'static>(
     let pml4_gpa = setup_guest_memory(&mut guest_mem, config, ram_bytes, gib_count)?;
 
     // ── 8. Write command line ──
-    build_kernel_cmdline(&mut guest_mem, config, &extras)?;
+    build_kernel_cmdline(&guest_mem, config, &extras)?;
 
     // ── 9. Write GDT ──
     boot_regs::write_gdt(&guest_mem)?;
@@ -505,11 +505,13 @@ fn setup_guest_memory(
 }
 
 fn build_kernel_cmdline(
-    guest_mem: &mut GuestMemory,
+    guest_mem: &GuestMemory,
     config: &VmConfig,
     extras: &BootExtras,
 ) -> Result<(), VmError> {
-    let mut cmdline = config.effective_cmdline().to_string();
+    let effective = config.effective_cmdline();
+    let mut cmdline = String::with_capacity(effective.len() + 256);
+    cmdline.push_str(effective);
 
     if config.net.is_some() {
         let net_base = VIRTIO_MMIO_BASE + VIRTIO_MMIO_SIZE;
