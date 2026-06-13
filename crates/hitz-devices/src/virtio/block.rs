@@ -66,6 +66,19 @@ impl VirtioBlockDevice {
     }
 
     /// Returns the disk capacity in 512-byte sectors.
+    ///
+    /// ## Examples
+    ///
+    /// ```rust
+    /// use hitz_devices::VirtioBlockDevice;
+    /// use tempfile::tempfile;
+    ///
+    /// let file = tempfile().expect("Failed to create temporary file");
+    /// // A new tempfile has a length of 0.
+    /// let device = VirtioBlockDevice::new(file).expect("Failed to create block device");
+    ///
+    /// assert_eq!(device.capacity(), 0);
+    /// ```
     #[must_use]
     pub const fn capacity(&self) -> u64 {
         self.capacity

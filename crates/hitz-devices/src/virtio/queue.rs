@@ -105,6 +105,9 @@ impl VirtQueue {
     }
 
     /// Set the guest physical addresses for the three ring structures.
+    ///
+    /// The guest driver writes these addresses into the MMIO configuration space
+    /// to tell the device where the queues reside in physical memory.
     pub const fn configure(&mut self, desc_gpa: u64, avail_gpa: u64, used_gpa: u64) {
         self.desc_gpa = desc_gpa;
         self.avail_gpa = avail_gpa;
@@ -151,6 +154,18 @@ impl VirtQueue {
     /// On success, returns a [`DescriptorChain`] that iterates over
     /// the descriptors in the chain, plus the head index for later
     /// use in [`push_used`](Self::push_used).
+    ///
+    /// ## Examples
+    ///
+    /// ```rust
+    /// # use hitz_devices::VirtQueue;
+    /// # use hitz_hal::GuestMemAccess;
+    /// # fn consume_queue(queue: &mut VirtQueue, mem: &dyn GuestMemAccess) {
+    /// while let Some(chain) = queue.pop_chain(mem) {
+    ///     // Process descriptors...
+    /// }
+    /// # }
+    /// ```
     #[allow(rustdoc::private_intra_doc_links)]
     pub fn pop_chain(&mut self, mem: &dyn GuestMemAccess) -> Option<DescriptorChain> {
         if !self.ready {
@@ -279,6 +294,22 @@ impl DescriptorChain {
     /// Read the next descriptor in the chain from guest memory.
     ///
     /// Returns `None` when the chain is exhausted or on read error.
+    ///
+    /// ## Examples
+    ///
+    /// ```rust
+    /// # use hitz_devices::virtio::queue::DescriptorChain;
+    /// # use hitz_hal::GuestMemAccess;
+    /// # fn process_chain(mut chain: DescriptorChain, mem: &dyn GuestMemAccess) {
+    /// while let Some(desc) = chain.next_descriptor(mem) {
+    ///     if desc.is_device_writable {
+    ///         // Write data to the guest at `desc.gpa`
+    ///     } else {
+    ///         // Read data from the guest at `desc.gpa`
+    ///     }
+    /// }
+    /// # }
+    /// ```
     pub fn next_descriptor(&mut self, mem: &dyn GuestMemAccess) -> Option<Descriptor> {
         let idx = self.next_idx?;
 

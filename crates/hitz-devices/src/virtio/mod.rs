@@ -12,4 +12,6 @@ pub use mmio_transport::VirtioMmioTransport;
 pub use queue::VirtQueue;
 
 pub use net::VirtioNetDevice;
-pub use vsock::{VSOCK_BUF_ALLOC, VirtioVsockDevice, VsockHdr, VsockOp, VsockPacket};
+pub use vsock::{
+    VSOCK_BUF_ALLOC, VSOCK_TYPE_STREAM, VirtioVsockDevice, VsockHdr, VsockOp, VsockPacket,
+};

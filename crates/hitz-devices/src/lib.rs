@@ -75,4 +75,6 @@ pub use virtio::VirtioBlockDevice;
 pub use virtio::VirtioMmioTransport;
 pub use virtio::VirtioNetDevice;
 
-pub use virtio::{VSOCK_BUF_ALLOC, VirtioVsockDevice, VsockHdr, VsockOp, VsockPacket};
+pub use virtio::{
+    VSOCK_BUF_ALLOC, VSOCK_TYPE_STREAM, VirtioVsockDevice, VsockHdr, VsockOp, VsockPacket,
+};

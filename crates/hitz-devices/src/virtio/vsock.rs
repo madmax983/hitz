@@ -13,20 +13,44 @@ use crate::virtio::queue::VirtQueue;
 // ── Protocol constants ────────────────────────────────────────────────────────
 
 /// Size of the virtio-vsock packet header in bytes (44 bytes).
+///
+/// Every packet transferred over the vsock queues begins with this header,
+/// followed immediately by the payload (if any).
 pub const VSOCK_HDR_SIZE: usize = 44;
 
 /// Stream socket type (the only type we implement).
+///
+/// Corresponds to `SOCK_STREAM` in the socket API. We do not support
+/// `SOCK_DGRAM` or `SOCK_SEQPACKET`.
 pub const VSOCK_TYPE_STREAM: u16 = 1;
 
 /// Host CID (as defined by the virtio-vsock spec).
+///
+/// Context IDs (CIDs) are the vsock equivalent of IP addresses. The host
+/// is always implicitly assigned CID `2`.
 pub const VMADDR_CID_HOST: u64 = 2;
 
 /// Initial receive buffer size advertised per connection (256 KiB).
+///
+/// Used for flow control to tell the peer how much data it is allowed
+/// to send before it must wait for a `CreditUpdate` packet.
 pub const VSOCK_BUF_ALLOC: u32 = 256 * 1024;
 
 // ── VsockOp ──────────────────────────────────────────────────────────────────
 
 /// Virtio-vsock packet operations.
+///
+/// Every vsock packet header contains an `op` field dictating the packet's
+/// purpose (e.g., establishing a connection, transferring data, or tearing down).
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_devices::VsockOp;
+///
+/// let op = VsockOp::from_u16(5).unwrap();
+/// assert_eq!(op, VsockOp::Rw);
+/// ```
 #[repr(u16)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VsockOp {
@@ -68,6 +92,30 @@ impl VsockOp {
 /// Virtio-vsock packet header (44 bytes, little-endian).
 ///
 /// Follows `struct virtio_vsock_hdr` from the Linux kernel.
+/// It is the mandatory prefix for every message sent over a virtio-vsock device.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_devices::{VsockHdr, VsockOp, VSOCK_TYPE_STREAM};
+///
+/// // Create a header for a connection request from the guest (CID 3)
+/// // to the host (CID 2) on port 5000.
+/// let hdr = VsockHdr {
+///     src_cid: 3,
+///     dst_cid: 2,
+///     src_port: 12345, // Ephemeral port
+///     dst_port: 5000,
+///     len: 0, // No payload for a Request
+///     r#type: VSOCK_TYPE_STREAM,
+///     op: VsockOp::Request as u16,
+///     flags: 0,
+///     buf_alloc: 256 * 1024,
+///     fwd_cnt: 0,
+/// };
+///
+/// assert_eq!(hdr.op, 1);
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VsockHdr {
     /// Source context ID.
@@ -153,6 +201,27 @@ impl VsockHdr {
 // ── Channel type alias ────────────────────────────────────────────────────────
 
 /// A vsock packet: header plus raw payload bytes.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_devices::{VsockHdr, VsockPacket, VsockOp, VSOCK_TYPE_STREAM};
+///
+/// let hdr = VsockHdr {
+///     src_cid: 3,
+///     dst_cid: 2,
+///     src_port: 12345,
+///     dst_port: 5000,
+///     len: 4,
+///     r#type: VSOCK_TYPE_STREAM,
+///     op: VsockOp::Rw as u16,
+///     flags: 0,
+///     buf_alloc: 256 * 1024,
+///     fwd_cnt: 0,
+/// };
+/// let payload = vec![1, 2, 3, 4];
+/// let packet: VsockPacket = (hdr, payload);
+/// ```
 pub type VsockPacket = (VsockHdr, Vec<u8>);
 
 // ── VirtioVsockDevice ─────────────────────────────────────────────────────────

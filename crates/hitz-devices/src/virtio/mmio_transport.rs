@@ -33,6 +33,46 @@
 //! let transport = VirtioMmioTransport::new(backend, mem, 5);
 //! ```
 
+//! Virtio MMIO transport implementation.
+//!
+//! # Abstract
+//!
+//! This module implements the virtio MMIO (Memory Mapped I/O) transport layer,
+//! specifically version 2 of the specification. It acts as the bridge between
+//! the guest OS and the concrete virtio backend device (like block, net, or vsock).
+//!
+//! # The Hero's Journey
+//!
+//! ```rust
+//! use hitz_devices::{VirtioMmioTransport, VirtioBackend, VirtQueue};
+//! use hitz_hal::GuestMemAccess;
+//! use std::sync::Arc;
+//!
+//! // 1. Create a concrete virtio backend.
+//! struct MyBackend;
+//! impl VirtioBackend for MyBackend {
+//!     fn device_id(&self) -> u32 { 99 }
+//!     fn device_features(&self) -> u64 { 0 }
+//!     fn process_queue(&mut self, _idx: u16, _q: &mut VirtQueue, _mem: &dyn GuestMemAccess) {}
+//!     fn read_config(&self, _off: u64, _data: &mut [u8]) {}
+//!     fn write_config(&mut self, _off: u64, _data: &[u8]) {}
+//! }
+//!
+//! # struct DummyMem;
+//! # impl hitz_hal::GuestMemAccess for DummyMem {
+//! #     fn read_guest(&self, _gpa: u64, _buf: &mut [u8]) -> Result<(), hitz_hal::HalError> { Ok(()) }
+//! #     fn write_guest(&self, _gpa: u64, _data: &[u8]) -> Result<(), hitz_hal::HalError> { Ok(()) }
+//! # }
+//! // 2. Wrap it in the MMIO transport to expose it to the guest.
+//! let mem: Arc<dyn GuestMemAccess> = Arc::new(DummyMem);
+//! let transport = VirtioMmioTransport::new(MyBackend, mem, 5); // IRQ 5
+//! ```
+//!
+//! # Details
+//!
+//! The transport exposes a standard set of registers to the guest (`Magic`, `Version`, `DeviceID`, etc.)
+//! and multiplexes operations to the specific `VirtioBackend`.
+
 use std::sync::Arc;
 
 use hitz_hal::GuestMemAccess;
@@ -105,21 +145,73 @@ const QUEUE_NUM_MAX: u16 = 256;
 // -- Status bits --------------------------------------------------------------
 
 /// Guest OS has found the device.
+///
+/// This is the first status bit the guest driver sets after reading the Device ID
+/// and confirming it recognizes the device.
 pub const STATUS_ACKNOWLEDGE: u8 = 0x01;
+
 /// Guest OS knows how to drive the device.
+///
+/// The guest driver sets this bit after successful initialization to indicate it
+/// knows how to operate the device.
 pub const STATUS_DRIVER: u8 = 0x02;
+
 /// Feature negotiation complete.
+///
+/// The driver sets this bit after reading the device features and writing back
+/// the subset of features it understands and wants to use.
 pub const STATUS_FEATURES_OK: u8 = 0x08;
+
 /// Driver setup complete, device is live.
+///
+/// Set by the guest when the driver is fully initialized and the device is
+/// ready to process requests.
 pub const STATUS_DRIVER_OK: u8 = 0x04;
+
 /// Something went wrong in the guest.
+///
+/// The guest sets this bit if it encounters an unrecoverable error and gives up
+/// on the device.
 pub const STATUS_FAILED: u8 = 0x80;
 
 /// A virtio device backend that processes queue requests.
 ///
+/// # Abstract
+///
 /// Implementations provide the device-specific logic (block, net, etc.)
 /// while the [`VirtioMmioTransport`] handles MMIO register decode and
 /// queue management.
+///
+/// # The Hero's Journey
+///
+/// ```rust
+/// use hitz_devices::{VirtioBackend, VirtQueue};
+/// use hitz_hal::GuestMemAccess;
+///
+/// struct MySimpleDevice;
+///
+/// impl VirtioBackend for MySimpleDevice {
+///     fn device_id(&self) -> u32 {
+///         42 // Some custom device ID
+///     }
+///
+///     fn device_features(&self) -> u64 {
+///         0 // No special features
+///     }
+///
+///     fn process_queue(&mut self, queue_idx: u16, queue: &mut VirtQueue, mem: &dyn GuestMemAccess) {
+///         // Process requests from the guest...
+///     }
+///
+///     fn read_config(&self, offset: u64, data: &mut [u8]) {
+///         // Read configuration space
+///     }
+///
+///     fn write_config(&mut self, offset: u64, data: &[u8]) {
+///         // Write configuration space
+///     }
+/// }
+/// ```
 pub trait VirtioBackend: Send {
     /// Return the virtio device ID (e.g., 2 for block, 1 for net).
     fn device_id(&self) -> u32;
@@ -187,9 +279,36 @@ struct QueueState {
 
 /// Virtio MMIO transport wrapping a backend device.
 ///
+/// # Abstract
+///
 /// Implements `MmioDevice` and manages the MMIO register file,
 /// virtqueue configuration, and device status state machine. Supports
 /// multiple virtqueues as reported by `VirtioBackend::queue_count`.
+///
+/// # The Hero's Journey
+///
+/// ```rust
+/// use hitz_devices::{VirtioMmioTransport, VirtioBackend, VirtQueue};
+/// use hitz_hal::GuestMemAccess;
+/// use std::sync::Arc;
+///
+/// # struct DummyBackend;
+/// # impl VirtioBackend for DummyBackend {
+/// #     fn device_id(&self) -> u32 { 1 }
+/// #     fn device_features(&self) -> u64 { 0 }
+/// #     fn process_queue(&mut self, _: u16, _: &mut VirtQueue, _: &dyn GuestMemAccess) {}
+/// #     fn read_config(&self, _: u64, _: &mut [u8]) {}
+/// #     fn write_config(&mut self, _: u64, _: &[u8]) {}
+/// # }
+/// # struct DummyMem;
+/// # impl hitz_hal::GuestMemAccess for DummyMem {
+/// #     fn read_guest(&self, _gpa: u64, _buf: &mut [u8]) -> Result<(), hitz_hal::HalError> { Ok(()) }
+/// #     fn write_guest(&self, _gpa: u64, _data: &[u8]) -> Result<(), hitz_hal::HalError> { Ok(()) }
+/// # }
+/// // Initialize the transport with a backend and an IRQ line.
+/// let mem: Arc<dyn GuestMemAccess> = Arc::new(DummyMem);
+/// let transport = VirtioMmioTransport::new(DummyBackend, mem, 5);
+/// ```
 pub struct VirtioMmioTransport<D: VirtioBackend> {
     /// The backend device.
     device: D,
@@ -218,8 +337,38 @@ pub struct VirtioMmioTransport<D: VirtioBackend> {
 impl<D: VirtioBackend> VirtioMmioTransport<D> {
     /// Create a new MMIO transport for the given backend.
     ///
+    /// # Abstract
+    ///
     /// Allocates one internal queue state per queue reported by
     /// `VirtioBackend::queue_count`.
+    ///
+    /// # The Hero's Journey
+    ///
+    /// ```rust
+    /// use hitz_devices::{VirtioMmioTransport, VirtioBackend, VirtQueue};
+    /// use hitz_hal::GuestMemAccess;
+    /// use std::sync::Arc;
+    ///
+    /// # struct DummyBackend;
+    /// # impl VirtioBackend for DummyBackend {
+    /// #     fn device_id(&self) -> u32 { 1 }
+    /// #     fn device_features(&self) -> u64 { 0 }
+    /// #     fn process_queue(&mut self, _: u16, _: &mut VirtQueue, _: &dyn GuestMemAccess) {}
+    /// #     fn read_config(&self, _: u64, _: &mut [u8]) {}
+    /// #     fn write_config(&mut self, _: u64, _: &[u8]) {}
+    /// # }
+    /// # struct DummyMem;
+    /// # impl hitz_hal::GuestMemAccess for DummyMem {
+    /// #     fn read_guest(&self, _gpa: u64, _buf: &mut [u8]) -> Result<(), hitz_hal::HalError> { Ok(()) }
+    /// #     fn write_guest(&self, _gpa: u64, _data: &[u8]) -> Result<(), hitz_hal::HalError> { Ok(()) }
+    /// # }
+    /// let mem: Arc<dyn GuestMemAccess> = Arc::new(DummyMem);
+    ///
+    /// // Create a transport wrapping `DummyBackend` that fires IRQ 10 when interrupted.
+    /// let transport = VirtioMmioTransport::new(DummyBackend, mem, 10);
+    /// ```
+    ///
+    /// # Details
     ///
     /// * `device` -- the virtio backend (block, net, etc.)
     /// * `mem` -- shared reference to guest memory
