@@ -493,3 +493,9 @@ pub use rightsizer::{ResizeRecommendation, RightSizer};
 mod terraform;
 #[cfg(feature = "terraform")]
 pub use terraform::ToTerraform;
+
+#[cfg(feature = "ecosizer")]
+/// Eco-aware VM Rightsizing module.
+mod ecosizer;
+#[cfg(feature = "ecosizer")]
+pub use ecosizer::{EcoRecommendation, EcoSizer};
