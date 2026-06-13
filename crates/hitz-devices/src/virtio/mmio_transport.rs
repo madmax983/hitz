@@ -1047,4 +1047,28 @@ mod tests {
         write_u32(&mut t, MMIO_DRIVER_FEATURES, 0x2222_2222);
         assert_eq!(t.driver_features, 0x1111_1111_2222_2222);
     }
+
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn havoc_fuzz_mmio_read(
+            offset in 0u64..0x200,
+            len in 0usize..8,
+        ) {
+            let mut t = make_transport();
+            let mut buf = vec![0u8; len];
+            t.mmio_read(offset, &mut buf);
+        }
+
+        #[test]
+        fn havoc_fuzz_mmio_write(
+            offset in 0u64..0x200,
+            data in proptest::collection::vec(any::<u8>(), 0..8),
+        ) {
+            let mut t = make_transport();
+            let mem = MockMem::new(16);
+            t.mmio_write(offset, &data, &mem);
+        }
+    }
 }
