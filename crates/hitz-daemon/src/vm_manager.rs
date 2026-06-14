@@ -1296,3 +1296,17 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+mod tests_vm_manager_misc {
+    use super::*;
+
+    #[test]
+    fn vminfo_send_sync() {
+        fn assert_send<T: Send>() {}
+        fn assert_sync<T: Sync>() {}
+
+        assert_send::<hitz_api::VmInfo>();
+        assert_sync::<hitz_api::VmInfo>();
+    }
+}

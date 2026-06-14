@@ -886,3 +886,67 @@ mod tests {
         assert_eq!(VIRTIO_IRQ_VSOCK, 7);
     }
 }
+
+#[cfg(test)]
+mod additional_tests {
+    use super::*;
+
+    #[test]
+    fn exit_reason_display() {
+        assert_eq!(ExitReason::Halt.to_string(), "Halted by guest");
+        assert_eq!(ExitReason::Shutdown.to_string(), "Guest requested shutdown");
+        assert_eq!(ExitReason::Canceled.to_string(), "Canceled by host");
+        assert_eq!(ExitReason::Unexpected("test".to_string()).to_string(), "Unexpected error: test");
+    }
+}
+
+#[cfg(test)]
+mod tests_vm_error {
+    use super::*;
+
+    #[test]
+    fn vm_error_display() {
+        assert_eq!(VmError::Config("test".to_string()).to_string(), "Configuration error: test");
+        assert_eq!(VmError::Memory(hitz_vmm::MemError::NotMapped { gpa: hitz_hal::Gpa::new(0) }).to_string(), "Memory error: Guest physical address 0x0000000000000000 is not mapped");
+        assert_eq!(VmError::Io(std::io::Error::new(std::io::ErrorKind::Other, "test")).to_string(), "I/O error: test");
+        assert_eq!(VmError::Hal(hitz_hal::HalError::Internal("test".to_string())).to_string(), "Hypervisor abstraction error: Internal error: test");
+    }
+}
+
+#[cfg(test)]
+mod tests_vm_error2 {
+    use super::*;
+    use hitz_vmm::MemError;
+    use hitz_hal::{HalError, Gpa};
+    use std::io;
+
+    #[test]
+    fn vm_error_from_hal() {
+        let err: VmError = HalError::Internal("test".to_string()).into();
+        assert!(matches!(err, VmError::Hal(HalError::Internal(_))));
+    }
+
+    #[test]
+    fn vm_error_from_mem() {
+        let err: VmError = MemError::NotMapped { gpa: Gpa::new(0) }.into();
+        assert!(matches!(err, VmError::Memory(MemError::NotMapped { .. })));
+    }
+
+    #[test]
+    fn vm_error_from_io() {
+        let err: VmError = io::Error::new(io::ErrorKind::Other, "test").into();
+        assert!(matches!(err, VmError::Io(_)));
+    }
+}
+
+#[cfg(test)]
+mod tests_vm_manager_run_multi_vcpu_v2 {
+    use super::*;
+    use hitz_hal::{HalError, VcpuExit};
+
+    #[test]
+    fn vcpu_error_from_std_io() {
+        let err: VcpuError = std::io::Error::new(std::io::ErrorKind::Other, "test").into();
+        assert!(matches!(err, VcpuError::Io(_)));
+    }
+}

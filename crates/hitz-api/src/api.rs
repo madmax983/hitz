@@ -292,3 +292,95 @@ pub struct ApiError {
     /// A human-readable, descriptive error message explaining the failure.
     pub message: String,
 }
+
+#[cfg(test)]
+#[allow(clippy::expect_used)]
+mod tests_coverage {
+    use super::*;
+    use std::path::PathBuf;
+    use crate::config::GuestAgentMode;
+
+    fn test_config() -> VmConfig {
+        VmConfig {
+            kernel_path: PathBuf::from("/vmlinux"),
+            initramfs_path: None,
+            disk_path: None,
+            ram_mib: 512,
+            cpus: 2,
+            cmdline: None,
+            net: None,
+            ports: vec![],
+            guest_cid: 3,
+            guest_agent: GuestAgentMode::Auto,
+        }
+    }
+
+    #[test]
+    fn test_vm_action_display() {
+        assert_eq!(VmAction::Start.to_string(), "start");
+        assert_eq!(VmAction::Stop.to_string(), "stop");
+        assert_eq!(VmAction::Restart.to_string(), "restart");
+    }
+
+    #[test]
+    fn test_vm_action_gerund() {
+        assert_eq!(VmAction::Start.gerund(), "Starting");
+        assert_eq!(VmAction::Stop.gerund(), "Stopping");
+        assert_eq!(VmAction::Restart.gerund(), "Restarting");
+    }
+
+    #[test]
+    fn test_vm_action_past_tense() {
+        assert_eq!(VmAction::Start.past_tense(), "started");
+        assert_eq!(VmAction::Stop.past_tense(), "stopped");
+        assert_eq!(VmAction::Restart.past_tense(), "restarted");
+    }
+
+    #[test]
+    fn test_create_vm_request_serialization() {
+        let req = CreateVmRequest { config: test_config() };
+        let json = serde_json::to_string(&req).expect("should serialize");
+        let deserialized: CreateVmRequest = serde_json::from_str(&json).expect("should deserialize");
+        assert_eq!(req.config, deserialized.config);
+    }
+
+    #[test]
+    fn test_action_vm_request_serialization() {
+        let req = ActionVmRequest { action: VmAction::Start };
+        let json = serde_json::to_string(&req).expect("should serialize");
+        let deserialized: ActionVmRequest = serde_json::from_str(&json).expect("should deserialize");
+        assert_eq!(req.action, deserialized.action);
+    }
+
+    #[test]
+    fn test_clone_vm_request_serialization() {
+        let req = CloneVmRequest { dest_id: "new-vm".to_string() };
+        let json = serde_json::to_string(&req).expect("should serialize");
+        let deserialized: CloneVmRequest = serde_json::from_str(&json).expect("should deserialize");
+        assert_eq!(req.dest_id, deserialized.dest_id);
+    }
+
+    #[test]
+    fn test_vm_info_serialization() {
+        let info = VmInfo {
+            id: "my-vm".to_string(),
+            state: VmState::Running,
+            config: test_config(),
+            exit_reason: None,
+        };
+        let json = serde_json::to_string(&info).expect("should serialize");
+        let deserialized: VmInfo = serde_json::from_str(&json).expect("should deserialize");
+        assert_eq!(info.id, deserialized.id);
+        assert_eq!(info.state, deserialized.state);
+        assert_eq!(info.config, deserialized.config);
+        assert_eq!(info.exit_reason, deserialized.exit_reason);
+    }
+
+    #[test]
+    fn test_api_error_serialization() {
+        let err = ApiError { message: "error message".to_string() };
+        let json = serde_json::to_string(&err).expect("should serialize");
+        let deserialized: ApiError = serde_json::from_str(&json).expect("should deserialize");
+        assert_eq!(err.message, deserialized.message);
+    }
+}
