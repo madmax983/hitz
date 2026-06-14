@@ -94,11 +94,12 @@ pub fn decode_mmio_instruction(bytes: &[u8]) -> Option<DecodedMmio> {
         0x88..=0x8B => Some(decode_mov_r_rm(
             opcode,
             has_operand_size_prefix,
+            rex,
             reg_field,
             pos,
         )),
         // MOV r/m32, imm32
-        0xC7 => decode_mov_rm_imm(bytes, has_operand_size_prefix, modrm, pos),
+        0xC7 => decode_mov_rm_imm(bytes, has_operand_size_prefix, rex, modrm, pos),
         _ => None,
     }
 }
@@ -148,6 +149,7 @@ fn parse_sib_and_disp(bytes: &[u8], modrm: u8, pos: &mut usize) -> Option<()> {
 const fn decode_mov_r_rm(
     opcode: u8,
     has_operand_size_prefix: bool,
+    rex: u8,
     reg_field: u8,
     pos: usize,
 ) -> DecodedMmio {
@@ -155,6 +157,8 @@ const fn decode_mov_r_rm(
         1 // 0x88, 0x8A = byte
     } else if has_operand_size_prefix {
         2
+    } else if (rex >> 3) & 1 != 0 {
+        8 // REX.W is set
     } else {
         4
     };
@@ -170,6 +174,7 @@ const fn decode_mov_r_rm(
 const fn decode_mov_rm_imm(
     bytes: &[u8],
     has_operand_size_prefix: bool,
+    rex: u8,
     modrm: u8,
     mut pos: usize,
 ) -> Option<DecodedMmio> {
@@ -178,11 +183,23 @@ const fn decode_mov_rm_imm(
         return None;
     }
 
+    // Determine the actual target size.
+    let size = if has_operand_size_prefix {
+        2
+    } else if (rex >> 3) & 1 != 0 {
+        8
+    } else {
+        4
+    };
+
     // Read the 4-byte immediate (or 2-byte with operand size prefix).
+    // Note: Even for 64-bit target size (REX.W), the immediate is 32-bit sign-extended
+    // in the instruction encoding, so we still read a 4-byte immediate.
     let imm_size = if has_operand_size_prefix { 2 } else { 4 };
     if pos + imm_size > bytes.len() {
         return None;
     }
+
     let imm = if imm_size == 2 {
         u16::from_le_bytes([bytes[pos], bytes[pos + 1]]) as u32
     } else {
@@ -192,7 +209,7 @@ const fn decode_mov_rm_imm(
 
     Some(DecodedMmio {
         register: 0, // C7 /0 uses an immediate, not a register source
-        size: imm_size as u8,
+        size,
         immediate: Some(imm),
         instruction_len: pos as u8,
     })
