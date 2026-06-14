@@ -64,8 +64,8 @@ impl ToTerraform for VmConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
     use crate::GuestAgentMode;
+    use std::path::PathBuf;
 
     #[test]
     fn test_to_terraform_basic() {
@@ -87,5 +87,26 @@ mod tests {
         assert!(hcl.contains("kernel_path = \"/boot/vmlinux\""));
         assert!(hcl.contains("ram_mib = 512"));
         assert!(hcl.contains("cpus = 2"));
+    }
+
+    #[test]
+    fn test_to_terraform_full() {
+        let config = VmConfig {
+            kernel_path: PathBuf::from("/boot/vmlinux"),
+            initramfs_path: Some(PathBuf::from("/boot/init.cpio")),
+            disk_path: Some(PathBuf::from("/disk.img")),
+            ram_mib: 1024,
+            cpus: 4,
+            cmdline: Some("quiet".to_string()),
+            net: None,
+            ports: vec![],
+            guest_cid: 4,
+            guest_agent: GuestAgentMode::Disabled,
+        };
+        let hcl = config.to_terraform("test_vm");
+        assert!(hcl.contains("initramfs_path = \"/boot/init.cpio\""));
+        assert!(hcl.contains("disk_path = \"/disk.img\""));
+        assert!(hcl.contains("cmdline = \"quiet\""));
+        assert!(hcl.contains("guest_cid = 4"));
     }
 }

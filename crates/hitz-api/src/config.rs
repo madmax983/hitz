@@ -305,4 +305,48 @@ mod tests {
     fn test_guest_agent_mode_default() {
         assert_eq!(GuestAgentMode::default(), GuestAgentMode::Auto);
     }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn test_guest_agent_mode_serde_auto() {
+        let mode = GuestAgentMode::Auto;
+        let json = serde_json::to_string(&mode).unwrap();
+        assert_eq!(json, r#"{"mode":"auto"}"#);
+        let deserialized: GuestAgentMode = serde_json::from_str(&json).unwrap();
+        assert_eq!(mode, deserialized);
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn test_guest_agent_mode_serde_custom() {
+        let mode = GuestAgentMode::Custom(PathBuf::from("/path/to/agent"));
+        let json = serde_json::to_string(&mode).unwrap();
+        assert_eq!(json, r#"{"mode":"custom","path":"/path/to/agent"}"#);
+        let deserialized: GuestAgentMode = serde_json::from_str(&json).unwrap();
+        assert_eq!(mode, deserialized);
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn test_guest_agent_mode_serde_disabled() {
+        let mode = GuestAgentMode::Disabled;
+        let json = serde_json::to_string(&mode).unwrap();
+        assert_eq!(json, r#"{"mode":"disabled"}"#);
+        let deserialized: GuestAgentMode = serde_json::from_str(&json).unwrap();
+        assert_eq!(mode, deserialized);
+    }
+
+    #[test]
+    fn test_guest_agent_mode_serde_unknown() {
+        let json = r#"{"mode":"unknown"}"#;
+        let result: Result<GuestAgentMode, _> = serde_json::from_str(json);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_guest_agent_mode_serde_custom_missing_path() {
+        let json = r#"{"mode":"custom"}"#;
+        let result: Result<GuestAgentMode, _> = serde_json::from_str(json);
+        assert!(result.is_err());
+    }
 }
