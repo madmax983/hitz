@@ -493,3 +493,9 @@ pub use rightsizer::{ResizeRecommendation, RightSizer};
 mod terraform;
 #[cfg(feature = "terraform")]
 pub use terraform::ToTerraform;
+
+#[cfg(feature = "oom")]
+/// OOM Prediction module.
+mod oom;
+#[cfg(feature = "oom")]
+pub use oom::{OomPrediction, OomPredictor};
