@@ -306,3 +306,23 @@ mod tests {
         assert_eq!(GuestAgentMode::default(), GuestAgentMode::Auto);
     }
 }
+
+#[test]
+fn test_guest_agent_mode_custom_serde() {
+    let mode = GuestAgentMode::Custom(PathBuf::from("/bin/agent"));
+    let json = serde_json::to_string(&mode).unwrap();
+    assert_eq!(json, r#"{"mode":"custom","path":"/bin/agent"}"#);
+
+    let deserialized: GuestAgentMode = serde_json::from_str(&json).unwrap();
+    assert_eq!(mode, deserialized);
+}
+
+#[test]
+fn test_guest_agent_mode_disabled_serde() {
+    let mode = GuestAgentMode::Disabled;
+    let json = serde_json::to_string(&mode).unwrap();
+    assert_eq!(json, r#"{"mode":"disabled"}"#);
+
+    let deserialized: GuestAgentMode = serde_json::from_str(&json).unwrap();
+    assert_eq!(mode, deserialized);
+}

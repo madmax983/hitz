@@ -450,3 +450,18 @@ mod tests {
         assert_eq!(diff.networks[0].rx_bytes_per_sec, 0.0);
     }
 }
+
+#[test]
+fn should_handle_no_previous_disks_or_networks_gracefully() {
+    let mut t1 = dummy_snapshot(1000, 100, 50);
+    t1.disks.clear();
+    t1.networks.clear();
+
+    let mut t2 = dummy_snapshot(2000, 200, 100);
+    t2.disks.clear();
+    t2.networks.clear();
+
+    let diff = t2.diff(&t1).expect("Diff should be Some");
+    assert!(diff.disks.is_empty());
+    assert!(diff.networks.is_empty());
+}

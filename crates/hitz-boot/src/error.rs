@@ -30,3 +30,33 @@ pub enum BootError {
     #[error("invalid page table config: {0}")]
     InvalidPageTableConfig(String),
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_boot_error_display() {
+        let err = BootError::InvalidElf("bad magic".to_string());
+        assert_eq!(err.to_string(), "invalid ELF: bad magic");
+
+        let err = BootError::LoadSegment {
+            gpa: 0x1000,
+            size: 4096,
+            reason: "no memory".to_string(),
+        };
+        assert_eq!(
+            err.to_string(),
+            "failed to load segment at GPA 0x1000, size 4096: no memory"
+        );
+
+        let err = BootError::WriteFailed("io error".to_string());
+        assert_eq!(err.to_string(), "write to guest memory failed: io error");
+
+        let err = BootError::InvalidBootParams("missing field".to_string());
+        assert_eq!(err.to_string(), "invalid boot params: missing field");
+
+        let err = BootError::InvalidPageTableConfig("bad level".to_string());
+        assert_eq!(err.to_string(), "invalid page table config: bad level");
+    }
+}

@@ -110,3 +110,78 @@ pub enum HalError {
         message: String,
     },
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_hal_error_display() {
+        let err = HalError::CreatePartition("no perm".to_string());
+        assert_eq!(err.to_string(), "failed to create partition: no perm");
+
+        let err = HalError::SetupPartition("bad config".to_string());
+        assert_eq!(
+            err.to_string(),
+            "failed to set partition property: bad config"
+        );
+
+        let err = HalError::MapMemory {
+            gpa: 0x1000,
+            size: 4096,
+            reason: "oom".to_string(),
+        };
+        assert_eq!(
+            err.to_string(),
+            "failed to map guest memory at GPA 0x1000, size 0x1000: oom"
+        );
+
+        let err = HalError::UnmapMemory {
+            gpa: 0x1000,
+            reason: "not mapped".to_string(),
+        };
+        assert_eq!(
+            err.to_string(),
+            "failed to unmap guest memory at GPA 0x1000: not mapped"
+        );
+
+        let err = HalError::CreateVcpu {
+            vcpu_id: 1,
+            reason: "limit reached".to_string(),
+        };
+        assert_eq!(err.to_string(), "failed to create vCPU 1: limit reached");
+
+        let err = HalError::VcpuRun("crashed".to_string());
+        assert_eq!(err.to_string(), "vCPU run failed: crashed");
+
+        let err = HalError::VcpuCancel("not running".to_string());
+        assert_eq!(err.to_string(), "failed to cancel vCPU: not running");
+
+        let err = HalError::RegisterAccess("invalid register".to_string());
+        assert_eq!(err.to_string(), "register access failed: invalid register");
+
+        let err = HalError::InterruptRequest("queue full".to_string());
+        assert_eq!(err.to_string(), "interrupt request failed: queue full");
+
+        let err = HalError::GuestMem {
+            gpa: 0x2000,
+            reason: "unmapped".to_string(),
+        };
+        assert_eq!(
+            err.to_string(),
+            "guest memory access at GPA 0x2000: unmapped"
+        );
+
+        let err = HalError::InjectInterrupt("not supported".to_string());
+        assert_eq!(err.to_string(), "interrupt injection failed: not supported");
+
+        let err = HalError::NotAvailable("kvm missing".to_string());
+        assert_eq!(err.to_string(), "hypervisor not available: kvm missing");
+
+        let err = HalError::Platform {
+            code: 0x5,
+            message: "access denied".to_string(),
+        };
+        assert_eq!(err.to_string(), "platform error (code 0x5): access denied");
+    }
+}
