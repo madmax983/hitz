@@ -136,6 +136,9 @@ pub enum VmState {
 /// daemon knows exactly how to build the partition.
 ///
 /// # The Hero's Journey
+///
+/// ## Examples
+///
 /// ```rust
 /// use hitz_api::{CreateVmRequest, VmConfig, GuestAgentMode};
 /// use std::path::PathBuf;
@@ -177,6 +180,9 @@ pub struct CreateVmRequest {
 /// `POST /vms/{id}/action` endpoint accepts this payload.
 ///
 /// # The Hero's Journey
+///
+/// ## Examples
+///
 /// ```rust
 /// use hitz_api::{ActionVmRequest, VmAction};
 ///
@@ -202,6 +208,9 @@ pub struct ActionVmRequest {
 /// identical workers.
 ///
 /// # The Hero's Journey
+///
+/// ## Examples
+///
 /// ```rust
 /// use hitz_api::CloneVmRequest;
 ///
@@ -230,6 +239,9 @@ pub struct CloneVmRequest {
 /// all VMs.
 ///
 /// # The Hero's Journey
+///
+/// ## Examples
+///
 /// ```rust
 /// use hitz_api::{VmInfo, VmState, VmConfig, GuestAgentMode};
 /// use std::path::PathBuf;
@@ -277,6 +289,9 @@ pub struct VmInfo {
 /// first line of defense for debugging CLI interactions.
 ///
 /// # The Hero's Journey
+///
+/// ## Examples
+///
 /// ```rust
 /// use hitz_api::ApiError;
 ///

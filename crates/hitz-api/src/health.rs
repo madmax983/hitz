@@ -38,6 +38,9 @@ use serde::{Deserialize, Serialize};
 /// perfectly fine, starting to sweat, and actively melting down.
 ///
 /// # The Hero's Journey
+///
+/// ## Examples
+///
 /// ```rust
 /// use hitz_api::HealthStatus;
 ///
@@ -62,6 +65,9 @@ pub enum HealthStatus {
 /// human-readable reasons explaining *why*.
 ///
 /// # The Hero's Journey
+///
+/// ## Examples
+///
 /// ```rust
 /// use hitz_api::{SystemHealth, HealthStatus};
 ///
@@ -89,6 +95,9 @@ pub struct SystemHealth {
 /// getting a [`SystemHealth`] report.
 ///
 /// # The Hero's Journey
+///
+/// ## Examples
+///
 /// ```rust
 /// use hitz_api::{HealthCheck, SystemHealth, HealthStatus};
 ///

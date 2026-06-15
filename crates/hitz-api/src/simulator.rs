@@ -34,6 +34,17 @@ use crate::{CpuMetrics, MemoryMetrics, MetricsSnapshot};
 /// a profile, developers can reliably recreate specific stress conditions
 /// (like resource exhaustion or CPU pinning) to ensure their telemetry
 /// pipelines and alerting systems react appropriately.
+///
+/// # The Hero's Journey
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::simulator::WorkloadProfile;
+///
+/// let profile = WorkloadProfile::CpuSpike;
+/// assert_eq!(profile, WorkloadProfile::CpuSpike);
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WorkloadProfile {
     /// Simulates a sudden, aggressive spike in CPU usage, eventually reaching
@@ -53,6 +64,18 @@ pub enum WorkloadProfile {
 /// tailored to the specific [`WorkloadProfile`] provided at creation. Because
 /// it implements the standard library's `Iterator` trait, you can easily compose
 /// it with other iterator adapters.
+///
+/// # The Hero's Journey
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::simulator::{VmSimulator, WorkloadProfile};
+///
+/// let mut sim = VmSimulator::new(WorkloadProfile::Idle);
+/// let snap = sim.next().unwrap();
+/// assert!(snap.cpu.total_pct < 10.0);
+/// ```
 #[derive(Debug)]
 pub struct VmSimulator {
     profile: WorkloadProfile,
@@ -66,6 +89,8 @@ impl VmSimulator {
     /// Rather than booting a real micro-VM to test alerting infrastructure, this
     /// factory initializes a predictable state machine that will emit synthetic
     /// metrics according to the chosen `WorkloadProfile`.
+    ///
+    /// # The Hero's Journey
     ///
     /// ## Examples
     ///

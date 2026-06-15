@@ -55,6 +55,9 @@ use serde::{Deserialize, Serialize};
 /// Defines the comparative logic for a sentinel watchdog condition.
 ///
 /// # The Hero's Journey
+///
+/// ## Examples
+///
 /// ```rust
 /// use hitz_api::ConditionOperator;
 ///
@@ -77,6 +80,9 @@ pub enum ConditionOperator {
 /// Specifies exactly which slice of a `MetricsSnapshot` should be evaluated.
 ///
 /// # The Hero's Journey
+///
+/// ## Examples
+///
 /// ```rust
 /// use hitz_api::MetricTarget;
 ///
@@ -97,6 +103,9 @@ pub enum MetricTarget {
 /// Combines a target metric, an operator, and a threshold into a single boolean assertion.
 ///
 /// # The Hero's Journey
+///
+/// ## Examples
+///
 /// ```rust
 /// use hitz_api::{SentinelCondition, MetricTarget, ConditionOperator};
 ///
@@ -125,6 +134,9 @@ pub struct SentinelCondition {
 /// payloads against predefined logic to spot anomalies (like CPU spikes or memory leaks).
 ///
 /// # The Hero's Journey
+///
+/// ## Examples
+///
 /// ```rust
 /// use hitz_api::{SentinelRule, SentinelCondition, MetricTarget, ConditionOperator, MetricsSnapshot, CpuMetrics, MemoryMetrics};
 ///
