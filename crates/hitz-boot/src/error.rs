@@ -1,6 +1,25 @@
 //! Boot error types.
 
 /// Errors that can occur during Linux direct boot setup.
+///
+/// # Abstract
+///
+/// Encapsulates failures that can happen when setting up the initial
+/// guest state, such as invalid ELFs, out-of-bounds memory writes,
+/// or malformed page tables.
+///
+/// # The Hero's Journey
+///
+/// ```rust
+/// use hitz_boot::BootError;
+///
+/// let err = BootError::InvalidElf("magic number mismatch".to_string());
+///
+/// match err {
+///     BootError::InvalidElf(msg) => println!("Failed to load kernel: {}", msg),
+///     _ => println!("Other boot error"),
+/// }
+/// ```
 #[derive(Debug, thiserror::Error)]
 pub enum BootError {
     /// The ELF binary is invalid or unsupported.
