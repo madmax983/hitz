@@ -305,4 +305,26 @@ mod tests {
     fn test_guest_agent_mode_default() {
         assert_eq!(GuestAgentMode::default(), GuestAgentMode::Auto);
     }
+
+    #[test]
+    fn should_serialize_deserialize_guest_agent_mode() -> Result<(), serde_json::Error> {
+        let auto_mode = GuestAgentMode::Auto;
+        let json = serde_json::to_string(&auto_mode)?;
+        assert_eq!(json, r#"{"mode":"auto"}"#);
+        let deserialized: GuestAgentMode = serde_json::from_str(&json)?;
+        assert_eq!(deserialized, GuestAgentMode::Auto);
+
+        let custom_mode = GuestAgentMode::Custom(PathBuf::from("/usr/local/bin/agent"));
+        let json = serde_json::to_string(&custom_mode)?;
+        assert_eq!(json, r#"{"mode":"custom","path":"/usr/local/bin/agent"}"#);
+        let deserialized: GuestAgentMode = serde_json::from_str(&json)?;
+        assert_eq!(deserialized, custom_mode);
+
+        let disabled_mode = GuestAgentMode::Disabled;
+        let json = serde_json::to_string(&disabled_mode)?;
+        assert_eq!(json, r#"{"mode":"disabled"}"#);
+        let deserialized: GuestAgentMode = serde_json::from_str(&json)?;
+        assert_eq!(deserialized, GuestAgentMode::Disabled);
+        Ok(())
+    }
 }

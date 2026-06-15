@@ -283,3 +283,19 @@ pub struct ProcMetrics {
     /// Process state character (e.g., 'R' for running, 'S' for sleeping).
     pub state: char,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn should_serialize_deserialize_metrics_request() -> Result<(), serde_json::Error> {
+        let req = MetricsRequest::Snapshot;
+        let json = serde_json::to_string(&req)?;
+        assert_eq!(json, r#""Snapshot""#);
+
+        let deserialized: MetricsRequest = serde_json::from_str(&json)?;
+        assert_eq!(deserialized, MetricsRequest::Snapshot);
+        Ok(())
+    }
+}
