@@ -25,6 +25,7 @@ classifier = ["diff"]
 carbon = []
 terraform = []
 
+eco = ["carbon", "efficiency"]
 sentinel = []
 efficiency = []
 fingerprint = []

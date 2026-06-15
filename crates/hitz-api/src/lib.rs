@@ -72,6 +72,12 @@ mod carbon;
 #[cfg(feature = "carbon")]
 pub use carbon::{CarbonEstimator, EmissionFactors};
 
+#[cfg(feature = "eco")]
+/// Ecological impact analysis module.
+mod eco;
+#[cfg(feature = "eco")]
+pub use eco::{EcoAnalyzer, EcoScore};
+
 #[cfg(feature = "sentinel")]
 /// Sentinel module for defining rules based on metrics.
 mod sentinel;
