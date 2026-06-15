@@ -28,9 +28,11 @@ use hitz_hal::{
 };
 use hitz_net::{parse_cidr, parse_mac, random_mac};
 
+use hitz_api::ExitReason;
+
 use crate::boot_regs;
 use crate::memory::GuestMemory;
-use crate::run_loop::{self, ExitReason, SharedDevices};
+use crate::run_loop::{self, SharedDevices};
 
 /// Virtio-MMIO base address for the first device slot.
 const VIRTIO_MMIO_BASE: u64 = 0xD000_0000;

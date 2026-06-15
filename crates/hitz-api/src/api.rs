@@ -128,6 +128,19 @@ pub enum VmState {
     Failed,
 }
 
+/// Reason the run loop terminated.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ExitReason {
+    /// Guest executed HLT.
+    Halt,
+    /// Guest initiated shutdown (triple fault, etc.).
+    Shutdown,
+    /// VM was stopped via the stop flag (user-initiated cancel).
+    Canceled,
+    /// Unexpected exit that the run loop doesn't know how to handle.
+    Unexpected(String),
+}
+
 /// Request to create a new VM with the given configuration.
 ///
 /// # Abstract
@@ -265,8 +278,8 @@ pub struct VmInfo {
     pub state: VmState,
     /// The exact configuration the VM was created with.
     pub config: VmConfig,
-    /// If the VM exited or failed, a human-readable explanation of why.
-    pub exit_reason: Option<String>,
+    /// If the VM exited or failed, the reason why.
+    pub exit_reason: Option<ExitReason>,
 }
 
 /// Error response from the API.

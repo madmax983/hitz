@@ -552,9 +552,10 @@ fn phase2_serial_output_from_elf() {
     use std::sync::Mutex;
     use std::sync::atomic::AtomicBool;
 
+    use hitz_api::ExitReason;
     use hitz_devices::MmioBus;
     use hitz_devices::SerialDevice;
-    use hitz_vmm::{ExitReason, SharedDevices, run_vcpu_loop};
+    use hitz_vmm::{SharedDevices, run_vcpu_loop};
 
     // x86-64 machine code that writes "Hello" to COM1 (0x3F8) then halts.
     //
@@ -615,9 +616,10 @@ fn phase2_serial_in_reads_lsr() {
     use std::sync::Mutex;
     use std::sync::atomic::AtomicBool;
 
+    use hitz_api::ExitReason;
     use hitz_devices::MmioBus;
     use hitz_devices::SerialDevice;
-    use hitz_vmm::{ExitReason, SharedDevices, run_vcpu_loop};
+    use hitz_vmm::{SharedDevices, run_vcpu_loop};
 
     // x86-64 machine code:
     //   mov edx, 0x3FD        ; BA FD 03 00 00   — COM1 LSR
@@ -737,11 +739,12 @@ fn phase3_virtio_mmio_magic_read() {
     use std::sync::atomic::AtomicBool;
     use std::sync::{Arc, Mutex};
 
+    use hitz_api::ExitReason;
     use hitz_devices::MmioBus;
     use hitz_devices::SerialDevice;
     use hitz_devices::VirtioBlockDevice;
     use hitz_devices::VirtioMmioTransport;
-    use hitz_vmm::{ExitReason, SharedDevices, run_vcpu_loop};
+    use hitz_vmm::{SharedDevices, run_vcpu_loop};
 
     // x86-64 machine code:
     //   mov ebx, 0xD0000000     ; MMIO base (unmapped GPA)
@@ -831,11 +834,12 @@ fn phase3_virtio_block_read() {
     use std::sync::atomic::AtomicBool;
     use std::sync::{Arc, Mutex};
 
+    use hitz_api::ExitReason;
     use hitz_devices::MmioBus;
     use hitz_devices::SerialDevice;
     use hitz_devices::VirtioBlockDevice;
     use hitz_devices::VirtioMmioTransport;
-    use hitz_vmm::{ExitReason, SharedDevices, run_vcpu_loop};
+    use hitz_vmm::{SharedDevices, run_vcpu_loop};
 
     const IRQ_VECTOR: u8 = 5;
 
@@ -992,11 +996,12 @@ fn phase4_apic_interrupt_delivery() {
     use std::sync::atomic::AtomicBool;
     use std::sync::{Arc, Mutex};
 
+    use hitz_api::ExitReason;
     use hitz_devices::MmioBus;
     use hitz_devices::SerialDevice;
     use hitz_devices::VirtioBlockDevice;
     use hitz_devices::VirtioMmioTransport;
-    use hitz_vmm::{ExitReason, SharedDevices, run_vcpu_loop};
+    use hitz_vmm::{SharedDevices, run_vcpu_loop};
 
     const IRQ_VECTOR: u8 = 5;
 
@@ -1340,8 +1345,8 @@ fn phase5_boot_and_run_hello() {
     use std::io::Write;
     use std::sync::{Arc, Mutex};
 
+    use hitz_api::ExitReason;
     use hitz_api::VmConfig;
-    use hitz_vmm::ExitReason;
 
     // x86-64 machine code that writes "Hello" to COM1 (0x3F8) then halts.
     // Same code as phase2_serial_output_from_elf.
@@ -1444,8 +1449,8 @@ fn phase8_smp_2vcpu_hello() {
     use std::sync::atomic::AtomicBool;
     use std::sync::{Arc, Mutex};
 
+    use hitz_api::ExitReason;
     use hitz_api::VmConfig;
-    use hitz_vmm::ExitReason;
 
     // x86-64 machine code: writes "Hello" to COM1 (0x3F8) then halts.
     let code: &[u8] = &[
@@ -1597,8 +1602,8 @@ fn phase9_cancel_via_stop_flag() {
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::{Arc, Mutex};
 
+    use hitz_api::ExitReason;
     use hitz_api::VmConfig;
-    use hitz_vmm::ExitReason;
 
     // x86-64: write "Hello" to COM1 (0x3F8) then HLT — same code as Phase 5.
     let code: &[u8] = &[
@@ -1687,8 +1692,8 @@ fn phase9_multi_vcpu_cancel() {
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::{Arc, Mutex};
 
+    use hitz_api::ExitReason;
     use hitz_api::VmConfig;
-    use hitz_vmm::ExitReason;
 
     let code: &[u8] = &[
         0xBA, 0xF8, 0x03, 0x00, 0x00, // mov edx, 0x3F8
@@ -1786,8 +1791,8 @@ fn phase10_port_forward_tcp() {
     use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, Ordering};
 
+    use hitz_api::ExitReason;
     use hitz_api::{DEFAULT_GUEST_IP, DEFAULT_HOST_IP, NetConfig, PortForward, VmConfig};
-    use hitz_vmm::ExitReason;
 
     let hv = WhpHypervisor::new().expect("WHP not available");
     let stop_flag = Arc::new(AtomicBool::new(false));

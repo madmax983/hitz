@@ -1,0 +1,6 @@
+🗺️ Atlas: Extract ExitReason to hitz-api
+
+🕸️ Tangle: The `ExitReason` enum was buried deep in `hitz-vmm::run_loop`, yet it was being used across `hitz-daemon`, `hitz-cli`, and `hitz-whp` tests. `hitz-daemon` even had to format it to a `String` to store it in `VmInfo`. This created tight coupling to the hypervisor crate just to understand why a VM stopped.
+📐 Blueprint: Extracted `ExitReason` into `hitz-api` alongside `VmState` and `VmAction`, making it a core part of the cross-platform public REST vocabulary. Derived `Serialize`/`Deserialize` to allow `VmInfo` to transmit structural exit data instead of a raw String.
+🧱 Stability: Eliminates unnecessary dependencies on `hitz-vmm` from upstream consumers, cleanly separating the "what" (API) from the "how" (VMM loop).
+🔭 Verification: Cross-compiled and tested all workspace crates on `x86_64-pc-windows-gnu` via Wine. Builds successfully, strict separation enforced. Note: unrelated pre-existing compilation errors in `hitz-cli/src/main.rs` involving `f32`/`f64` conversions and unstable `str_as_str` are present but out of scope.

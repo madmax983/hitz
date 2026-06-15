@@ -24,7 +24,7 @@ mod config;
 mod metrics;
 
 pub use api::{
-    ActionVmRequest, ApiError, CloneVmRequest, CreateVmRequest, VmAction, VmInfo, VmState,
+    ActionVmRequest, ApiError, CloneVmRequest, CreateVmRequest, ExitReason, VmAction, VmInfo, VmState,
 };
 pub use config::{
     DEFAULT_CMDLINE, DEFAULT_CPUS, DEFAULT_GUEST_CID, DEFAULT_GUEST_IP, DEFAULT_HOST_IP,
