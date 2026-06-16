@@ -77,7 +77,7 @@ fn collect_snapshot(buf: &mut String) -> MetricsSnapshot {
     let disks = parse_proc_diskstats(buf);
     read_file_into("/proc/net/dev", buf);
     let networks = parse_proc_net_dev(buf);
-    let processes = collect_top_procs(TOP_N_PROCS);
+    let processes = collect_top_procs(TOP_N_PROCS, buf);
 
     MetricsSnapshot {
         timestamp_ms: now_ms(),
@@ -106,10 +106,11 @@ fn parse_load_avg(content: &str) -> [f32; 3] {
 /// Pre-allocating the vector and reusing `String` buffers prevents allocating
 /// new memory strings `2 * N` times per collection frame, greatly reducing heap
 /// fragmentation on the guest agent.
-fn collect_top_procs(n: usize) -> Vec<hitz_api::ProcMetrics> {
+fn collect_top_procs(n: usize, buf: &mut String) -> Vec<hitz_api::ProcMetrics> {
     let mut procs = Vec::with_capacity(256);
     let mut path_buf = String::with_capacity(32);
-    let mut stat_buf = String::with_capacity(1024);
+
+    let uptime_secs = read_uptime_secs(buf);
 
     if let Ok(entries) = std::fs::read_dir("/proc") {
         use std::fmt::Write;
@@ -127,15 +128,15 @@ fn collect_top_procs(n: usize) -> Vec<hitz_api::ProcMetrics> {
             path_buf.clear();
             let _ = write!(path_buf, "/proc/{pid}/stat");
 
-            stat_buf.clear();
+            buf.clear();
 
             let Ok(mut f) = std::fs::File::open(&path_buf) else {
                 continue;
             };
-            if f.read_to_string(&mut stat_buf).is_err() {
+            if f.read_to_string(buf).is_err() {
                 continue;
             }
-            let Some(p) = parse_proc_pid_stat(pid, &stat_buf) else {
+            let Some(p) = parse_proc_pid_stat(pid, buf, uptime_secs) else {
                 continue;
             };
 
@@ -154,14 +155,15 @@ fn collect_top_procs(n: usize) -> Vec<hitz_api::ProcMetrics> {
 /// Read wall-clock uptime in seconds from `/proc/uptime`.
 ///
 /// Returns `1.0` as a safe fallback if the file is unreadable (e.g. on Windows).
-fn read_uptime_secs() -> f64 {
-    std::fs::read_to_string("/proc/uptime")
-        .ok()
-        .and_then(|s| s.split_ascii_whitespace().next()?.parse::<f64>().ok())
+fn read_uptime_secs(buf: &mut String) -> f64 {
+    read_file_into("/proc/uptime", buf);
+    buf.split_ascii_whitespace()
+        .next()
+        .and_then(|s| s.parse::<f64>().ok())
         .unwrap_or(1.0)
 }
 
-fn parse_proc_pid_stat(pid: u32, content: &str) -> Option<hitz_api::ProcMetrics> {
+fn parse_proc_pid_stat(pid: u32, content: &str, uptime_secs: f64) -> Option<hitz_api::ProcMetrics> {
     let open = content.find('(')?;
     let close = content.rfind(')')?;
     let name = content.get(open + 1..close)?.to_string();
@@ -190,7 +192,7 @@ fn parse_proc_pid_stat(pid: u32, content: &str) -> Option<hitz_api::ProcMetrics>
         clippy::cast_possible_truncation,
         clippy::cast_sign_loss
     )]
-    let uptime_ticks = (read_uptime_secs() * 100.0) as u64;
+    let uptime_ticks = (uptime_secs * 100.0) as u64;
     #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
     let cpu_pct: f32 = if uptime_ticks == 0 {
         0.0_f32
@@ -274,14 +276,14 @@ mod tests {
     proptest! {
         #[test]
         fn havoc_fuzz_parse_proc_pid_stat(s in ".*\\(.*\\).*") {
-            let _ = parse_proc_pid_stat(1, &s);
+            let _ = parse_proc_pid_stat(1, &s, 100.0);
         }
     }
 
     #[test]
     fn havoc_test_parse_proc_pid_stat_out_of_bounds() {
         let content = "(a)";
-        assert!(parse_proc_pid_stat(1, content).is_none());
+        assert!(parse_proc_pid_stat(1, content, 100.0).is_none());
     }
 
     #[test]
@@ -317,7 +319,7 @@ mod tests {
 
         // Since cpu_pct calculation involves uptime, we can't easily assert the exact
         // value without mocking uptime. But we can assert the other fields.
-        let metrics = parse_proc_pid_stat(123, content).unwrap();
+        let metrics = parse_proc_pid_stat(123, content, 100.0).unwrap();
 
         assert_eq!(metrics.pid, 123);
         assert_eq!(metrics.name, "my_process");
@@ -326,11 +328,11 @@ mod tests {
 
         // Test parsing with an empty name
         let content_empty_name = "123 () S 1 1 1 1 1 1 1 1 1 1 100 200 1 1 1 1 1 1 1 1 50";
-        let metrics_empty_name = parse_proc_pid_stat(123, content_empty_name).unwrap();
+        let metrics_empty_name = parse_proc_pid_stat(123, content_empty_name, 100.0).unwrap();
         assert_eq!(metrics_empty_name.name, "");
 
         // Test parsing failure due to missing fields
         let content_short = "123 (short) S 1";
-        assert!(parse_proc_pid_stat(123, content_short).is_none());
+        assert!(parse_proc_pid_stat(123, content_short, 100.0).is_none());
     }
 }
