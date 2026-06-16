@@ -183,7 +183,10 @@ impl VirtioBlockDevice {
             return VIRTIO_BLK_S_IOERR;
         }
 
-        let byte_offset = sector * SECTOR_SIZE;
+        let Some(byte_offset) = sector.checked_mul(SECTOR_SIZE) else {
+            tracing::warn!(sector, "sector calculation overflow");
+            return VIRTIO_BLK_S_IOERR;
+        };
 
         if byte_offset.saturating_add(data_len) > capacity_bytes {
             tracing::warn!(sector, len, capacity = self.capacity, "read out of bounds");
@@ -224,7 +227,10 @@ impl VirtioBlockDevice {
             return VIRTIO_BLK_S_IOERR;
         }
 
-        let byte_offset = sector * SECTOR_SIZE;
+        let Some(byte_offset) = sector.checked_mul(SECTOR_SIZE) else {
+            tracing::warn!(sector, "sector calculation overflow");
+            return VIRTIO_BLK_S_IOERR;
+        };
 
         if byte_offset.saturating_add(data_len) > capacity_bytes {
             tracing::warn!(sector, len, capacity = self.capacity, "write out of bounds");
@@ -873,6 +879,20 @@ mod tests {
 
         dev.process_queue(0, &mut q, &mem);
 
+        let status = mem.read_bytes(STATUS_GPA, 1);
+        assert_eq!(status[0], VIRTIO_BLK_S_IOERR);
+    }
+
+    #[test]
+    fn should_handle_overflowing_sector() {
+        let f = create_temp_disk(2); // 2 sectors
+        let mut dev = VirtioBlockDevice::new(f).unwrap();
+        let mem = MockMem::new(0x10000);
+        let mut q = setup_queue(&mem);
+
+        // Request a read at an overflowing sector (like u64::MAX)
+        setup_request_chain(&mem, 0, VIRTIO_BLK_T_IN, u64::MAX, 512, true);
+        dev.process_queue(0, &mut q, &mem);
         let status = mem.read_bytes(STATUS_GPA, 1);
         assert_eq!(status[0], VIRTIO_BLK_S_IOERR);
     }
