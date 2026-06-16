@@ -1,7 +1,55 @@
 //! Reusable VM boot pipeline.
 //!
+//! # Abstract
 //! Extracts the 17-step boot sequence from integration tests into a single
 //! `boot_and_run` function that can be called from the CLI, daemon, or tests.
+//! It orchestrates memory allocation, ACPI table generation, kernel loading,
+//! vCPU initialization, and virtio device attachment.
+//!
+//! # The Hero's Journey
+//!
+//! ```no_run
+//! use hitz_api::VmConfig;
+//! use hitz_hal::{Hypervisor, Partition, Vcpu};
+//! use hitz_vmm::vm::boot_and_run;
+//! use std::path::PathBuf;
+//! use std::sync::atomic::{AtomicBool, Ordering};
+//! use std::sync::Arc;
+//! use hitz_hal::DummyHypervisor; // Safe proxy for doctests
+//!
+//! fn main() -> Result<(), Box<dyn std::error::Error>> {
+//!     let config = VmConfig {
+//!         kernel_path: PathBuf::from("vmlinux"),
+//!         initramfs_path: None,
+//!         disk_path: None,
+//!         ram_mib: 256,
+//!         cpus: 1,
+//!         cmdline: None,
+//!         net: None,
+//!         ports: vec![],
+//!         guest_cid: 3,
+//!         guest_agent: Default::default(),
+//!     };
+//!
+//!     let hypervisor = DummyHypervisor::new();
+//!     let stop_flag = Arc::new(AtomicBool::new(false));
+//!     let log_output = std::io::stdout();
+//!
+//!     // Kick off the boot sequence and run the VM until it halts or is canceled
+//!     let result = boot_and_run(&hypervisor, &config, stop_flag.clone(), log_output)?;
+//!     println!("VM exited with reason: {:?}", result.exit_reason);
+//!
+//!     Ok(())
+//! }
+//! ```
+//!
+//! # Details
+//! - **Memory:** Sets up identity-mapped page tables and locates the `rsdp` and `cmdline`.
+//! - **Devices:** Registers virtio-blk, virtio-net, virtio-vsock, and serial devices on the MMIO bus.
+//! - **vCPUs:** Boots parallel vCPU threads. The first vCPU handles primary initialization while APs wait for SIPI.
+//!
+//! # Errors
+//! Returns `VmError` if resource allocation fails, paths are invalid, or the hypervisor rejects the configuration.
 
 use std::fmt::Write as _;
 use std::fs;

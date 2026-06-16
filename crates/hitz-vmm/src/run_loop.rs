@@ -1,9 +1,48 @@
 //! vCPU run loop — dispatches exits to devices and advances RIP.
 //!
+//! # Abstract
+//! This module provides the central execution loop for a virtual CPU.
+//! It repeatedly runs the vCPU until an exit occurs (e.g., I/O port access,
+//! MMIO access, or Halt), dispatches the exit to the appropriate emulated device,
+//! and handles deferred interrupt injections via the interrupt window.
+//!
+//! # The Hero's Journey
+//!
+//! ```no_run
+//! use hitz_hal::{Vcpu, VcpuExit};
+//! use hitz_vmm::run_loop::{run_vcpu_loop, SharedDevices};
+//! use hitz_vmm::memory::GuestMemory;
+//! use hitz_devices::{MmioBus, SerialDevice};
+//! use std::sync::Mutex;
+//! use std::sync::atomic::{AtomicBool, Ordering};
+//!
+//! # fn mock_run<V: Vcpu>(mut vcpu: V) -> Result<(), hitz_hal::HalError> {
+//! let devices = Mutex::new(SharedDevices {
+//!     serial: SerialDevice::new(std::io::sink()),
+//!     mmio_bus: MmioBus::new(),
+//! });
+//! let mem = GuestMemory::with_capacity(1024 * 1024);
+//! let stop_flag = AtomicBool::new(false);
+//!
+//! // Start the infinite run-exit-dispatch loop
+//! let exit_reason = run_vcpu_loop(&mut vcpu, &devices, &mem, &stop_flag)?;
+//! println!("vCPU stopped due to: {:?}", exit_reason);
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! # Details
+//!
 //! WHP does **not** auto-advance RIP on I/O port or MMIO exits. The VMM
 //! must read the current registers, add `instruction_len` to RIP, and
 //! write them back before re-entering the guest. Without this, the guest
-//! infinite-loops on the faulting instruction.
+//! infinite-loops on the faulting instruction. This module handles that
+//! advancement automatically for MMIO exits.
+//!
+//! It also manages the "Interrupt Window" mechanism. If an emulated device
+//! raises an IRQ but the guest currently has interrupts disabled (IF=0),
+//! the injection is deferred. The VMM requests an interrupt window exit
+//! and injects the IRQ as soon as the guest becomes interruptible.
 
 use std::io::Write;
 use std::sync::Mutex;
