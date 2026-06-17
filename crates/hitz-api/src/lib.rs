@@ -20,17 +20,18 @@
 mod api;
 /// Configuration structures representing the VM specification.
 mod config;
+/// Lifecycle structures for tracking and controlling VM states.
+pub mod lifecycle;
 /// Telemetry structures representing the VM's runtime resources.
 mod metrics;
 
-pub use api::{
-    ActionVmRequest, ApiError, CloneVmRequest, CreateVmRequest, VmAction, VmInfo, VmState,
-};
+pub use api::{ActionVmRequest, ApiError, CloneVmRequest, CreateVmRequest, VmInfo};
 pub use config::{
     DEFAULT_CMDLINE, DEFAULT_CPUS, DEFAULT_GUEST_CID, DEFAULT_GUEST_IP, DEFAULT_HOST_IP,
     DEFAULT_RAM_MIB, GuestAgentMode, NetConfig, PortForward, VMADDR_CID_HOST, VSOCK_METRICS_PORT,
     VmConfig,
 };
+pub use lifecycle::{VmAction, VmState};
 pub use metrics::{
     CpuMetrics, DiskMetrics, MemoryMetrics, MetricsRequest, MetricsSnapshot, NetMetrics,
     ProcMetrics,
