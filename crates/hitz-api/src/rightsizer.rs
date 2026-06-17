@@ -54,6 +54,24 @@ use crate::{MetricsSnapshot, VmConfig};
 use serde::{Deserialize, Serialize};
 
 /// Specific actionable recommendation for resizing a VM.
+///
+/// # Abstract
+/// This enum represents a suggestion to scale the resources of a VM up or down
+/// based on its current utilization and configuration.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::ResizeRecommendation;
+///
+/// let rec = ResizeRecommendation::ScaleUpCpu {
+///     current: 1,
+///     suggested: 2,
+///     reason: "CPU utilization is critically high".to_string(),
+/// };
+///
+/// assert!(matches!(rec, ResizeRecommendation::ScaleUpCpu { .. }));
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ResizeRecommendation {
     /// Suggests increasing the CPU count.
@@ -95,8 +113,48 @@ pub enum ResizeRecommendation {
 }
 
 /// Trait for objects that can evaluate metrics and configuration to recommend resizing.
+///
+/// # Abstract
+/// Provides the capability to analyze a VM's resource telemetry and configuration
+/// to suggest actionable resizing recommendations.
 pub trait RightSizer {
     /// Analyzes current metrics against the VM's configuration and returns recommendations.
+    ///
+    /// # Abstract
+    /// Evaluates CPU and Memory utilization against the current VM configuration limits
+    /// to propose actionable changes to resource allocation.
+    ///
+    /// ## Examples
+    ///
+    /// ```rust
+    /// use hitz_api::{RightSizer, VmConfig, MetricsSnapshot, CpuMetrics, MemoryMetrics, GuestAgentMode};
+    /// use std::path::PathBuf;
+    ///
+    /// let config = VmConfig {
+    ///     kernel_path: PathBuf::from("vmlinux"),
+    ///     initramfs_path: None,
+    ///     disk_path: None,
+    ///     ram_mib: 1024,
+    ///     cpus: 4,
+    ///     cmdline: None,
+    ///     net: None,
+    ///     ports: vec![],
+    ///     guest_cid: 3,
+    ///     guest_agent: GuestAgentMode::Auto,
+    /// };
+    ///
+    /// let snap = MetricsSnapshot {
+    ///     timestamp_ms: 1000,
+    ///     cpu: CpuMetrics { total_pct: 95.0, per_core: vec![95.0], load_avg: [0.1, 0.1, 0.1] },
+    ///     memory: MemoryMetrics { total_bytes: 1024, used_bytes: 512, free_bytes: 512, buffers_bytes: 0, cached_bytes: 0, swap_total: 0, swap_used: 0 },
+    ///     disks: vec![],
+    ///     networks: vec![],
+    ///     processes: vec![],
+    /// };
+    ///
+    /// let recommendations = snap.recommend_sizing(&config);
+    /// assert!(!recommendations.is_empty());
+    /// ```
     fn recommend_sizing(&self, config: &VmConfig) -> Vec<ResizeRecommendation>;
 }
 

@@ -21,6 +21,19 @@ use crate::{MetricsDiff, MetricsSnapshot};
 use serde::{Deserialize, Serialize};
 
 /// The categorized type of workload running on the VM.
+///
+/// # Abstract
+/// This enum represents the different archetypes of virtual machine behavior
+/// based on their real-time resource utilization patterns.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::WorkloadClass;
+///
+/// let class = WorkloadClass::ComputeBound;
+/// assert_eq!(class, WorkloadClass::ComputeBound);
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum WorkloadClass {
     /// The VM is heavily utilizing the CPU.
@@ -34,8 +47,36 @@ pub enum WorkloadClass {
 }
 
 /// Trait for objects that can classify their workload.
+///
+/// # Abstract
+/// Provides the capability to evaluate current telemetry data and rate-of-change
+/// to categorize the VM into a specific [`WorkloadClass`].
 pub trait WorkloadClassifier {
     /// Classifies the workload based on the current state and a rate-of-change diff.
+    ///
+    /// # Abstract
+    /// Uses predefined heuristics (such as CPU thresholds and I/O rates) to assign
+    /// an archetype to the workload.
+    ///
+    /// ## Examples
+    ///
+    /// ```rust
+    /// use hitz_api::{WorkloadClassifier, WorkloadClass, MetricsSnapshot, MetricsDiff, CpuMetrics, MemoryMetrics};
+    ///
+    /// let snap = MetricsSnapshot {
+    ///     timestamp_ms: 1000,
+    ///     cpu: CpuMetrics { total_pct: 95.0, per_core: vec![95.0], load_avg: [1.0, 1.0, 1.0] },
+    ///     memory: MemoryMetrics { total_bytes: 1024, used_bytes: 512, free_bytes: 512, buffers_bytes: 0, cached_bytes: 0, swap_total: 0, swap_used: 0 },
+    ///     disks: vec![],
+    ///     networks: vec![],
+    ///     processes: vec![],
+    /// };
+    ///
+    /// let diff = MetricsDiff { elapsed_secs: 1.0, disks: vec![], networks: vec![] };
+    ///
+    /// let class = snap.classify_workload(&diff);
+    /// assert_eq!(class, WorkloadClass::ComputeBound);
+    /// ```
     fn classify_workload(&self, diff: &MetricsDiff) -> WorkloadClass;
 }
 
