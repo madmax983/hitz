@@ -493,3 +493,9 @@ pub use rightsizer::{ResizeRecommendation, RightSizer};
 mod terraform;
 #[cfg(feature = "terraform")]
 pub use terraform::ToTerraform;
+
+#[cfg(feature = "eco_score")]
+/// Eco score evaluation module.
+mod eco_score;
+#[cfg(feature = "eco_score")]
+pub use eco_score::{EcoScoreResult, EcoScorer};
