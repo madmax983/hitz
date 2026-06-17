@@ -503,4 +503,17 @@ mod tests {
             "unexpected error: {err}"
         );
     }
+
+    #[test]
+    fn not_little_endian() {
+        let mut elf = make_test_elf(0x10_0000, b"x");
+        // Change data encoding from ELFDATA2LSB (1) to ELFDATA2MSB (2).
+        elf[5] = 2;
+        let writer = MockWriter::new();
+        let err = load_elf(&elf, &writer).unwrap_err();
+        assert!(
+            err.to_string().contains("not little-endian"),
+            "unexpected error: {err}"
+        );
+    }
 }
