@@ -323,3 +323,39 @@ mod tests {
         );
     }
 }
+
+#[test]
+fn parse_meminfo_empty() {
+    let mem = parse_proc_meminfo("");
+    assert!(mem.is_none());
+}
+
+#[test]
+fn parse_meminfo_missing_total() {
+    let mem = parse_proc_meminfo("MemFree: 1024 kB\n");
+    assert!(mem.is_none());
+}
+
+#[test]
+fn cpu_sample_overflow_protection() {
+    let a = CpuSample {
+        user: u64::MAX,
+        nice: 0,
+        system: 0,
+        idle: 0,
+        iowait: 0,
+        irq: 0,
+        softirq: 0,
+    };
+    let b = CpuSample {
+        user: 0, // Wrapped or invalid
+        nice: 0,
+        system: 0,
+        idle: 0,
+        iowait: 0,
+        irq: 0,
+        softirq: 0,
+    };
+    let pct = cpu_pct(&a, &b);
+    assert!((pct - 0.0).abs() < f32::EPSILON);
+}

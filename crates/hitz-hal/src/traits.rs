@@ -57,12 +57,12 @@ pub trait GuestMemAccess: Send + Sync {
 /// # struct DummyVcpu;
 /// # impl Vcpu for DummyVcpu {
 /// #     type CancelHandle = ();
-/// #     fn run(&mut self) -> Result<hitz_hal::VcpuExit, HalError> { unreachable!() }
+/// #     fn run(&mut self) -> Result<hitz_hal::VcpuExit, HalError> { Ok(hitz_hal::VcpuExit::Halt) }
 /// #     fn cancel_handle(&self) -> () { () }
 /// #     fn cancel_via(_: &()) -> Result<(), HalError> { Ok(()) }
-/// #     fn get_regs(&self) -> Result<hitz_hal::StandardRegs, HalError> { unreachable!() }
+/// #     fn get_regs(&self) -> Result<hitz_hal::StandardRegs, HalError> { Ok(Default::default()) }
 /// #     fn set_regs(&mut self, _: &hitz_hal::StandardRegs) -> Result<(), HalError> { Ok(()) }
-/// #     fn get_sregs(&self) -> Result<hitz_hal::SpecialRegs, HalError> { unreachable!() }
+/// #     fn get_sregs(&self) -> Result<hitz_hal::SpecialRegs, HalError> { Ok(Default::default()) }
 /// #     fn set_sregs(&mut self, _: &hitz_hal::SpecialRegs) -> Result<(), HalError> { Ok(()) }
 /// #     fn inject_interrupt(&mut self, _: u8) -> Result<(), HalError> { Ok(()) }
 /// #     fn request_interrupt_window(&mut self) -> Result<(), HalError> { Ok(()) }
@@ -112,12 +112,12 @@ pub trait Hypervisor: Send + Sync {
 /// # struct DummyVcpu;
 /// # impl Vcpu for DummyVcpu {
 /// #     type CancelHandle = ();
-/// #     fn run(&mut self) -> Result<hitz_hal::VcpuExit, HalError> { unreachable!() }
+/// #     fn run(&mut self) -> Result<hitz_hal::VcpuExit, HalError> { Ok(hitz_hal::VcpuExit::Halt) }
 /// #     fn cancel_handle(&self) -> () { () }
 /// #     fn cancel_via(_: &()) -> Result<(), HalError> { Ok(()) }
-/// #     fn get_regs(&self) -> Result<hitz_hal::StandardRegs, HalError> { unreachable!() }
+/// #     fn get_regs(&self) -> Result<hitz_hal::StandardRegs, HalError> { Ok(Default::default()) }
 /// #     fn set_regs(&mut self, _: &hitz_hal::StandardRegs) -> Result<(), HalError> { Ok(()) }
-/// #     fn get_sregs(&self) -> Result<hitz_hal::SpecialRegs, HalError> { unreachable!() }
+/// #     fn get_sregs(&self) -> Result<hitz_hal::SpecialRegs, HalError> { Ok(Default::default()) }
 /// #     fn set_sregs(&mut self, _: &hitz_hal::SpecialRegs) -> Result<(), HalError> { Ok(()) }
 /// #     fn inject_interrupt(&mut self, _: u8) -> Result<(), HalError> { Ok(()) }
 /// #     fn request_interrupt_window(&mut self) -> Result<(), HalError> { Ok(()) }
@@ -188,9 +188,9 @@ pub trait Partition: Send + Sync {
 /// #     fn run(&mut self) -> Result<hitz_hal::VcpuExit, HalError> { Ok(VcpuExit::Halt) }
 /// #     fn cancel_handle(&self) -> () { () }
 /// #     fn cancel_via(_: &()) -> Result<(), HalError> { Ok(()) }
-/// #     fn get_regs(&self) -> Result<hitz_hal::StandardRegs, HalError> { unreachable!() }
+/// #     fn get_regs(&self) -> Result<hitz_hal::StandardRegs, HalError> { Ok(Default::default()) }
 /// #     fn set_regs(&mut self, _: &hitz_hal::StandardRegs) -> Result<(), HalError> { Ok(()) }
-/// #     fn get_sregs(&self) -> Result<hitz_hal::SpecialRegs, HalError> { unreachable!() }
+/// #     fn get_sregs(&self) -> Result<hitz_hal::SpecialRegs, HalError> { Ok(Default::default()) }
 /// #     fn set_sregs(&mut self, _: &hitz_hal::SpecialRegs) -> Result<(), HalError> { Ok(()) }
 /// #     fn inject_interrupt(&mut self, _: u8) -> Result<(), HalError> { Ok(()) }
 /// #     fn request_interrupt_window(&mut self) -> Result<(), HalError> { Ok(()) }

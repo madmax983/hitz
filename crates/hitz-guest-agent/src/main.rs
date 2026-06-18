@@ -290,7 +290,12 @@ mod tests {
         assert_eq!(parse_load_avg("1.23 4.56 7.89"), [1.23, 4.56, 7.89]);
         assert_eq!(parse_load_avg("1.23 4.56"), [1.23, 4.56, 0.0]);
         assert_eq!(parse_load_avg("1.23"), [1.23, 0.0, 0.0]);
-        assert_eq!(parse_load_avg(""), [0.0, 0.0, 0.0]);
+        let res = parse_load_avg("");
+        assert!(
+            (res[0] - 0.0).abs() < f32::EPSILON
+                && (res[1] - 0.0).abs() < f32::EPSILON
+                && (res[2] - 0.0).abs() < f32::EPSILON
+        );
         assert_eq!(parse_load_avg("invalid"), [0.0, 0.0, 0.0]);
         assert_eq!(parse_load_avg("1.23 invalid 7.89"), [1.23, 0.0, 7.89]);
     }
@@ -333,4 +338,59 @@ mod tests {
         let content_short = "123 (short) S 1";
         assert!(parse_proc_pid_stat(123, content_short).is_none());
     }
+}
+
+#[test]
+fn now_ms_test() {
+    let ms = now_ms();
+    assert!(ms > 0);
+}
+
+#[test]
+fn parse_load_avg_empty() {
+    let res = parse_load_avg("");
+    assert!(
+        (res[0] - 0.0).abs() < f32::EPSILON
+            && (res[1] - 0.0).abs() < f32::EPSILON
+            && (res[2] - 0.0).abs() < f32::EPSILON
+    );
+}
+
+#[test]
+fn parse_load_avg_incomplete() {
+    let res1 = parse_load_avg("1.0");
+    assert!(
+        (res1[0] - 1.0).abs() < f32::EPSILON
+            && (res1[1] - 0.0).abs() < f32::EPSILON
+            && (res1[2] - 0.0).abs() < f32::EPSILON
+    );
+    let res2 = parse_load_avg("1.0 2.0");
+    assert!(
+        (res2[0] - 1.0).abs() < f32::EPSILON
+            && (res2[1] - 2.0).abs() < f32::EPSILON
+            && (res2[2] - 0.0).abs() < f32::EPSILON
+    );
+}
+
+#[test]
+fn parse_load_avg_invalid() {
+    let res1 = parse_load_avg("a b c");
+    assert!(
+        (res1[0] - 0.0).abs() < f32::EPSILON
+            && (res1[1] - 0.0).abs() < f32::EPSILON
+            && (res1[2] - 0.0).abs() < f32::EPSILON
+    );
+    let res2 = parse_load_avg("1.0 b 3.0");
+    assert!(
+        (res2[0] - 1.0).abs() < f32::EPSILON
+            && (res2[1] - 0.0).abs() < f32::EPSILON
+            && (res2[2] - 3.0).abs() < f32::EPSILON
+    );
+}
+
+#[test]
+fn read_uptime_secs_test() {
+    // Just verify it doesn't panic. The value might be a mock or actual uptime.
+    let uptime = read_uptime_secs();
+    assert!(uptime >= 0.0);
 }
