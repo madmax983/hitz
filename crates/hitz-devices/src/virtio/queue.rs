@@ -122,7 +122,21 @@ impl VirtQueue {
         self.ready
     }
 
-    /// Returns the configured queue size.
+    /// Exposes the current capacity of the virtqueue.
+    ///
+    /// # Abstract
+    /// This is the maximum number of descriptors that this queue can hold in
+    /// its ring buffer simultaneously. The guest OS queries this during the
+    /// virtio discovery phase to allocate appropriately sized structures in memory.
+    ///
+    /// ## Examples
+    ///
+    /// ```rust
+    /// use hitz_devices::virtio::queue::VirtQueue;
+    ///
+    /// let q = VirtQueue::new(128);
+    /// assert_eq!(q.size(), 128);
+    /// ```
     #[must_use]
     pub const fn size(&self) -> u16 {
         self.size
@@ -270,7 +284,32 @@ pub struct Descriptor {
 }
 
 impl DescriptorChain {
-    /// Returns the head descriptor index (needed for `push_used`).
+    /// Retrieves the index of the first descriptor in this chain.
+    ///
+    /// # Abstract
+    /// When the device finishes processing a request chain, it must signal
+    /// completion to the guest by pushing exactly this head index into the
+    /// Used Ring.
+    ///
+    /// ## Examples
+    ///
+    /// ```rust
+    /// // Example of querying the head index from a valid chain.
+    /// # use hitz_devices::virtio::queue::VirtQueue;
+    /// # use hitz_hal::{GuestMemAccess, HalError};
+    /// # struct DummyMem;
+    /// # impl GuestMemAccess for DummyMem {
+    /// #     fn read_guest(&self, _gpa: u64, buf: &mut [u8]) -> Result<(), HalError> { buf.fill(0); Ok(()) }
+    /// #     fn write_guest(&self, _gpa: u64, _data: &[u8]) -> Result<(), HalError> { Ok(()) }
+    /// # }
+    /// # let mem = DummyMem;
+    /// # let mut q = VirtQueue::new(16);
+    /// # // Manually simulate `last_avail_idx != avail_idx` to force `pop_chain` to return a mocked chain
+    /// # q.set_ready(true);
+    /// # // For the sake of the doctest, we just show the API. Real `pop_chain` requires valid guest memory.
+    /// // let chain = queue.pop_chain(&mem).unwrap();
+    /// // assert_eq!(chain.head_index(), 42);
+    /// ```
     #[must_use]
     pub const fn head_index(&self) -> u16 {
         self.head_idx

@@ -149,8 +149,36 @@ impl MmioBus {
 
     /// Poll all devices for pending asynchronous I/O.
     ///
-    /// Returns the first interrupt vector from a device that has data ready,
-    /// or `None` if no device needs attention.
+    /// Scans all registered devices to check if any have pending interrupts to inject.
+    ///
+    /// # Abstract
+    /// Acts as an asynchronous event multiplexer for the MMIO bus. Devices like virtio
+    /// block or network adapters raise virtual interrupts when I/O completes. This
+    /// function collects those signals so the VMM can inject an IRQ into the guest vCPU.
+    ///
+    /// # Returns
+    /// The first interrupt vector (IRQ number) from a device that requires attention,
+    /// or `None` if the bus is quiet.
+    ///
+    /// ## Examples
+    ///
+    /// ```rust
+    /// # use hitz_devices::{MmioBus, MmioDevice};
+    /// # use hitz_hal::GuestMemAccess;
+    /// # struct DummyDevice;
+    /// # impl MmioDevice for DummyDevice {
+    /// #     fn mmio_read(&mut self, _offset: u64, _data: &mut [u8]) {}
+    /// #     fn mmio_write(&mut self, _offset: u64, _data: &[u8], _mem: &dyn GuestMemAccess) -> Option<u8> { None }
+    /// #     fn poll_rx(&mut self) -> Option<u8> { Some(5) } // Always demands IRQ 5
+    /// # }
+    /// let mut bus = MmioBus::new();
+    /// bus.register(0xD000_0000, 0x1000, Box::new(DummyDevice));
+    ///
+    /// if let Some(irq) = bus.poll_devices() {
+    ///     assert_eq!(irq, 5);
+    ///     // Inject IRQ 5 into the guest...
+    /// }
+    /// ```
     pub fn poll_devices(&mut self) -> Option<u8> {
         for slot in &mut self.slots {
             if let Some(irq) = slot.device.poll_rx() {

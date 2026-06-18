@@ -101,7 +101,26 @@ impl<W: Write> SerialDevice<W> {
 
     /// Handle an IN instruction (device → guest read).
     ///
-    /// Returns the register value for the given port.
+    /// Reads a byte from the specified virtual COM1 register.
+    ///
+    /// # Abstract
+    /// Simulates the CPU executing an `IN` instruction. Depending on the requested
+    /// I/O port offset, this may return the Line Status Register (LSR) ready bits,
+    /// or other legacy UART states required by the guest Linux kernel to initialize
+    /// the early boot console.
+    ///
+    /// ## Examples
+    ///
+    /// ```rust
+    /// use hitz_devices::SerialDevice;
+    ///
+    /// let mut serial = SerialDevice::new(Vec::new());
+    ///
+    /// // Port 0x3FD is the Line Status Register (LSR).
+    /// // The device will report that the transmitter is empty and ready.
+    /// let lsr = serial.pio_read(0x3FD);
+    /// assert_ne!(lsr & 0x60, 0); // THRE (bit 5) and TEMT (bit 6) should be set
+    /// ```
     pub fn pio_read(&mut self, port: u16) -> u8 {
         // Safe: callers gate on handles_port(), so offset is 0..7.
         #[allow(clippy::cast_possible_truncation)]

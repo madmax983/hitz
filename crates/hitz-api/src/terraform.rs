@@ -32,7 +32,34 @@ use std::fmt::Write as _;
 
 /// Trait to export structures to Terraform HCL representation.
 pub trait ToTerraform {
-    /// Returns the Terraform HCL representation as a String.
+    /// Serializes the implementor into a Terraform Infrastructure-as-Code resource block.
+    ///
+    /// # Abstract
+    /// Converts a configuration blueprint into a `resource "hitz_vm" "{resource_name}"`
+    /// block. This is useful for users automating their infrastructure deployments.
+    ///
+    /// ## Examples
+    ///
+    /// ```rust
+    /// use hitz_api::{VmConfig, ToTerraform, GuestAgentMode};
+    /// use std::path::PathBuf;
+    ///
+    /// let config = VmConfig {
+    ///     kernel_path: PathBuf::from("/vmlinux"),
+    ///     initramfs_path: None,
+    ///     disk_path: None,
+    ///     ram_mib: 512,
+    ///     cpus: 1,
+    ///     cmdline: None,
+    ///     net: None,
+    ///     ports: vec![],
+    ///     guest_cid: 3,
+    ///     guest_agent: GuestAgentMode::Auto,
+    /// };
+    ///
+    /// let hcl = config.to_terraform("my-worker");
+    /// assert!(hcl.contains("resource \"hitz_vm\" \"my-worker\""));
+    /// ```
     fn to_terraform(&self, resource_name: &str) -> String;
 }
 

@@ -257,13 +257,30 @@ pub fn parse_mac(s: &str) -> Result<[u8; 6], String> {
     Ok(mac)
 }
 
-/// Parse a CIDR notation string like "192.168.100.1/24".
+/// Splits a CIDR notation string into its constituent IPv4 address and prefix length.
 ///
-/// Returns the IPv4 address and prefix length.
+/// # Abstract
+/// Used during CLI parsing to convert a human-readable network block (e.g., "10.0.0.1/24")
+/// into the raw byte arrays and bit counts required by the `wintun` interface setup and
+/// the micro-VM's network stack.
+///
+/// # Returns
+/// A tuple containing the 4-byte IPv4 address and the prefix length.
 ///
 /// # Errors
 ///
-/// Returns an error string if the format is invalid.
+/// Returns a descriptive error string if the input is malformed, lacks a slash,
+/// or contains invalid octets/prefix sizes.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_net::ethernet::parse_cidr;
+///
+/// let (ip, prefix) = parse_cidr("192.168.100.1/24").unwrap();
+/// assert_eq!(ip, [192, 168, 100, 1]);
+/// assert_eq!(prefix, 24);
+/// ```
 pub fn parse_cidr(s: &str) -> Result<([u8; 4], u8), String> {
     if s.len() > 18 {
         return Err(format!("input too long for CIDR (len {})", s.len()));

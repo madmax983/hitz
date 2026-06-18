@@ -65,7 +65,28 @@ impl VirtioBlockDevice {
         Ok(Self { disk, capacity })
     }
 
-    /// Returns the disk capacity in 512-byte sectors.
+    /// Reports the size of the backing file in 512-byte sectors.
+    ///
+    /// # Abstract
+    /// The guest OS queries this value via the device configuration space
+    /// to determine the maximum addressable LBA (Logical Block Address) of the virtual disk.
+    ///
+    /// ## Examples
+    ///
+    /// ```rust
+    /// use std::fs::File;
+    /// use hitz_devices::virtio::VirtioBlockDevice;
+    ///
+    /// # fn main() -> std::io::Result<()> {
+    /// # let temp = tempfile::tempfile()?;
+    /// # temp.set_len(1024)?;
+    /// let dev = VirtioBlockDevice::new(temp)?;
+    ///
+    /// // 1024 bytes = 2 sectors (512 bytes each).
+    /// assert_eq!(dev.capacity(), 2);
+    /// # Ok(())
+    /// # }
+    /// ```
     #[must_use]
     pub const fn capacity(&self) -> u64 {
         self.capacity
@@ -73,8 +94,16 @@ impl VirtioBlockDevice {
 
     /// Process a single block request from a descriptor chain.
     ///
-    /// Returns the total bytes written to device-writable descriptors
-    /// (data + status byte).
+    /// Executes a single block I/O request.
+    ///
+    /// # Abstract
+    /// Dissects the virtqueue descriptor chain into a Header (LBA, read vs. write),
+    /// Data buffer, and Status byte. It bounds checks the request, performs the
+    /// synchronous File I/O on the host, and updates the Status byte in guest memory.
+    ///
+    /// # Returns
+    /// The total number of bytes written to the guest memory (device-writable descriptors).
+    /// This is strictly used to update the length field in the Used Ring.
     fn process_request(
         &mut self,
         chain: &mut crate::virtio::queue::DescriptorChain,

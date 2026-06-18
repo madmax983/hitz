@@ -76,7 +76,20 @@ impl std::fmt::Display for VmAction {
 }
 
 impl VmAction {
-    /// Returns the gerund form of the action (e.g., "Starting", "Stopping").
+    /// Converts the action into its active, continuous tense.
+    ///
+    /// # Abstract
+    /// Useful for logging or displaying progress messages to the user while an
+    /// asynchronous VM operation is in flight.
+    ///
+    /// ## Examples
+    ///
+    /// ```rust
+    /// use hitz_api::VmAction;
+    ///
+    /// assert_eq!(VmAction::Start.gerund(), "Starting");
+    /// assert_eq!(VmAction::Restart.gerund(), "Restarting");
+    /// ```
     #[must_use]
     pub const fn gerund(&self) -> &'static str {
         match self {
@@ -86,7 +99,19 @@ impl VmAction {
         }
     }
 
-    /// Returns the past tense form of the action (e.g., "started", "stopped").
+    /// Converts the action into its completed, past tense.
+    ///
+    /// # Abstract
+    /// Useful for generating success notifications or audit logs after a VM
+    /// lifecycle command completes successfully.
+    ///
+    /// ## Examples
+    ///
+    /// ```rust
+    /// use hitz_api::VmAction;
+    ///
+    /// assert_eq!(VmAction::Stop.past_tense(), "stopped");
+    /// ```
     #[must_use]
     pub const fn past_tense(&self) -> &'static str {
         match self {
