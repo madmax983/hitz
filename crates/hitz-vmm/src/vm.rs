@@ -558,7 +558,7 @@ fn setup_devices(
     if let Some(ref disk_path) = config.disk_path {
         let disk_file = fs::File::open(disk_path)?;
         let block_dev = VirtioBlockDevice::new(disk_file)?;
-        let mem: Arc<dyn GuestMemAccess> = guest_mem_arc.clone();
+        let mem: Arc<dyn GuestMemAccess> = Arc::clone(guest_mem_arc) as _;
         let transport = VirtioMmioTransport::new(block_dev, mem, VIRTIO_IRQ_BASE);
         mmio_bus.register(VIRTIO_MMIO_BASE, VIRTIO_MMIO_SIZE, Box::new(transport));
     }
@@ -575,7 +575,7 @@ fn setup_devices(
 
         let (net_dev, tx_receiver, rx_sender) = VirtioNetDevice::new(guest_mac);
 
-        let mem: Arc<dyn GuestMemAccess> = guest_mem_arc.clone();
+        let mem: Arc<dyn GuestMemAccess> = Arc::clone(guest_mem_arc) as _;
         let net_transport = VirtioMmioTransport::new(net_dev, mem, VIRTIO_IRQ_NET);
         let net_base = VIRTIO_MMIO_BASE + VIRTIO_MMIO_SIZE;
         mmio_bus.register(net_base, VIRTIO_MMIO_SIZE, Box::new(net_transport));
@@ -600,7 +600,7 @@ fn setup_devices(
     if let Some((rx_receiver, tx_sender)) = extras.vsock_channels.take() {
         let vsock_dev = VirtioVsockDevice::with_channels(config.guest_cid, rx_receiver, tx_sender);
         let vsock_base = VIRTIO_MMIO_BASE + VIRTIO_MMIO_SIZE * 2;
-        let vsock_mem: Arc<dyn GuestMemAccess> = guest_mem_arc.clone();
+        let vsock_mem: Arc<dyn GuestMemAccess> = Arc::clone(guest_mem_arc) as _;
         let vsock_transport = VirtioMmioTransport::new(vsock_dev, vsock_mem, VIRTIO_IRQ_VSOCK);
         mmio_bus.register(vsock_base, VIRTIO_MMIO_SIZE, Box::new(vsock_transport));
     }
@@ -665,7 +665,7 @@ fn run_multi_vcpu<H: Hypervisor>(
             let mem = Arc::clone(&guest_mem_arc);
             let stop = Arc::clone(&stop_flag);
             let cancel_handles = Arc::clone(&shared_handles);
-            let tx = exit_tx.clone();
+            let tx = mpsc::Sender::clone(&exit_tx);
 
             std::thread::Builder::new()
                 .name(format!("vcpu-{idx}"))
@@ -689,14 +689,13 @@ fn run_multi_vcpu<H: Hypervisor>(
                     let exit = match result {
                         Ok(r) => r,
                         Err(payload) => {
-                            let msg = payload.downcast_ref::<&str>().map_or_else(
-                                || {
-                                    payload
-                                        .downcast_ref::<String>()
-                                        .map_or_else(|| "unknown panic".to_string(), Clone::clone)
-                                },
-                                |s| (*s).to_string(),
-                            );
+                            let msg = if let Some(s) = payload.downcast_ref::<&str>() {
+                                *s
+                            } else if let Some(s) = payload.downcast_ref::<String>() {
+                                s.as_str()
+                            } else {
+                                "unknown panic"
+                            };
                             Ok(ExitReason::Unexpected(format!(
                                 "vCPU {idx} panicked: {msg}"
                             )))
