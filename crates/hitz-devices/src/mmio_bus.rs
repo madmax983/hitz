@@ -90,8 +90,11 @@ impl MmioBus {
     /// # Panics
     /// Panics if the requested address range overlaps with an already registered device.
     pub fn register(&mut self, base_gpa: u64, size: u64, device: Box<dyn MmioDevice>) {
+        let end_gpa = base_gpa
+            .checked_add(size)
+            .expect("MMIO region overflows address space");
+
         for slot in &self.slots {
-            let end_gpa = base_gpa + size;
             let slot_end = slot.base + slot.size;
             assert!(
                 !(base_gpa < slot_end && end_gpa > slot.base),
