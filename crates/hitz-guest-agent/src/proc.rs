@@ -32,7 +32,26 @@ impl CpuSample {
     }
 }
 
-/// Calculate CPU utilisation % between two samples.
+/// Calculate CPU utilisation percentage between two consecutive samples.
+///
+/// # Abstract
+/// Computes the CPU utilization percentage by comparing the active and total
+/// ticks between a previous and current [`CpuSample`]. It uses the difference
+/// over time to determine the actual usage rather than the lifetime average.
+///
+/// # The Hero's Journey
+///
+/// ```rust
+/// use hitz_guest_agent::proc::{CpuSample, cpu_pct};
+///
+/// let t1 = CpuSample { user: 100, nice: 0, system: 50, idle: 850, iowait: 0, irq: 0, softirq: 0 };
+/// let t2 = CpuSample { user: 150, nice: 0, system: 75, idle: 1775, iowait: 0, irq: 0, softirq: 0 };
+///
+/// // Between t1 and t2, active ticks increased by 75, and idle ticks increased by 925.
+/// // Total delta = 1000. 75 / 1000 = 7.5% CPU utilization.
+/// let pct = cpu_pct(&t1, &t2);
+/// assert!((pct - 7.5).abs() < f32::EPSILON);
+/// ```
 #[must_use]
 pub fn cpu_pct(prev: &CpuSample, curr: &CpuSample) -> f32 {
     let total_delta = curr.total().saturating_sub(prev.total());
@@ -47,6 +66,23 @@ pub fn cpu_pct(prev: &CpuSample, curr: &CpuSample) -> f32 {
 }
 
 /// Parse `/proc/stat` into per-CPU samples (index 0 = aggregate "cpu" line).
+///
+/// # Abstract
+/// Extracts CPU timing information from the raw text of `/proc/stat`. The
+/// resulting vector contains the aggregate CPU usage as the first element,
+/// followed by individual core statistics.
+///
+/// # The Hero's Journey
+///
+/// ```rust
+/// use hitz_guest_agent::proc::parse_proc_stat_sample;
+///
+/// let content = "cpu  1234 56 789 1000 0 0 0\ncpu0 1234 56 789 1000 0 0 0\n";
+/// let samples = parse_proc_stat_sample(content);
+///
+/// assert_eq!(samples.len(), 2);
+/// assert_eq!(samples[0].user, 1234);
+/// ```
 #[must_use]
 pub fn parse_proc_stat_sample(content: &str) -> Vec<CpuSample> {
     content
@@ -72,6 +108,23 @@ pub fn parse_proc_stat_sample(content: &str) -> Vec<CpuSample> {
 
 /// Parse `/proc/meminfo` into [`MemoryMetrics`].
 ///
+/// # Abstract
+/// Converts the key-value pairs of `/proc/meminfo` into a structured
+/// [`MemoryMetrics`] object, translating kibibytes into bytes.
+///
+/// # The Hero's Journey
+///
+/// ```rust
+/// use hitz_guest_agent::proc::parse_proc_meminfo;
+///
+/// let content = "MemTotal:       2048000 kB\nMemFree:         512000 kB\nBuffers:          10240 kB\nCached:           20480 kB\nSwapTotal:            0 kB\nSwapFree:             0 kB\n";
+/// let metrics = parse_proc_meminfo(content).expect("Valid meminfo");
+///
+/// assert_eq!(metrics.total_bytes, 2048000 * 1024);
+/// assert_eq!(metrics.free_bytes, 512000 * 1024);
+/// ```
+///
+/// # Details
 /// Returns `None` if `MemTotal` is missing.
 #[must_use]
 pub fn parse_proc_meminfo(content: &str) -> Option<MemoryMetrics> {
@@ -120,6 +173,24 @@ pub fn parse_proc_meminfo(content: &str) -> Option<MemoryMetrics> {
 
 /// Parse `/proc/diskstats` into a list of [`DiskMetrics`].
 ///
+/// # Abstract
+/// Decodes the space-separated output of `/proc/diskstats` to extract read
+/// and write operations for each block device, converting sector counts into byte counts.
+///
+/// # The Hero's Journey
+///
+/// ```rust
+/// use hitz_guest_agent::proc::parse_proc_diskstats;
+///
+/// let content = "   8       0 vda 100 0 800 20 50 0 400 10 0 30 30\n";
+/// let disks = parse_proc_diskstats(content);
+///
+/// assert_eq!(disks.len(), 1);
+/// assert_eq!(disks[0].name, "vda");
+/// assert_eq!(disks[0].read_bytes, 800 * 512); // sectors converted to bytes
+/// ```
+///
+/// # Details
 /// Only includes devices with entries present in the file.
 #[must_use]
 pub fn parse_proc_diskstats(content: &str) -> Vec<DiskMetrics> {
@@ -148,7 +219,28 @@ pub fn parse_proc_diskstats(content: &str) -> Vec<DiskMetrics> {
 
 /// Parse `/proc/net/dev` into a list of [`NetMetrics`].
 ///
-/// Skips the two header lines and the loopback interface.
+/// # Abstract
+/// Scrapes the network interface statistics from `/proc/net/dev`, extracting
+/// byte and packet counters for both transmission and reception.
+///
+/// # The Hero's Journey
+///
+/// ```rust
+/// use hitz_guest_agent::proc::parse_proc_net_dev;
+///
+/// let content = "Inter-|   Receive                                                |  Transmit\n\
+///                face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed\n\
+///                eth0:    5000     40    0    0    0     0          0         0     2000      20    0    0    0     0       0          0\n";
+/// let nets = parse_proc_net_dev(content);
+///
+/// assert_eq!(nets.len(), 1);
+/// assert_eq!(nets[0].interface, "eth0");
+/// assert_eq!(nets[0].rx_bytes, 5000);
+/// assert_eq!(nets[0].tx_bytes, 2000);
+/// ```
+///
+/// # Details
+/// Skips the two header lines and the loopback (`lo`) interface.
 #[must_use]
 pub fn parse_proc_net_dev(content: &str) -> Vec<NetMetrics> {
     content
