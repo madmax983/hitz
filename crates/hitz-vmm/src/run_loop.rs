@@ -53,6 +53,13 @@ fn record_exit(counter: &Counter<u64>, reason: &'static str) {
     counter.add(1, &[KeyValue::new("exit_reason", reason)]);
 }
 
+#[allow(clippy::expect_used)]
+fn lock_devices<W: Write>(
+    devices: &Mutex<SharedDevices<W>>,
+) -> std::sync::MutexGuard<'_, SharedDevices<W>> {
+    devices.lock().expect("device lock poisoned")
+}
+
 /// Run a vCPU in a loop, dispatching I/O and MMIO exits to devices.
 ///
 /// # Abstract
@@ -162,11 +169,13 @@ fn poll_devices<V: Vcpu, W: Write>(
     devices: &Mutex<SharedDevices<W>>,
     pending_irq: &mut Option<u8>,
 ) -> Result<(), HalError> {
-    let mut devs = devices.lock().expect("device lock poisoned");
+    let mut devs = lock_devices(devices);
     let pending_vector = devs.mmio_bus.poll_devices();
     drop(devs);
 
-    let Some(vector) = pending_vector else { return Ok(()); };
+    let Some(vector) = pending_vector else {
+        return Ok(());
+    };
     if vcpu.inject_interrupt(vector).is_err() {
         *pending_irq = Some(vector);
         vcpu.request_interrupt_window()?;
@@ -183,37 +192,40 @@ fn dispatch_exit<V: Vcpu, W: Write>(
     pending_irq: &mut Option<u8>,
     exit_counter: &Counter<u64>,
 ) -> Result<Option<ExitReason>, HalError> {
+    let reason_label = match &exit {
+        VcpuExit::IoPort(_) => "IoPort",
+        VcpuExit::Halt => "Halt",
+        VcpuExit::Shutdown => "Shutdown",
+        VcpuExit::Mmio(_) => "Mmio",
+        VcpuExit::InterruptWindow => "InterruptWindow",
+        VcpuExit::Canceled => "Canceled",
+        VcpuExit::Unknown(_) => "Unexpected",
+    };
+    record_exit(exit_counter, reason_label);
+
     match exit {
         VcpuExit::IoPort(io) => {
-            record_exit(exit_counter, "IoPort");
-            let mut devs = devices.lock().expect("device lock poisoned");
+            let mut devs = lock_devices(devices);
             handle_io_port(vcpu, &mut devs.serial, &io)?;
             Ok(None)
         }
-        VcpuExit::Halt => {
-            record_exit(exit_counter, "Halt");
-            Ok(Some(ExitReason::Halt))
-        }
-        VcpuExit::Shutdown => {
-            record_exit(exit_counter, "Shutdown");
-            Ok(Some(ExitReason::Shutdown))
-        }
+        VcpuExit::Halt => Ok(Some(ExitReason::Halt)),
+        VcpuExit::Shutdown => Ok(Some(ExitReason::Shutdown)),
         VcpuExit::Mmio(mmio) => {
-            record_exit(exit_counter, "Mmio");
             handle_mmio(vcpu, devices, mem, &mmio, pending_irq)?;
             Ok(None)
         }
         VcpuExit::InterruptWindow => {
-            record_exit(exit_counter, "InterruptWindow");
             // Guest is now interruptible. WHP auto-clears the
             // deliverability notification after this exit fires.
-            let Some(vector) = pending_irq.take() else { return Ok(None); };
+            let Some(vector) = pending_irq.take() else {
+                return Ok(None);
+            };
             vcpu.inject_interrupt(vector)?;
             tracing::debug!(vector, "deferred interrupt injected via interrupt window");
             Ok(None)
         }
         VcpuExit::Canceled => {
-            record_exit(exit_counter, "Canceled");
             // vCPU run was canceled (e.g. by another thread).
             // If we have a pending IRQ, re-request the interrupt window
             // so we get notified once the guest becomes interruptible.
@@ -222,12 +234,9 @@ fn dispatch_exit<V: Vcpu, W: Write>(
             }
             Ok(None)
         }
-        VcpuExit::Unknown(code) => {
-            record_exit(exit_counter, "Unexpected");
-            Ok(Some(ExitReason::Unexpected(format!(
-                "unknown vCPU exit reason: {code:#x}"
-            ))))
-        }
+        VcpuExit::Unknown(code) => Ok(Some(ExitReason::Unexpected(format!(
+            "unknown vCPU exit reason: {code:#x}"
+        )))),
     }
 }
 
@@ -283,7 +292,7 @@ fn handle_mmio_read<V: Vcpu, W: Write>(
     let size = usize::from(decoded.size).min(8);
     let mut data = [0u8; 8];
     {
-        let mut devs = devices.lock().expect("device lock poisoned");
+        let mut devs = lock_devices(devices);
         devs.mmio_bus.read(mmio.gpa.as_u64(), &mut data[..size]);
     }
     let value = u64::from_le_bytes(data);
@@ -315,12 +324,14 @@ fn handle_mmio_write<V: Vcpu, W: Write>(
 
     // Lock → device write → unlock, then handle IRQ.
     let irq = {
-        let mut devs = devices.lock().expect("device lock poisoned");
+        let mut devs = lock_devices(devices);
         devs.mmio_bus.write(mmio.gpa.as_u64(), &data[..size], mem)
     };
     advance_rip(vcpu, instr_len)?;
 
-    let Some(vector) = irq else { return Ok(()); };
+    let Some(vector) = irq else {
+        return Ok(());
+    };
     // Try to inject immediately. If the guest has IF=0
     // (interrupts disabled) or is in interrupt shadow,
     // WHP rejects the injection — stash the IRQ and
@@ -1201,7 +1212,7 @@ mod tests {
         });
 
         let _ = std::panic::catch_unwind(|| {
-            let _guard = devices.lock().expect("device lock poisoned");
+            let _guard = lock_devices(devices);
             panic!("poisoning");
         });
 
@@ -1223,7 +1234,7 @@ mod tests {
         });
 
         let _ = std::panic::catch_unwind(|| {
-            let _guard = devices.lock().expect("device lock poisoned");
+            let _guard = lock_devices(devices);
             panic!("poisoning");
         });
 
@@ -1264,7 +1275,7 @@ mod tests {
         });
 
         let _ = std::panic::catch_unwind(|| {
-            let _guard = devices.lock().expect("device lock poisoned");
+            let _guard = lock_devices(devices);
             panic!("poisoning");
         });
 
@@ -1310,7 +1321,7 @@ mod tests {
         });
 
         let _ = std::panic::catch_unwind(|| {
-            let _guard = devices.lock().expect("device lock poisoned");
+            let _guard = lock_devices(devices);
             panic!("poisoning");
         });
 
@@ -1356,7 +1367,7 @@ mod tests {
         });
 
         let _ = std::panic::catch_unwind(|| {
-            let _guard = devices.lock().expect("device lock poisoned");
+            let _guard = lock_devices(devices);
             panic!("poisoning");
         });
 
@@ -1378,7 +1389,7 @@ mod tests {
         });
 
         let _ = std::panic::catch_unwind(|| {
-            let _guard = devices.lock().expect("device lock poisoned");
+            let _guard = lock_devices(devices);
             panic!("poisoning");
         });
 
@@ -1419,7 +1430,7 @@ mod tests {
         });
 
         let _ = std::panic::catch_unwind(|| {
-            let _guard = devices.lock().expect("device lock poisoned");
+            let _guard = lock_devices(devices);
             panic!("poisoning");
         });
 
@@ -1465,7 +1476,7 @@ mod tests {
         });
 
         let _ = std::panic::catch_unwind(|| {
-            let _guard = devices.lock().expect("device lock poisoned");
+            let _guard = lock_devices(devices);
             panic!("poisoning");
         });
 
@@ -1511,7 +1522,7 @@ mod tests {
         });
 
         let _ = std::panic::catch_unwind(|| {
-            let _guard = devices.lock().expect("device lock poisoned");
+            let _guard = lock_devices(devices);
             panic!("poisoning");
         });
 
@@ -1534,7 +1545,7 @@ mod tests {
         });
 
         let _ = std::panic::catch_unwind(|| {
-            let _guard = devices.lock().expect("device lock poisoned");
+            let _guard = lock_devices(devices);
             panic!("poisoning");
         });
 
@@ -1556,7 +1567,7 @@ mod tests {
         });
 
         let _ = std::panic::catch_unwind(|| {
-            let _guard = devices.lock().expect("device lock poisoned");
+            let _guard = lock_devices(devices);
             panic!("poisoning");
         });
 
