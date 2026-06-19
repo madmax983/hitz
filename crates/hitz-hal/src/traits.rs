@@ -269,3 +269,162 @@ pub trait Vcpu: Send {
     /// IF=1 and the vCPU is not in an interrupt shadow.
     fn request_interrupt_window(&mut self) -> Result<(), HalError>;
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct DummyVcpu;
+
+    impl Vcpu for DummyVcpu {
+        type CancelHandle = ();
+        fn run(&mut self) -> Result<VcpuExit, HalError> {
+            Ok(VcpuExit::Canceled)
+        }
+        fn cancel_handle(&self) -> Self::CancelHandle {}
+        fn cancel_via(_handle: &Self::CancelHandle) -> Result<(), HalError> {
+            Ok(())
+        }
+        fn get_regs(&self) -> Result<StandardRegs, HalError> {
+            Ok(StandardRegs::default())
+        }
+        fn set_regs(&mut self, _regs: &StandardRegs) -> Result<(), HalError> {
+            Ok(())
+        }
+        fn get_sregs(&self) -> Result<SpecialRegs, HalError> {
+            Ok(SpecialRegs::default())
+        }
+        fn set_sregs(&mut self, _sregs: &SpecialRegs) -> Result<(), HalError> {
+            Ok(())
+        }
+        fn inject_interrupt(&mut self, _vector: u8) -> Result<(), HalError> {
+            Ok(())
+        }
+        fn request_interrupt_window(&mut self) -> Result<(), HalError> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn test_vcpu_cancel() {
+        let vcpu = DummyVcpu;
+        assert!(vcpu.cancel().is_ok());
+    }
+}
+
+#[cfg(test)]
+mod mem_tests {
+    use super::*;
+
+    struct DummyMem;
+
+    impl GuestMemAccess for DummyMem {
+        fn read_guest(&self, _gpa: u64, _buf: &mut [u8]) -> Result<(), HalError> {
+            Ok(())
+        }
+        fn write_guest(&self, _gpa: u64, _data: &[u8]) -> Result<(), HalError> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn test_guest_mem_access() {
+        let mem = DummyMem;
+        let mut buf = [0u8; 4];
+        assert!(mem.read_guest(0, &mut buf).is_ok());
+        assert!(mem.write_guest(0, &buf).is_ok());
+    }
+}
+
+#[cfg(test)]
+mod hypervisor_tests {
+    use super::*;
+
+    struct DummyVcpu;
+
+    impl Vcpu for DummyVcpu {
+        type CancelHandle = ();
+        fn run(&mut self) -> Result<VcpuExit, HalError> {
+            Ok(VcpuExit::Canceled)
+        }
+        fn cancel_handle(&self) -> Self::CancelHandle {}
+        fn cancel_via(_handle: &Self::CancelHandle) -> Result<(), HalError> {
+            Ok(())
+        }
+        fn get_regs(&self) -> Result<StandardRegs, HalError> {
+            Ok(StandardRegs::default())
+        }
+        fn set_regs(&mut self, _regs: &StandardRegs) -> Result<(), HalError> {
+            Ok(())
+        }
+        fn get_sregs(&self) -> Result<SpecialRegs, HalError> {
+            Ok(SpecialRegs::default())
+        }
+        fn set_sregs(&mut self, _sregs: &SpecialRegs) -> Result<(), HalError> {
+            Ok(())
+        }
+        fn inject_interrupt(&mut self, _vector: u8) -> Result<(), HalError> {
+            Ok(())
+        }
+        fn request_interrupt_window(&mut self) -> Result<(), HalError> {
+            Ok(())
+        }
+    }
+
+    struct DummyPartition;
+
+    impl Partition for DummyPartition {
+        type Vcpu = DummyVcpu;
+        unsafe fn map_memory(
+            &mut self,
+            _gpa: Gpa,
+            _hva: *mut u8,
+            _size: usize,
+            _flags: MemFlags,
+        ) -> Result<(), HalError> {
+            Ok(())
+        }
+        fn unmap_memory(&mut self, _gpa: Gpa, _size: usize) -> Result<(), HalError> {
+            Ok(())
+        }
+        fn create_vcpu(&mut self, _id: VcpuId) -> Result<Self::Vcpu, HalError> {
+            Ok(DummyVcpu)
+        }
+        fn request_interrupt(&self, _vcpu_id: VcpuId, _vector: u8) -> Result<(), HalError> {
+            Ok(())
+        }
+    }
+
+    struct DummyHypervisor;
+
+    impl Hypervisor for DummyHypervisor {
+        type Partition = DummyPartition;
+        fn create_partition(&self, _cfg: &PartitionConfig) -> Result<Self::Partition, HalError> {
+            Ok(DummyPartition)
+        }
+    }
+
+    #[test]
+    fn test_hypervisor_and_partition() -> Result<(), HalError> {
+        use crate::newtypes::{Gpa, MemSizeMiB, VcpuId};
+        use crate::types::MemFlags;
+        use std::ptr;
+
+        let hv = DummyHypervisor;
+        let config = PartitionConfig {
+            vcpu_count: 1,
+            memory_size: MemSizeMiB::new(1),
+        };
+        let mut part = hv.create_partition(&config)?;
+        assert!(part.create_vcpu(VcpuId::new(0)).is_ok());
+        unsafe {
+            assert!(
+                part.map_memory(Gpa::new(0), ptr::null_mut(), 0, MemFlags::READ_WRITE)
+                    .is_ok()
+            );
+        }
+        assert!(part.unmap_memory(Gpa::new(0), 0).is_ok());
+        assert!(part.request_interrupt(VcpuId::new(0), 0).is_ok());
+        Ok(())
+    }
+}

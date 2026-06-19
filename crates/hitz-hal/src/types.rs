@@ -419,3 +419,65 @@ pub struct InterruptRequest {
     /// Interrupt vector number.
     pub vector: u8,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_partition_config() {
+        let config = PartitionConfig {
+            vcpu_count: 2,
+            memory_size: MemSizeMiB::new(1024),
+        };
+        assert_eq!(config.vcpu_count, 2);
+        assert_eq!(config.memory_size.as_mib(), 1024);
+    }
+
+    #[test]
+    fn test_vcpu_exit_variants() {
+        let _ = VcpuExit::Halt;
+        let _ = VcpuExit::InterruptWindow;
+        let _ = VcpuExit::Canceled;
+        let _ = VcpuExit::Shutdown;
+        let _ = VcpuExit::Unknown(1);
+    }
+
+    #[test]
+    fn test_interrupt_request() {
+        let req = InterruptRequest {
+            vcpu_id: VcpuId::new(0),
+            vector: 32,
+        };
+        assert_eq!(req.vcpu_id.as_u32(), 0);
+        assert_eq!(req.vector, 32);
+    }
+
+    #[test]
+    fn test_mmio_exit() {
+        let exit = MmioExit {
+            gpa: Gpa::new(0x1000),
+            data: [0x42; 8],
+            len: 4,
+            is_write: true,
+            instruction_len: 3,
+            instruction_bytes: [0; 16],
+            instruction_byte_count: 0,
+        };
+        assert_eq!(exit.gpa.as_u64(), 0x1000);
+        assert!(exit.is_write);
+    }
+
+    #[test]
+    fn test_io_port_exit() {
+        let exit = IoPortExit {
+            port: 0x3F8,
+            data: [0x41, 0, 0, 0],
+            len: 1,
+            is_write: true,
+            instruction_len: 2,
+        };
+        assert_eq!(exit.port, 0x3F8);
+        assert!(exit.is_write);
+    }
+}

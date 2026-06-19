@@ -283,3 +283,37 @@ pub struct ProcMetrics {
     /// Process state character (e.g., 'R' for running, 'S' for sleeping).
     pub state: char,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_metrics_snapshot_deserialization() -> Result<(), serde_json::Error> {
+        let json = r#"{
+            "timestamp_ms": 1700000000000,
+            "cpu": {
+                "total_pct": 12.5,
+                "per_core": [10.0, 15.0],
+                "load_avg": [0.5, 0.4, 0.3]
+            },
+            "memory": {
+                "total_bytes": 268435456,
+                "used_bytes": 104857600,
+                "free_bytes": 163577856,
+                "buffers_bytes": 0,
+                "cached_bytes": 0,
+                "swap_total": 0,
+                "swap_used": 0
+            },
+            "disks": [],
+            "networks": [],
+            "processes": []
+        }"#;
+
+        let snap: MetricsSnapshot = serde_json::from_str(json)?;
+        assert_eq!(snap.timestamp_ms, 1_700_000_000_000);
+        assert!((snap.cpu.total_pct - 12.5).abs() < f32::EPSILON);
+        Ok(())
+    }
+}

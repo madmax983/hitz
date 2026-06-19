@@ -110,3 +110,88 @@ pub enum HalError {
         message: String,
     },
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_hal_error_display() {
+        let err = HalError::CreatePartition("test".to_string());
+        assert_eq!(err.to_string(), "failed to create partition: test");
+
+        let err = HalError::MapMemory {
+            gpa: 0x1000,
+            size: 4096,
+            reason: "oom".to_string(),
+        };
+        assert_eq!(
+            err.to_string(),
+            "failed to map guest memory at GPA 0x1000, size 0x1000: oom"
+        );
+    }
+
+    #[test]
+    fn test_hal_error_display_all() {
+        assert_eq!(
+            HalError::SetupPartition("test".to_string()).to_string(),
+            "failed to set partition property: test"
+        );
+        assert_eq!(
+            HalError::UnmapMemory {
+                gpa: 0x1000,
+                reason: "err".to_string()
+            }
+            .to_string(),
+            "failed to unmap guest memory at GPA 0x1000: err"
+        );
+        assert_eq!(
+            HalError::CreateVcpu {
+                vcpu_id: 1,
+                reason: "err".to_string()
+            }
+            .to_string(),
+            "failed to create vCPU 1: err"
+        );
+        assert_eq!(
+            HalError::VcpuRun("test".to_string()).to_string(),
+            "vCPU run failed: test"
+        );
+        assert_eq!(
+            HalError::VcpuCancel("test".to_string()).to_string(),
+            "failed to cancel vCPU: test"
+        );
+        assert_eq!(
+            HalError::RegisterAccess("test".to_string()).to_string(),
+            "register access failed: test"
+        );
+        assert_eq!(
+            HalError::InterruptRequest("test".to_string()).to_string(),
+            "interrupt request failed: test"
+        );
+        assert_eq!(
+            HalError::GuestMem {
+                gpa: 0x1000,
+                reason: "test".to_string()
+            }
+            .to_string(),
+            "guest memory access at GPA 0x1000: test"
+        );
+        assert_eq!(
+            HalError::InjectInterrupt("test".to_string()).to_string(),
+            "interrupt injection failed: test"
+        );
+        assert_eq!(
+            HalError::NotAvailable("test".to_string()).to_string(),
+            "hypervisor not available: test"
+        );
+        assert_eq!(
+            HalError::Platform {
+                code: 1,
+                message: "test".to_string()
+            }
+            .to_string(),
+            "platform error (code 0x1): test"
+        );
+    }
+}

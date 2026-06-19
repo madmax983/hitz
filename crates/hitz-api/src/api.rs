@@ -292,3 +292,54 @@ pub struct ApiError {
     /// A human-readable, descriptive error message explaining the failure.
     pub message: String,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::{GuestAgentMode, VmConfig};
+    use std::path::PathBuf;
+
+    #[test]
+    fn test_vm_action_display() {
+        assert_eq!(VmAction::Start.to_string(), "start");
+        assert_eq!(VmAction::Stop.to_string(), "stop");
+        assert_eq!(VmAction::Restart.to_string(), "restart");
+    }
+
+    #[test]
+    fn test_vm_action_gerund() {
+        assert_eq!(VmAction::Start.gerund(), "Starting");
+        assert_eq!(VmAction::Stop.gerund(), "Stopping");
+        assert_eq!(VmAction::Restart.gerund(), "Restarting");
+    }
+
+    #[test]
+    fn test_vm_action_past_tense() {
+        assert_eq!(VmAction::Start.past_tense(), "started");
+        assert_eq!(VmAction::Stop.past_tense(), "stopped");
+        assert_eq!(VmAction::Restart.past_tense(), "restarted");
+    }
+
+    #[test]
+    fn test_create_vm_request() -> Result<(), serde_json::Error> {
+        let req = CreateVmRequest {
+            config: VmConfig {
+                kernel_path: PathBuf::from("/vmlinux"),
+                initramfs_path: None,
+                disk_path: None,
+                ram_mib: 512,
+                cpus: 2,
+                cmdline: None,
+                net: None,
+                ports: vec![],
+                guest_cid: 3,
+                guest_agent: GuestAgentMode::Auto,
+            },
+        };
+        let json = serde_json::to_string(&req)?;
+        assert!(json.contains("vmlinux"));
+        let decoded: CreateVmRequest = serde_json::from_str(&json)?;
+        assert_eq!(decoded.config.cpus, 2);
+        Ok(())
+    }
+}
