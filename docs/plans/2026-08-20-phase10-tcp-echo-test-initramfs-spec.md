@@ -1,13 +1,23 @@
-# Spec: TCP Echo Test Initramfs
+# 🔭 Vantage: Spec for Guest Initramfs TCP Listener
 
-👤 **User Story:** As a VMM Developer, I want a test initramfs containing a TCP echo server, so that I can automatically verify bi-directional traffic flow across forwarded ports in integration tests.
+## Problem Statement
+Currently, our integration tests for port forwarding can only verify that the microVM boots and the hypervisor accepts the port mapping configuration. They cannot fully validate the end-to-end data plane because the default guest initramfs used in tests lacks a running service (such as a TCP echo server) to receive and respond to incoming network traffic.
 
-✅ **Acceptance Criteria:**
-- **Metric Definition:** Success = A network integration test successfully connects to a forwarded port on the host, sends a payload, and receives the exact same payload back from the guest within a 5-second timeout, achieving 100% reliability.
-- **So What? (Business Problem):** Without end-to-end verification of port forwarding in our integration tests, we risk regressions in the network and daemon routing components going unnoticed. Ensuring that port forwarding genuinely works at the TCP level is critical for developer confidence and guaranteeing the reliability of our network emulation layer for end users.
-- **Gap Analysis:** We have an environment variable gating the port forwarding test, but no official minimal initramfs image bundled or generated in our test suite that starts a TCP echo server on boot. Standard libraries do not magically provide this; we must explicitly provide a test image.
+## The "So What?"
+What business problem does this solve? Testing infrastructure is the bedrock of reliable product delivery. Without end-to-end networking tests, regressions in our virtio-net or host-side port forwarding implementation could slip into production unnoticed, leading to broken network connectivity for users. By implementing a guest-side TCP listener, we can guarantee that port forwarding and network traffic are flowing correctly between the host and the microVM, saving support costs and protecting user trust.
 
-🚫 **Out of Scope:**
-- Full Linux distributions; the image must be minimal.
-- UDP port forwarding verification.
-- Performance/throughput benchmarking of the network interface.
+## Gap Analysis
+Our `hitz-whp` test suite currently marks the "Full TCP connect + echo assertion" as a TODO. While the host-side VMM and networking logic correctly configure the port bindings, the test stops short of sending actual bytes because there is nothing inside the guest listening on the mapped port (e.g., port 9999). We are missing a minimal, purpose-built initramfs containing a lightweight TCP server.
+
+## Acceptance Criteria
+- 👤 **User Story:** As a Core Engineer, I want the test guest initramfs to run a TCP echo server on boot, so that I can write end-to-end integration tests that send packets from the host and verify the responses.
+- ✅ **Metric Definition:** Success = A new integration test successfully establishes a TCP connection to the host-mapped port, sends a string of bytes, and receives the exact same string of bytes back from the guest without timing out.
+- **Functional Requirements:**
+  - Build or provide a reproducible script to generate a minimal Linux initramfs.
+  - The initramfs must start a TCP service (like `nc -l -p 9999 -e cat` or a custom lightweight Rust binary) immediately after network interface initialization.
+  - The test suite must be updated to boot this specific initramfs and assert full TCP connectivity.
+
+## 🚫 Out of Scope
+- **Production Initramfs:** This is strictly for integration testing. We are not building a production-ready OS image.
+- **Complex Application Protocols:** We only need to verify basic TCP byte-streaming (echo), not HTTP, TLS, or other higher-level protocols.
+- **UDP Testing:** For Phase 21, the focus is strictly on TCP. UDP will be handled in a separate phase if necessary.
