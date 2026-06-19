@@ -7,6 +7,8 @@ use crossbeam_channel::{Receiver, Sender};
 use hitz_api::{MetricsSnapshot, VSOCK_METRICS_PORT};
 use hitz_devices::{VSOCK_BUF_ALLOC, VsockHdr, VsockOp, VsockPacket};
 use opentelemetry::KeyValue;
+use opentelemetry::metrics::Meter;
+use std::sync::OnceLock;
 use tokio::sync::watch;
 
 /// Receive loop for a single VM's vsock metrics stream.
@@ -97,7 +99,10 @@ fn handle_packet(
 ///
 /// All calls are no-ops when no `OTel` provider is registered.
 pub fn publish_to_otel(vm_id: &str, snap: &MetricsSnapshot) {
-    let meter = opentelemetry::global::meter("hitz");
+    // ⚡ Bolt Optimization: Cache the meter globally to avoid heavy lock contention
+    // and hash map lookups on the hot path (per-packet basis).
+    static METER: OnceLock<Meter> = OnceLock::new();
+    let meter = METER.get_or_init(|| opentelemetry::global::meter("hitz"));
 
     // ⚡ Bolt Optimization:
     // We pre-allocate the `vm.id` KeyValue to avoid `vm_id.to_string()` heap allocations
