@@ -143,10 +143,8 @@ impl GuestMemory {
                     size: aligned_size,
                 })?;
         for existing in &self.regions {
-            let existing_end = existing
-                .gpa_start
-                .as_u64()
-                .saturating_add(existing.size as u64);
+            #[allow(clippy::expect_used)]
+            let existing_end = existing.gpa_start.as_u64().checked_add(existing.size as u64).expect("Memory region end overflow");
             if gpa.as_u64() < existing_end && gpa_end > existing.gpa_start.as_u64() {
                 return Err(MemError::Hal(hitz_hal::HalError::MapMemory {
                     gpa: gpa.as_u64(),
@@ -221,7 +219,8 @@ impl GuestMemory {
             .regions
             .binary_search_by(|r| {
                 let start = r.gpa_start.as_u64();
-                let end = start.saturating_add(r.size as u64);
+                #[allow(clippy::expect_used)]
+                let end = start.checked_add(r.size as u64).expect("Memory region end overflow");
                 if addr < start {
                     std::cmp::Ordering::Greater
                 } else if addr >= end {
@@ -374,7 +373,8 @@ impl hitz_boot::GuestMemWriter for GuestMemory {
             let chunk = len.min(CHUNK_SIZE);
             self.write_slice(gpa, &zeroes[..chunk])
                 .map_err(|e| hitz_boot::BootError::WriteFailed(e.to_string()))?;
-            gpa = Gpa::new(gpa.as_u64().saturating_add(chunk as u64));
+            #[allow(clippy::expect_used)]
+            gpa = Gpa::new(gpa.as_u64().checked_add(chunk as u64).expect("Memory region end overflow"));
             len -= chunk;
         }
         Ok(())

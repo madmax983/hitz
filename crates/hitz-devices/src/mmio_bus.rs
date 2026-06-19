@@ -90,9 +90,11 @@ impl MmioBus {
     /// # Panics
     /// Panics if the requested address range overlaps with an already registered device.
     pub fn register(&mut self, base_gpa: u64, size: u64, device: Box<dyn MmioDevice>) {
+        #[allow(clippy::expect_used)]
+        let end_gpa = base_gpa.checked_add(size).expect("MMIO region end overflow");
         for slot in &self.slots {
-            let end_gpa = base_gpa + size;
-            let slot_end = slot.base + slot.size;
+            #[allow(clippy::expect_used)]
+            let slot_end = slot.base.checked_add(slot.size).expect("MMIO slot end overflow");
             assert!(
                 !(base_gpa < slot_end && end_gpa > slot.base),
                 "Overlapping MMIO region: base {base_gpa:#x}, size {size:#x} overlaps with existing device at {:#x}",
@@ -116,7 +118,8 @@ impl MmioBus {
         let idx = self.slots.partition_point(|s| s.base <= gpa);
         if idx > 0 {
             let slot = &mut self.slots[idx - 1];
-            if gpa < slot.base + slot.size {
+            #[allow(clippy::expect_used)]
+            if gpa < slot.base.checked_add(slot.size).expect("MMIO slot end overflow") {
                 return Some(slot);
             }
         }
@@ -173,7 +176,7 @@ mod tests {
     use hitz_hal::HalError;
 
     /// Stub MMIO device for testing.
-    struct StubDevice {
+    pub(crate) struct StubDevice {
         last_write_offset: u64,
         last_write_data: Vec<u8>,
         read_value: u32,
@@ -182,7 +185,7 @@ mod tests {
     }
 
     impl StubDevice {
-        fn new(read_value: u32) -> Self {
+        pub(crate) fn new(read_value: u32) -> Self {
             Self {
                 last_write_offset: 0,
                 last_write_data: Vec::new(),
@@ -217,7 +220,7 @@ mod tests {
     }
 
     /// Stub `GuestMemAccess` for testing.
-    struct StubMem;
+    pub(crate) struct StubMem;
     impl GuestMemAccess for StubMem {
         fn read_guest(&self, _gpa: u64, _buf: &mut [u8]) -> Result<(), HalError> {
             Ok(())
@@ -374,10 +377,25 @@ mod tests {
         bus.register(0xCFFF_0000, 0x12000, Box::new(StubDevice::new(0)));
     }
 
+
     #[test]
     fn default_mmio_bus_and_default_device() {
         let _bus = MmioBus::default();
         let mut dev = StubDevice::new(0);
         assert_eq!(MmioDevice::poll_rx(&mut dev), None);
+    }
+}
+
+#[cfg(test)]
+mod havoc_tests {
+    use super::*;
+    use crate::mmio_bus::tests::StubDevice;
+
+    #[test]
+    #[should_panic(expected = "MMIO region end overflow")]
+    fn havoc_test_mmio_overlap_bypass_via_overflow() {
+        let mut bus = MmioBus::new();
+        bus.register(0xffffffffffffffff, 2, Box::new(StubDevice::new(0)));
+        bus.register(0, 100, Box::new(StubDevice::new(0)));
     }
 }
