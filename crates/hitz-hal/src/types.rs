@@ -1,12 +1,13 @@
-//! Shared types for the HAL: exit reasons, register state, configuration.
+//! Core types and enums used across the HAL.
 
-use crate::newtypes::{Gpa, MemSizeMiB, VcpuId};
+use crate::{Gpa, MemSizeMiB, VcpuId};
 
-/// Configuration for creating a new partition.
+/// Configuration for creating a VM partition.
 ///
 /// # Abstract
 ///
-/// Defines the fundamental parameters required to bootstrap a new VM.
+/// Contains the parameters required to initialize a new VM partition,
+/// such as the number of vCPUs and the total amount of RAM.
 ///
 /// # The Hero's Journey
 ///
@@ -14,26 +15,29 @@ use crate::newtypes::{Gpa, MemSizeMiB, VcpuId};
 /// use hitz_hal::{PartitionConfig, MemSizeMiB};
 ///
 /// let config = PartitionConfig {
-///     vcpu_count: 2,
-///     memory_size: MemSizeMiB::new(1024),
+///     vcpu_count: 4,
+///     memory_size: MemSizeMiB::new(2048), // 2 GiB
 /// };
 /// ```
-///
-/// # The Fine Print
-/// Some hypervisors may round `memory_size` up to the nearest page boundary.
 #[derive(Debug, Clone)]
 pub struct PartitionConfig {
-    /// Number of virtual CPUs.
+    /// Number of virtual processors.
     pub vcpu_count: u32,
-    /// Total guest RAM in MiB.
+    /// Total guest memory.
     pub memory_size: MemSizeMiB,
 }
 
-/// Reason a vCPU exited the run loop.
+/// The reason a vCPU stopped executing the guest.
 ///
 /// # Abstract
 ///
-/// Represents the various reasons a virtual CPU might stop execution
+/// Represents an event that requires handling by the VMM. When `Vcpu::run`
+/// returns, this enum indicates *why* it returned so the VMM can emulate
+/// an instruction, handle I/O, or shut down.
+///
+/// # The Fine Print
+/// When a vCPU exits for MMIO or I/O ports, the VMM is responsible for
+/// advancing the instruction pointer (`RIP`) before resuming execution
 /// and return control to the Virtual Machine Monitor (VMM).
 ///
 /// # The Hero's Journey
@@ -418,4 +422,98 @@ pub struct InterruptRequest {
     pub vcpu_id: VcpuId,
     /// Interrupt vector number.
     pub vector: u8,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn vcpu_exit_debug() {
+        let exit = VcpuExit::Halt;
+        assert_eq!(format!("{exit:?}"), "Halt");
+    }
+
+    #[test]
+    fn mmio_exit_debug() {
+        let exit = MmioExit {
+            gpa: Gpa::new(0x1000),
+            data: [0; 8],
+            len: 4,
+            is_write: false,
+            instruction_len: 3,
+            instruction_bytes: [0; 16],
+            instruction_byte_count: 0,
+        };
+        let s = format!("{exit:?}");
+        assert!(s.contains("MmioExit"));
+    }
+
+    #[test]
+    fn io_port_exit_debug() {
+        let exit = IoPortExit {
+            port: 0x3F8,
+            data: [0x41, 0, 0, 0],
+            len: 1,
+            is_write: true,
+            instruction_len: 2,
+        };
+        let s = format!("{exit:?}");
+        assert!(s.contains("IoPortExit"));
+    }
+
+    #[test]
+    fn standard_regs_debug() {
+        let regs = StandardRegs::default();
+        let s = format!("{regs:?}");
+        assert!(s.contains("StandardRegs"));
+    }
+
+    #[test]
+    fn segment_descriptor_debug() {
+        let desc = SegmentDescriptor::default();
+        let s = format!("{desc:?}");
+        assert!(s.contains("SegmentDescriptor"));
+    }
+
+    #[test]
+    fn descriptor_table_debug() {
+        let table = DescriptorTable::default();
+        let s = format!("{table:?}");
+        assert!(s.contains("DescriptorTable"));
+    }
+
+    #[test]
+    fn special_regs_debug() {
+        let regs = SpecialRegs::default();
+        let s = format!("{regs:?}");
+        assert!(s.contains("SpecialRegs"));
+    }
+
+    #[test]
+    fn mem_flags_debug() {
+        let flags = MemFlags::READ_WRITE;
+        let s = format!("{flags:?}");
+        assert!(s.contains("MemFlags"));
+    }
+
+    #[test]
+    fn interrupt_request_debug() {
+        let req = InterruptRequest {
+            vcpu_id: VcpuId::new(0),
+            vector: 32,
+        };
+        let s = format!("{req:?}");
+        assert!(s.contains("InterruptRequest"));
+    }
+
+    #[test]
+    fn partition_config_debug() {
+        let config = PartitionConfig {
+            vcpu_count: 4,
+            memory_size: MemSizeMiB::new(2048),
+        };
+        let s = format!("{config:?}");
+        assert!(s.contains("PartitionConfig"));
+    }
 }

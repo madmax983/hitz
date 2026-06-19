@@ -269,3 +269,29 @@ pub trait Vcpu: Send {
     /// IF=1 and the vCPU is not in an interrupt shadow.
     fn request_interrupt_window(&mut self) -> Result<(), HalError>;
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{VcpuExit, StandardRegs, SpecialRegs};
+
+    struct DummyVcpu;
+    impl Vcpu for DummyVcpu {
+        type CancelHandle = ();
+        fn run(&mut self) -> Result<VcpuExit, HalError> { Ok(VcpuExit::Halt) }
+        fn cancel_handle(&self) -> Self::CancelHandle {  }
+        fn cancel_via(_handle: &Self::CancelHandle) -> Result<(), HalError> { Ok(()) }
+        fn get_regs(&self) -> Result<StandardRegs, HalError> { Ok(StandardRegs::default()) }
+        fn set_regs(&mut self, _regs: &StandardRegs) -> Result<(), HalError> { Ok(()) }
+        fn get_sregs(&self) -> Result<SpecialRegs, HalError> { Ok(SpecialRegs::default()) }
+        fn set_sregs(&mut self, _sregs: &SpecialRegs) -> Result<(), HalError> { Ok(()) }
+        fn inject_interrupt(&mut self, _vector: u8) -> Result<(), HalError> { Ok(()) }
+        fn request_interrupt_window(&mut self) -> Result<(), HalError> { Ok(()) }
+    }
+
+    #[test]
+    fn vcpu_cancel_default_impl() {
+        let vcpu = DummyVcpu;
+        assert!(vcpu.cancel().is_ok());
+    }
+}
