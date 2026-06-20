@@ -425,4 +425,121 @@ mod tests {
 
         dev.process_tx(&mut q, &mem);
     }
+
+    #[test]
+    fn should_deliver_rx_frame_to_single_descriptor() -> Result<(), hitz_hal::HalError> {
+        let mac = [0x02, 0x00, 0x00, 0x00, 0x00, 0x01];
+        let (mut dev, _tx_receiver, rx_sender) = VirtioNetDevice::new(mac);
+
+        let mem = MockMem::new(0x10000);
+        let mut q = VirtQueue::new(16);
+        q.configure(0, 0x1000, 0x2000);
+        q.set_ready(true);
+        set_avail_idx(&mem, 0);
+        mem.write_bytes(0x2000 + 2, &0u16.to_le_bytes()); // used.idx
+
+        // Write a device-writable descriptor (Flags: 2)
+        write_desc(&mem, 0, 0x4000, 64, 2, 0);
+        write_avail_entry(&mem, 0, 0);
+        set_avail_idx(&mem, 1);
+
+        let test_frame = vec![0xAB; 20];
+        rx_sender.send(test_frame.clone()).unwrap();
+
+        let delivered = dev.poll_rx(&mut q, &mem);
+        assert!(delivered, "Frame should be delivered successfully");
+
+        // Frame = 12 bytes header (0s) + 20 bytes data
+        let mut written_data = vec![0u8; 32];
+        mem.read_guest(0x4000, &mut written_data)?;
+        assert_eq!(
+            &written_data[0..12],
+            &[0u8; 12],
+            "Virtio-net header should be zeroed"
+        );
+        assert_eq!(
+            &written_data[12..32],
+            test_frame.as_slice(),
+            "Frame data should match"
+        );
+
+        assert!(
+            dev.rx_pending.is_empty(),
+            "Pending queue should be empty after delivery"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn should_deliver_rx_frame_across_chained_descriptors() -> Result<(), hitz_hal::HalError> {
+        let mac = [0x02, 0x00, 0x00, 0x00, 0x00, 0x01];
+        let (mut dev, _tx_receiver, rx_sender) = VirtioNetDevice::new(mac);
+
+        let mem = MockMem::new(0x10000);
+        let mut q = VirtQueue::new(16);
+        q.configure(0, 0x1000, 0x2000);
+        q.set_ready(true);
+        set_avail_idx(&mem, 0);
+        mem.write_bytes(0x2000 + 2, &0u16.to_le_bytes());
+
+        // Descriptor 0: length 16, WRITE | NEXT (2 | 1 = 3) -> Next is 1
+        write_desc(&mem, 0, 0x4000, 16, 3, 1);
+        // Descriptor 1: length 32, WRITE (2)
+        write_desc(&mem, 1, 0x4010, 32, 2, 0);
+
+        write_avail_entry(&mem, 0, 0);
+        set_avail_idx(&mem, 1);
+
+        let test_frame = vec![0xCD; 28]; // Total 40 bytes: 12 header + 28 data
+        rx_sender.send(test_frame).unwrap();
+
+        let delivered = dev.poll_rx(&mut q, &mem);
+        assert!(delivered);
+
+        let mut desc0_data = vec![0u8; 16];
+        mem.read_guest(0x4000, &mut desc0_data)?;
+        assert_eq!(&desc0_data[0..12], &[0u8; 12]);
+        assert_eq!(&desc0_data[12..16], &[0xCD; 4]);
+
+        let mut desc1_data = vec![0u8; 24];
+        mem.read_guest(0x4010, &mut desc1_data)?;
+        assert_eq!(&desc1_data[..], &[0xCD; 24]);
+
+        Ok(())
+    }
+
+    #[test]
+    fn should_skip_readonly_descriptors_on_rx() -> Result<(), hitz_hal::HalError> {
+        let mac = [0x02, 0x00, 0x00, 0x00, 0x00, 0x01];
+        let (mut dev, _tx_receiver, rx_sender) = VirtioNetDevice::new(mac);
+
+        let mem = MockMem::new(0x10000);
+        let mut q = VirtQueue::new(16);
+        q.configure(0, 0x1000, 0x2000);
+        q.set_ready(true);
+        set_avail_idx(&mem, 0);
+        mem.write_bytes(0x2000 + 2, &0u16.to_le_bytes());
+
+        // Descriptor 0: length 16, NEXT (1) -> Read-only!
+        write_desc(&mem, 0, 0x4000, 16, 1, 1);
+        // Descriptor 1: length 32, WRITE (2) -> Device-writable
+        write_desc(&mem, 1, 0x4010, 32, 2, 0);
+
+        write_avail_entry(&mem, 0, 0);
+        set_avail_idx(&mem, 1);
+
+        let test_frame = vec![0xEF; 8];
+        rx_sender.send(test_frame).unwrap();
+
+        let delivered = dev.poll_rx(&mut q, &mem);
+        assert!(delivered);
+
+        // The 20 bytes (12 header + 8 data) should all land in Descriptor 1
+        let mut desc1_data = vec![0u8; 20];
+        mem.read_guest(0x4010, &mut desc1_data)?;
+        assert_eq!(&desc1_data[0..12], &[0u8; 12]);
+        assert_eq!(&desc1_data[12..20], &[0xEF; 8]);
+
+        Ok(())
+    }
 }
