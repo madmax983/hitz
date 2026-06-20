@@ -90,9 +90,9 @@ impl MmioBus {
     /// # Panics
     /// Panics if the requested address range overlaps with an already registered device.
     pub fn register(&mut self, base_gpa: u64, size: u64, device: Box<dyn MmioDevice>) {
+        let end_gpa = base_gpa.checked_add(size).expect("MMIO device range overflow");
         for slot in &self.slots {
-            let end_gpa = base_gpa + size;
-            let slot_end = slot.base + slot.size;
+            let slot_end = slot.base.checked_add(slot.size).expect("MMIO device range overflow");
             assert!(
                 !(base_gpa < slot_end && end_gpa > slot.base),
                 "Overlapping MMIO region: base {base_gpa:#x}, size {size:#x} overlaps with existing device at {:#x}",
@@ -379,5 +379,12 @@ mod tests {
         let _bus = MmioBus::default();
         let mut dev = StubDevice::new(0);
         assert_eq!(MmioDevice::poll_rx(&mut dev), None);
+}
+
+    #[test]
+    #[should_panic(expected = "MMIO device range overflow")]
+    fn test_mmio_overflow() {
+        let mut bus = MmioBus::new();
+        bus.register(u64::MAX - 100, 200, Box::new(StubDevice::new(0)));
     }
 }
