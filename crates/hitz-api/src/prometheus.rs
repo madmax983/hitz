@@ -43,6 +43,8 @@ impl ToPrometheus for MetricsSnapshot {
     fn to_prometheus(&self, vm_id: &str) -> String {
         use core::fmt::Write;
 
+        let safe_vm_id = vm_id.replace(['"', '\n'], "");
+
         // Pre-allocate a reasonable buffer size to avoid dynamic reallocation.
         let mut out = String::with_capacity(2048);
         let ts = self.timestamp_ms;
@@ -52,7 +54,7 @@ impl ToPrometheus for MetricsSnapshot {
             ($name:expr, $type:expr, $help:expr, $val:expr) => {
                 let _ = writeln!(out, "# HELP {} {}", $name, $help);
                 let _ = writeln!(out, "# TYPE {} {}", $name, $type);
-                let _ = writeln!(out, "{}{{vm_id=\"{}\"}} {} {}", $name, vm_id, $val, ts);
+                let _ = writeln!(out, "{}{{vm_id=\"{}\"}} {} {}", $name, safe_vm_id, $val, ts);
             };
             ($name:expr, $type:expr, $help:expr, $labels:expr, $val:expr) => {
                 let _ = writeln!(out, "# HELP {} {}", $name, $help);
@@ -60,7 +62,7 @@ impl ToPrometheus for MetricsSnapshot {
                 let _ = writeln!(
                     out,
                     "{}{{vm_id=\"{}\",{}}} {} {}",
-                    $name, vm_id, $labels, $val, ts
+                    $name, safe_vm_id, $labels, $val, ts
                 );
             };
         }

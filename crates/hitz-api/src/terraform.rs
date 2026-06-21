@@ -38,7 +38,8 @@ pub trait ToTerraform {
 
 impl ToTerraform for VmConfig {
     fn to_terraform(&self, resource_name: &str) -> String {
-        let mut hcl = format!("resource \"hitz_vm\" \"{resource_name}\" {{\n");
+        let safe_resource_name = resource_name.replace(['"', '\n'], "");
+        let mut hcl = format!("resource \"hitz_vm\" \"{safe_resource_name}\" {{\n");
         let _ = writeln!(hcl, "  kernel_path = \"{}\"", self.kernel_path.display());
 
         if let Some(initramfs) = &self.initramfs_path {
