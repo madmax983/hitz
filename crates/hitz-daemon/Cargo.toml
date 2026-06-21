@@ -33,3 +33,6 @@ hitz-devices.workspace           = true
 [dev-dependencies]
 hitz-whp.workspace = true
 tempfile = "3"
+
+[target.x86_64-pc-windows-gnu.dependencies]
+hitz-boot.workspace = true
