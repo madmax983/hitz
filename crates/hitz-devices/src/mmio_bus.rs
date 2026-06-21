@@ -91,8 +91,8 @@ impl MmioBus {
     /// Panics if the requested address range overlaps with an already registered device.
     pub fn register(&mut self, base_gpa: u64, size: u64, device: Box<dyn MmioDevice>) {
         for slot in &self.slots {
-            let end_gpa = base_gpa + size;
-            let slot_end = slot.base + slot.size;
+            let end_gpa = base_gpa.checked_add(size).unwrap_or(u64::MAX);
+            let slot_end = slot.base.checked_add(slot.size).unwrap_or(u64::MAX);
             assert!(
                 !(base_gpa < slot_end && end_gpa > slot.base),
                 "Overlapping MMIO region: base {base_gpa:#x}, size {size:#x} overlaps with existing device at {:#x}",
@@ -116,7 +116,7 @@ impl MmioBus {
         let idx = self.slots.partition_point(|s| s.base <= gpa);
         if idx > 0 {
             let slot = &mut self.slots[idx - 1];
-            if gpa < slot.base + slot.size {
+            if gpa < slot.base.checked_add(slot.size).unwrap_or(u64::MAX) {
                 return Some(slot);
             }
         }
