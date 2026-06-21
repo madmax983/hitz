@@ -292,3 +292,134 @@ pub struct ApiError {
     /// A human-readable, descriptive error message explaining the failure.
     pub message: String,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    #[test]
+    fn test_vmaction_fmt() {
+        assert_eq!(format!("{}", VmAction::Start), "start");
+        assert_eq!(format!("{}", VmAction::Stop), "stop");
+        assert_eq!(format!("{}", VmAction::Restart), "restart");
+    }
+
+    #[test]
+    fn test_vmaction_gerund() {
+        assert_eq!(VmAction::Start.gerund(), "Starting");
+        assert_eq!(VmAction::Stop.gerund(), "Stopping");
+        assert_eq!(VmAction::Restart.gerund(), "Restarting");
+    }
+
+    #[test]
+    fn test_vmaction_past_tense() {
+        assert_eq!(VmAction::Start.past_tense(), "started");
+        assert_eq!(VmAction::Stop.past_tense(), "stopped");
+        assert_eq!(VmAction::Restart.past_tense(), "restarted");
+    }
+
+    #[test]
+    fn test_vmstate_serialization_roundtrip() {
+        let states = vec![
+            VmState::Created,
+            VmState::Running,
+            VmState::Stopped,
+            VmState::Failed,
+        ];
+        for state in states {
+            let serialized = serde_json::to_string(&state).unwrap();
+            let deserialized: VmState = serde_json::from_str(&serialized).unwrap();
+            assert_eq!(state, deserialized);
+        }
+    }
+
+    #[test]
+    fn test_vmaction_serialization_roundtrip() {
+        let actions = vec![VmAction::Start, VmAction::Stop, VmAction::Restart];
+        for action in actions {
+            let serialized = serde_json::to_string(&action).unwrap();
+            let deserialized: VmAction = serde_json::from_str(&serialized).unwrap();
+            assert_eq!(action, deserialized);
+        }
+    }
+
+    #[test]
+    fn test_createvmrequest_serialization_roundtrip() {
+        let req = CreateVmRequest {
+            config: VmConfig {
+                kernel_path: PathBuf::from("/vmlinux"),
+                initramfs_path: Some(PathBuf::from("/initrd")),
+                disk_path: None,
+                ram_mib: 512,
+                cpus: 2,
+                cmdline: Some("console=ttyS0".to_string()),
+                net: None,
+                ports: vec![],
+                guest_agent: crate::config::GuestAgentMode::Auto,
+                guest_cid: 3,
+            },
+        };
+        let serialized = serde_json::to_string(&req).unwrap();
+        let deserialized: CreateVmRequest = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(req.config.cpus, deserialized.config.cpus);
+        assert_eq!(req.config.ram_mib, deserialized.config.ram_mib);
+        assert_eq!(req.config.cmdline, deserialized.config.cmdline);
+    }
+
+    #[test]
+    fn test_actionvmrequest_serialization_roundtrip() {
+        let req = ActionVmRequest {
+            action: VmAction::Stop,
+        };
+        let serialized = serde_json::to_string(&req).unwrap();
+        let deserialized: ActionVmRequest = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(req.action, deserialized.action);
+    }
+
+    #[test]
+    fn test_clonevmrequest_serialization_roundtrip() {
+        let req = CloneVmRequest {
+            dest_id: "cloned-vm".to_string(),
+        };
+        let serialized = serde_json::to_string(&req).unwrap();
+        let deserialized: CloneVmRequest = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(req.dest_id, deserialized.dest_id);
+    }
+
+    #[test]
+    fn test_vminfo_serialization_roundtrip() {
+        let info = VmInfo {
+            id: "my-vm".to_string(),
+            state: VmState::Running,
+            config: VmConfig {
+                kernel_path: PathBuf::from("/vmlinux"),
+                initramfs_path: None,
+                disk_path: None,
+                ram_mib: 512,
+                cpus: 2,
+                cmdline: None,
+                net: None,
+                ports: vec![],
+                guest_agent: crate::config::GuestAgentMode::Auto,
+                guest_cid: 3,
+            },
+            exit_reason: Some("Exited normally".to_string()),
+        };
+        let serialized = serde_json::to_string(&info).unwrap();
+        let deserialized: VmInfo = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(info.id, deserialized.id);
+        assert_eq!(info.state, deserialized.state);
+        assert_eq!(info.exit_reason, deserialized.exit_reason);
+    }
+
+    #[test]
+    fn test_apierror_serialization_roundtrip() {
+        let err = ApiError {
+            message: "VM not found".to_string(),
+        };
+        let serialized = serde_json::to_string(&err).unwrap();
+        let deserialized: ApiError = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(err.message, deserialized.message);
+    }
+}
