@@ -1,0 +1,34 @@
+[package]
+name = "hitz-cli"
+description = "CLI binary — clap + named pipe client"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "hitz"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+hitz-api = { workspace = true, features = ["health_check"] }
+hitz-hal.workspace = true
+hitz-vmm.workspace = true
+hitz-whp.workspace = true
+hitz-daemon.workspace = true
+anyhow.workspace = true
+clap.workspace = true
+tracing-subscriber.workspace = true
+tokio.workspace = true
+hyper = { workspace = true, features = ["client"] }
+http-body-util.workspace = true
+hyper-util.workspace = true
+serde_json.workspace = true
+bytes.workspace = true
+ctrlc.workspace = true
+windows-service.workspace = true
+comfy-table = { version = "7.2.2", features = ["custom_styling"] }
+crossterm = "0.29.0"
+ratatui = { version = "0.30.0", default-features = false, features = ["crossterm"] }

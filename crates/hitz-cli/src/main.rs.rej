@@ -1,0 +1,37 @@
+--- main.rs
++++ main.rs
+@@ -2427,6 +2430,34 @@
+     Ok(())
+ }
+
++async fn handle_vm_export_terraform(args: &VmIdArgs) -> Result<()> {
++    use crossterm::style::Stylize;
++    use hitz_api::ToTerraform;
++
++    print!("{}", format!("⏳ Exporting VM '{}' to Terraform...", args.id).cyan());
++    use std::io::Write;
++    let _ = std::io::stdout().flush();
++
++    // Fetch VM Info
++    let (status_info, resp_info) = pipe_client::pipe_request(
++        &args.pipe,
++        args.tcp,
++        Method::GET,
++        &format!("/vms/{}", args.id),
++        None,
++    )
++    .await?;
++
++    if !status_info.is_success() {
++        print_error_response(status_info, &resp_info, &format!("Failed to get VM {} info", args.id));
++        return Ok(());
++    }
++
++    let info: hitz_api::VmInfo = serde_json::from_str(&resp_info).context("failed to parse VM info")?;
++    println!("\r\x1b[2K\n{}", info.config.to_terraform(&args.id));
++    Ok(())
++}
++
+ fn print_error_response(status: hyper::StatusCode, resp_body: &str, prefix: &str) {
+     use crossterm::style::Stylize;
+     let formatted = format_error_response(status, resp_body, prefix);
