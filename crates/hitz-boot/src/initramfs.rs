@@ -76,6 +76,40 @@ pub struct InitramfsLoadResult {
 /// load_initramfs("wrong_type", 123, 456, &writer);
 /// ```
 ///
+/// # Abstract
+///
+/// Loads the initial ramdisk (initramfs) archive into guest memory, immediately
+/// following the loaded kernel.
+///
+/// # The Hero's Journey
+///
+/// ```rust
+/// use hitz_boot::{load_initramfs, GuestMemWriter, BootError};
+/// use hitz_hal::Gpa;
+///
+/// struct DummyWriter;
+/// impl GuestMemWriter for DummyWriter {
+///     fn write_bytes(&self, _gpa: Gpa, _bytes: &[u8]) -> Result<(), BootError> {
+///         Ok(())
+///     }
+///     fn write_zeroes(&self, _gpa: Gpa, _len: usize) -> Result<(), BootError> {
+///         Ok(())
+///     }
+/// }
+///
+/// let cpio_data = b"dummy cpio archive content";
+/// let kernel_end = Gpa::new(0x2_0001);
+/// let ram_size = 128 * 1024 * 1024;
+///
+/// let res = load_initramfs(cpio_data, kernel_end, ram_size, &DummyWriter).unwrap();
+/// assert!(res.gpa.as_u64() > kernel_end.as_u64());
+/// assert_eq!(res.size, cpio_data.len() as u64);
+/// ```
+///
+/// # The Fine Print
+///
+/// The function assumes that the `writer` instance provided properly maps the requested physical memory, and will fail if the provided memory boundaries are invalid or exhausted.
+///
 /// # Errors
 ///
 /// Returns `BootError::InvalidBootParams` if:

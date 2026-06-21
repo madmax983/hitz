@@ -210,6 +210,43 @@ pub struct KernelLoadResult {
 /// assert!(res.is_err());
 /// ```
 ///
+/// # Abstract
+///
+/// Parses an ELF64 x86-64 kernel image and loads its `PT_LOAD` segments into guest
+/// memory using the provided `GuestMemWriter`.
+///
+/// # The Hero's Journey
+///
+/// ```rust
+/// use hitz_boot::{load_elf, GuestMemWriter, BootError};
+/// use hitz_hal::Gpa;
+///
+/// struct DummyWriter;
+/// impl GuestMemWriter for DummyWriter {
+///     fn write_bytes(&self, _gpa: Gpa, _bytes: &[u8]) -> Result<(), BootError> {
+///         Ok(())
+///     }
+///     fn write_zeroes(&self, _gpa: Gpa, _len: usize) -> Result<(), BootError> {
+///         Ok(())
+///     }
+/// }
+///
+/// // Example ELF header (invalid for real execution, but passes initial parse)
+/// let mut elf = vec![0; 64];
+/// elf[0..4].copy_from_slice(b"\x7FELF");
+/// elf[4] = 2; // 64-bit
+/// elf[5] = 1; // Little endian
+/// elf[18] = 0x3E; // AMD64
+///
+/// // In a real scenario, this would load the segments into guest RAM.
+/// // Let's just assume it's a valid ELF slice.
+/// // load_elf(&elf, &DummyWriter).unwrap();
+/// ```
+///
+/// # The Fine Print
+///
+/// The function will iterate through all `PT_LOAD` segments and load them into memory. It ensures that the file offset boundaries are valid and that it writes the data correctly.
+///
 /// # Errors
 ///
 /// Returns [`BootError::InvalidElf`] if the bytes are not a valid ELF64

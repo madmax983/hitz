@@ -72,6 +72,40 @@ pub fn parse_proc_stat_sample(content: &str) -> Vec<CpuSample> {
 
 /// Parse `/proc/meminfo` into [`MemoryMetrics`].
 ///
+/// # Abstract
+///
+/// Converts the textual key-value output of `/proc/meminfo` into a structured
+/// `MemoryMetrics` object, parsing sizes in kB and scaling them to bytes.
+///
+/// # The Hero's Journey
+///
+/// ```rust
+/// use hitz_api::MemoryMetrics;
+/// use hitz_guest_agent::proc::parse_proc_meminfo;
+///
+/// let meminfo = "\
+/// MemTotal:        8192000 kB
+/// MemFree:         2048000 kB
+/// Buffers:          512000 kB
+/// Cached:          1024000 kB
+/// SwapTotal:       4096000 kB
+/// SwapFree:        4096000 kB
+/// ";
+///
+/// let metrics = parse_proc_meminfo(meminfo).unwrap();
+///
+/// assert_eq!(metrics.total_bytes, 8192000 * 1024);
+/// assert_eq!(metrics.free_bytes, 2048000 * 1024);
+/// // used = total - free - buffers - cached
+/// assert_eq!(metrics.used_bytes, (8192000 - 2048000 - 512000 - 1024000) * 1024);
+/// assert_eq!(metrics.swap_total, 4096000 * 1024);
+/// assert_eq!(metrics.swap_used, 0);
+/// ```
+///
+/// # The Fine Print
+///
+/// The function calculates `used_bytes` by subtracting the amount of free, buffered, and cached memory from the total memory, representing a high-level representation of memory usage.
+///
 /// Returns `None` if `MemTotal` is missing.
 #[must_use]
 pub fn parse_proc_meminfo(content: &str) -> Option<MemoryMetrics> {
