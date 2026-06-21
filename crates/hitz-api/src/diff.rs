@@ -179,7 +179,7 @@ pub struct NetRate {
 /// let c1 = MyCounter { time: 1, count: 10 };
 /// let c2 = MyCounter { time: 3, count: 50 }; // 40 ops over 2 seconds
 ///
-/// let rate = c2.diff(&c1).unwrap();
+/// let rate = c2.diff(&c1).expect("should return valid result");
 /// assert_eq!(rate.ops_per_sec, 20.0);
 /// ```
 pub trait CalculateDiff {
@@ -212,7 +212,7 @@ pub trait CalculateDiff {
     /// let mut t2 = t1.clone();
     /// t2.timestamp_ms = 2000;
     ///
-    /// let diff = t2.diff(&t1).unwrap();
+    /// let diff = t2.diff(&t1).expect("should return valid result");
     /// assert_eq!(diff.elapsed_secs, 1.0);
     /// ```
     fn diff(&self, previous: &Self) -> Option<Self::Diff>;

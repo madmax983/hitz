@@ -80,7 +80,7 @@ pub use sentinel::{ConditionOperator, MetricTarget, SentinelCondition, SentinelR
 
 #[cfg(test)]
 #[allow(clippy::expect_used)]
-#[allow(clippy::unwrap_used)]
+
 mod tests {
     use super::*;
     use std::path::PathBuf;
