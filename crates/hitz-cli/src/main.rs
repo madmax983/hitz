@@ -1212,17 +1212,17 @@ fn format_error_response(status: hyper::StatusCode, resp: &str, error_prefix: &s
                     use std::fmt::Write;
                     if let Some(s) = val.as_str() {
                         if !acc.is_empty() {
-                            let _ = write!(acc, ", ");
+                            let _ = write!(acc, "\n    - ");
                         }
                         let _ = write!(acc, "{k}: {s}");
                     } else if let Some(n) = val.as_number() {
                         if !acc.is_empty() {
-                            let _ = write!(acc, ", ");
+                            let _ = write!(acc, "\n    - ");
                         }
                         let _ = write!(acc, "{k}: {n}");
                     } else if val.is_boolean() || val.is_null() {
                         if !acc.is_empty() {
-                            let _ = write!(acc, ", ");
+                            let _ = write!(acc, "\n    - ");
                         }
                         let _ = write!(acc, "{k}: {val}");
                     }
@@ -1232,7 +1232,7 @@ fn format_error_response(status: hyper::StatusCode, resp: &str, error_prefix: &s
             if parts_str.is_empty() {
                 format!("✗ {error_prefix} ({status})")
             } else {
-                format!("✗ {error_prefix} ({status}): {parts_str}")
+                format!("✗ {error_prefix} ({status})\n  Details:\n    - {parts_str}")
             }
         }
     } else {
@@ -1241,9 +1241,8 @@ fn format_error_response(status: hyper::StatusCode, resp: &str, error_prefix: &s
             format!("✗ {error_prefix} ({status})")
         } else {
             let max_len = 200;
-            let display_text = if clean.chars().count() > max_len {
-                let truncated: String = clean.chars().take(max_len).collect();
-                format!("{}...", truncated)
+            let display_text = if let Some((idx, _)) = clean.char_indices().nth(max_len) {
+                format!("{}...", &clean[..idx])
             } else {
                 clean.to_string()
             };
