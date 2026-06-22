@@ -6,7 +6,7 @@
 //! infinite-loops on the faulting instruction.
 
 use std::io::Write;
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use hitz_devices::MmioBus;
@@ -132,10 +132,15 @@ pub fn run_vcpu_loop<V: Vcpu, W: Write>(
     let mut pending_irq: Option<u8> = None;
 
     // Create once; all calls are no-ops when no SDK is registered.
-    let exit_counter = opentelemetry::global::meter("hitz")
-        .u64_counter("hitz.vcpu.exits")
-        .with_description("Number of vCPU exits, labeled by exit reason")
-        .build();
+    // ⚡ Bolt Optimization: Use `OnceLock` to cache the global OTel counter,
+    // avoiding heavy lock contention and `HashMap` lookups on every vCPU thread invocation.
+    static EXIT_COUNTER: OnceLock<Counter<u64>> = OnceLock::new();
+    let exit_counter = EXIT_COUNTER.get_or_init(|| {
+        opentelemetry::global::meter("hitz")
+            .u64_counter("hitz.vcpu.exits")
+            .with_description("Number of vCPU exits, labeled by exit reason")
+            .build()
+    });
 
     loop {
         if stop_flag.load(Ordering::Relaxed) {
