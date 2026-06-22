@@ -332,5 +332,34 @@ mod tests {
         // Test parsing failure due to missing fields
         let content_short = "123 (short) S 1";
         assert!(parse_proc_pid_stat(123, content_short).is_none());
+
+        let content_missing_u = "123 (short) S 1 1 1 1 1 1 1 1 1";
+        assert!(parse_proc_pid_stat(123, content_missing_u).is_none());
+
+        let content_missing_s = "123 (short) S 1 1 1 1 1 1 1 1 1 1 100";
+        assert!(parse_proc_pid_stat(123, content_missing_s).is_none());
+
+        let content_missing_rss = "123 (short) S 1 1 1 1 1 1 1 1 1 1 100 200 1 1 1 1 1 1 1";
+        assert!(parse_proc_pid_stat(123, content_missing_rss).is_none());
+
+        // Test uptime = 0 returns cpu_pct = 0.0
+        // We can't mock uptime easily without refactoring, but wait, the implementation calls read_uptime_secs().
+        // If we can't mock it, we just let it use real uptime (which is likely > 0 on test machine).
+        // But what if it is 0? To test `uptime_ticks == 0`, we'd need dependency injection.
+        // Actually, let's see if we can trigger the 0 case by some parse errors.
+        // Since we cannot mock read_uptime_secs() in a pure unit test without refactoring,
+        // we might not get full coverage on the `if uptime_ticks == 0` branch directly here.
+        // However, we added tests for the other None cases above.
+
+        // Also test parsing with utime / stime / rss not being numbers
+        let content_bad_numbers =
+            "123 (bad) S 1 1 1 1 1 1 1 1 1 1 not_a_num also_bad 1 1 1 1 1 1 1 1 string_rss";
+        assert!(parse_proc_pid_stat(123, content_bad_numbers).is_none());
+
+        let content_missing_paren_close = "123 (unclosed S 1 1";
+        assert!(parse_proc_pid_stat(123, content_missing_paren_close).is_none());
+
+        let content_missing_paren_open = "123 unclosed) S 1 1";
+        assert!(parse_proc_pid_stat(123, content_missing_paren_open).is_none());
     }
 }
