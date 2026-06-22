@@ -312,117 +312,132 @@ impl<D: VirtioBackend> VirtioMmioTransport<D> {
         }
     }
 
+    fn write_driver_features(&mut self, value: u32) {
+        if self.driver_features_sel == 0 {
+            // Low 32 bits.
+            self.driver_features =
+                (self.driver_features & 0xFFFF_FFFF_0000_0000) | u64::from(value);
+        } else {
+            // High 32 bits.
+            self.driver_features =
+                (self.driver_features & 0x0000_0000_FFFF_FFFF) | (u64::from(value) << 32);
+        }
+    }
+
+    #[allow(clippy::cast_possible_truncation)]
+    fn write_queue_sel(&mut self, value: u32) {
+        let sel = value as usize;
+        if sel < self.queues.len() {
+            self.queue_sel = sel;
+        } else {
+            tracing::debug!(value, "guest selected non-existent queue");
+        }
+    }
+
+    #[allow(clippy::cast_possible_truncation)]
+    fn write_queue_num(&mut self, value: u32) {
+        // Queue size fits in u16 (max 256). Higher bits are ignored per spec.
+        let size = value as u16;
+        if let Some(qs) = self.queues.get_mut(self.queue_sel) {
+            qs.num = size;
+            qs.queue.set_size(size);
+        }
+    }
+
+    fn write_queue_ready(&mut self, value: u32) {
+        let ready = value != 0;
+        if let Some(qs) = self.queues.get_mut(self.queue_sel) {
+            if ready {
+                // Configure the queue GPAs before marking ready.
+                let desc_gpa = u64::from(qs.desc_low) | (u64::from(qs.desc_high) << 32);
+                let avail_gpa = u64::from(qs.avail_low) | (u64::from(qs.avail_high) << 32);
+                let used_gpa = u64::from(qs.used_low) | (u64::from(qs.used_high) << 32);
+                qs.queue.configure(desc_gpa, avail_gpa, used_gpa);
+            }
+            qs.queue.set_ready(ready);
+        }
+    }
+
+    #[allow(clippy::cast_possible_truncation)]
+    fn write_queue_notify(&mut self, value: u32) -> Option<u8> {
+        // Value is the queue index the guest is notifying.
+        let queue_idx = value as u16;
+        if let Some(qs) = self.queues.get_mut(usize::from(queue_idx)) {
+            self.device
+                .process_queue(queue_idx, &mut qs.queue, &*self.mem);
+            // Signal used ring update.
+            self.interrupt_status |= 1;
+            return Some(self.irq_vector);
+        }
+        None
+    }
+
+    #[allow(clippy::cast_possible_truncation)]
+    fn write_status(&mut self, value: u32) {
+        // Status is an 8-bit register. Higher bits are ignored per spec.
+        let val = value as u8;
+        if val == 0 {
+            // Writing 0 resets the device.
+            self.reset();
+        } else {
+            self.status = val;
+        }
+    }
+
+    fn write_queue_desc_low(&mut self, value: u32) {
+        if let Some(qs) = self.queues.get_mut(self.queue_sel) {
+            qs.desc_low = value;
+        }
+    }
+
+    fn write_queue_desc_high(&mut self, value: u32) {
+        if let Some(qs) = self.queues.get_mut(self.queue_sel) {
+            qs.desc_high = value;
+        }
+    }
+
+    fn write_queue_avail_low(&mut self, value: u32) {
+        if let Some(qs) = self.queues.get_mut(self.queue_sel) {
+            qs.avail_low = value;
+        }
+    }
+
+    fn write_queue_avail_high(&mut self, value: u32) {
+        if let Some(qs) = self.queues.get_mut(self.queue_sel) {
+            qs.avail_high = value;
+        }
+    }
+
+    fn write_queue_used_low(&mut self, value: u32) {
+        if let Some(qs) = self.queues.get_mut(self.queue_sel) {
+            qs.used_low = value;
+        }
+    }
+
+    fn write_queue_used_high(&mut self, value: u32) {
+        if let Some(qs) = self.queues.get_mut(self.queue_sel) {
+            qs.used_high = value;
+        }
+    }
     /// Write a 32-bit MMIO register. Returns `Some(irq)` if an interrupt should fire.
-    #[allow(clippy::too_many_lines)]
     fn write_reg(&mut self, offset: u64, value: u32) -> Option<u8> {
         match offset {
-            MMIO_DEVICE_FEATURES_SEL => {
-                self.device_features_sel = value;
-            }
-            MMIO_DRIVER_FEATURES => {
-                if self.driver_features_sel == 0 {
-                    // Low 32 bits.
-                    self.driver_features =
-                        (self.driver_features & 0xFFFF_FFFF_0000_0000) | u64::from(value);
-                } else {
-                    // High 32 bits.
-                    self.driver_features =
-                        (self.driver_features & 0x0000_0000_FFFF_FFFF) | (u64::from(value) << 32);
-                }
-            }
-            MMIO_DRIVER_FEATURES_SEL => {
-                self.driver_features_sel = value;
-            }
-            MMIO_QUEUE_SEL => {
-                #[allow(clippy::cast_possible_truncation)]
-                let sel = value as usize;
-                if sel < self.queues.len() {
-                    self.queue_sel = sel;
-                } else {
-                    tracing::debug!(value, "guest selected non-existent queue");
-                }
-            }
-            MMIO_QUEUE_NUM => {
-                // Queue size fits in u16 (max 256). Higher bits are ignored per spec.
-                #[allow(clippy::cast_possible_truncation)]
-                let size = value as u16;
-                if let Some(qs) = self.queues.get_mut(self.queue_sel) {
-                    qs.num = size;
-                    qs.queue.set_size(size);
-                }
-            }
-            MMIO_QUEUE_READY => {
-                let ready = value != 0;
-                if let Some(qs) = self.queues.get_mut(self.queue_sel) {
-                    if ready {
-                        // Configure the queue GPAs before marking ready.
-                        let desc_gpa = u64::from(qs.desc_low) | (u64::from(qs.desc_high) << 32);
-                        let avail_gpa = u64::from(qs.avail_low) | (u64::from(qs.avail_high) << 32);
-                        let used_gpa = u64::from(qs.used_low) | (u64::from(qs.used_high) << 32);
-                        qs.queue.configure(desc_gpa, avail_gpa, used_gpa);
-                    }
-                    qs.queue.set_ready(ready);
-                }
-            }
-            MMIO_QUEUE_NOTIFY => {
-                // Value is the queue index the guest is notifying.
-                #[allow(clippy::cast_possible_truncation)]
-                let queue_idx = value as u16;
-                if let Some(qs) = self.queues.get_mut(usize::from(queue_idx)) {
-                    self.device
-                        .process_queue(queue_idx, &mut qs.queue, &*self.mem);
-                    // Signal used ring update.
-                    self.interrupt_status |= 1;
-                    return Some(self.irq_vector);
-                }
-            }
-            MMIO_INTERRUPT_ACK => {
-                self.interrupt_status &= !value;
-            }
-            MMIO_STATUS => {
-                // Status is an 8-bit register. Higher bits are ignored per spec.
-                #[allow(clippy::cast_possible_truncation)]
-                let val = value as u8;
-                if val == 0 {
-                    // Writing 0 resets the device.
-                    self.reset();
-                } else {
-                    self.status = val;
-                }
-            }
-            MMIO_QUEUE_DESC_LOW => {
-                if let Some(qs) = self.queues.get_mut(self.queue_sel) {
-                    qs.desc_low = value;
-                }
-            }
-            MMIO_QUEUE_DESC_HIGH => {
-                if let Some(qs) = self.queues.get_mut(self.queue_sel) {
-                    qs.desc_high = value;
-                }
-            }
-            MMIO_QUEUE_AVAIL_LOW => {
-                if let Some(qs) = self.queues.get_mut(self.queue_sel) {
-                    qs.avail_low = value;
-                }
-            }
-            MMIO_QUEUE_AVAIL_HIGH => {
-                if let Some(qs) = self.queues.get_mut(self.queue_sel) {
-                    qs.avail_high = value;
-                }
-            }
-            MMIO_QUEUE_USED_LOW => {
-                if let Some(qs) = self.queues.get_mut(self.queue_sel) {
-                    qs.used_low = value;
-                }
-            }
-            MMIO_QUEUE_USED_HIGH => {
-                if let Some(qs) = self.queues.get_mut(self.queue_sel) {
-                    qs.used_high = value;
-                }
-            }
-            _ => {
-                tracing::debug!(offset, value, "unhandled MMIO write");
-            }
+            MMIO_DEVICE_FEATURES_SEL => self.device_features_sel = value,
+            MMIO_DRIVER_FEATURES => self.write_driver_features(value),
+            MMIO_DRIVER_FEATURES_SEL => self.driver_features_sel = value,
+            MMIO_QUEUE_SEL => self.write_queue_sel(value),
+            MMIO_QUEUE_NUM => self.write_queue_num(value),
+            MMIO_QUEUE_READY => self.write_queue_ready(value),
+            MMIO_QUEUE_NOTIFY => return self.write_queue_notify(value),
+            MMIO_INTERRUPT_ACK => self.interrupt_status &= !value,
+            MMIO_STATUS => self.write_status(value),
+            MMIO_QUEUE_DESC_LOW => self.write_queue_desc_low(value),
+            MMIO_QUEUE_DESC_HIGH => self.write_queue_desc_high(value),
+            MMIO_QUEUE_AVAIL_LOW => self.write_queue_avail_low(value),
+            MMIO_QUEUE_AVAIL_HIGH => self.write_queue_avail_high(value),
+            MMIO_QUEUE_USED_LOW => self.write_queue_used_low(value),
+            MMIO_QUEUE_USED_HIGH => self.write_queue_used_high(value),
+            _ => tracing::debug!(offset, value, "unhandled MMIO write"),
         }
         None
     }
