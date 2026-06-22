@@ -38,7 +38,7 @@ pub use metrics::{
 
 #[cfg(feature = "health_check")]
 /// Health assessment module for evaluating system telemetry.
-mod health;
+pub mod health;
 #[cfg(feature = "health_check")]
 pub use health::{HealthCheck, HealthStatus, SystemHealth};
 
