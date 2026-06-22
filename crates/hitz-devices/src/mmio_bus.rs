@@ -90,9 +90,9 @@ impl MmioBus {
     /// # Panics
     /// Panics if the requested address range overlaps with an already registered device.
     pub fn register(&mut self, base_gpa: u64, size: u64, device: Box<dyn MmioDevice>) {
+        let end_gpa = base_gpa.checked_add(size).unwrap_or_else(|| panic!("Invalid MMIO region: base_gpa + size overflows u64"));
         for slot in &self.slots {
-            let end_gpa = base_gpa + size;
-            let slot_end = slot.base + slot.size;
+            let slot_end = slot.base.checked_add(slot.size).unwrap_or_else(|| panic!("Invalid MMIO region: slot base + size overflows u64"));
             assert!(
                 !(base_gpa < slot_end && end_gpa > slot.base),
                 "Overlapping MMIO region: base {base_gpa:#x}, size {size:#x} overlaps with existing device at {:#x}",
@@ -116,7 +116,9 @@ impl MmioBus {
         let idx = self.slots.partition_point(|s| s.base <= gpa);
         if idx > 0 {
             let slot = &mut self.slots[idx - 1];
-            if gpa < slot.base + slot.size {
+            #[allow(clippy::manual_saturating_arithmetic)]
+            let end_gpa = slot.base.checked_add(slot.size).unwrap_or(u64::MAX);
+            if gpa < end_gpa {
                 return Some(slot);
             }
         }
@@ -379,5 +381,27 @@ mod tests {
         let _bus = MmioBus::default();
         let mut dev = StubDevice::new(0);
         assert_eq!(MmioDevice::poll_rx(&mut dev), None);
+    }
+}
+
+#[cfg(test)]
+mod havoc_tests {
+    use super::*;
+    use hitz_hal::GuestMemAccess;
+
+    struct StubDevice;
+    impl MmioDevice for StubDevice {
+        fn mmio_read(&mut self, _offset: u64, _data: &mut [u8]) {}
+        fn mmio_write(&mut self, _offset: u64, _data: &[u8], _mem: &dyn GuestMemAccess) -> Option<u8> { None }
+    }
+
+    #[test]
+    #[should_panic(expected = "Invalid MMIO region")]
+    fn havoc_mmio_register_overflow() {
+        let mut bus = MmioBus::new();
+        bus.register(0xD000_0000, 0x1000, Box::new(StubDevice));
+
+        // This will panic on `base_gpa + size` in debug mode, but should be handled properly
+        bus.register(0xFFFF_FFFF_FFFF_F000, 0x2000, Box::new(StubDevice));
     }
 }
