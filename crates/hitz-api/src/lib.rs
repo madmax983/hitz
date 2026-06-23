@@ -491,5 +491,11 @@ pub use rightsizer::{ResizeRecommendation, RightSizer};
 #[cfg(feature = "terraform")]
 /// Terraform HCL generation module.
 mod terraform;
+
 #[cfg(feature = "terraform")]
 pub use terraform::ToTerraform;
+#[cfg(feature = "anomaly")]
+/// Anomaly detection module.
+mod anomaly;
+#[cfg(feature = "anomaly")]
+pub use anomaly::{AnomalyDetector, MetricTracker};
