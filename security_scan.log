@@ -1,17 +1,18 @@
 🔍 SURVEILLANCE REPORT - WARDEN
 
 1. MEMORY SAFETY & UNSAFE:
-   - Scanned all `unsafe` blocks in `hitz-vmm`, `hitz-whp`, `hitz-daemon`, `hitz-cli`, and `hitz-hal`.
-   - Guest memory management (`GuestMemory`) correctly validates bounds using `saturating_add` and `checked_sub`.
-   - FFI boundaries to WHP are appropriately zero-initialized (`core::mem::zeroed`) and size-checked.
-   - No dangling pointers or unsafe buffer overflows identified.
+   - Evaluated `unsafe` blocks across `hitz-vmm`, `hitz-whp`, `hitz-hal`, and `hitz-daemon`.
+   - `GuestMemory` operations correctly bind slice checks and buffer allocations to valid lengths using checked math.
+   - Pointers passed to `VirtualAlloc` and `WHvMapGpaRange` maintain proper lifetime semantics scoped by `GuestRegion` drop guards.
+   - Unsafe FFI inputs (e.g., in WHP bindings) correctly zero-initialize or cast matching layouts without assuming unverified caller bounds.
 
 2. INPUT & LOGIC:
-   - `SerialBuf` handles capacity wraps securely. `inner.total_written += len as u64` is safe on 64-bit systems, and ring buffer calculations correctly bound `to_read`.
-   - Checked math is correctly used in `hitz-vmm/src/memory.rs` and `serial_buf.rs` to prevent integer overflows.
+   - Arithmetic bounds on `avail_idx_gpa`, `desc_addr`, and ring offsets inside `VirtQueue::push_used` and `next_descriptor` defensively employ `checked_add` with safe fallbacks (Option `?`).
+   - Slices extracted from VM exit contexts in `handle_mmio` limit instruction boundaries (`std::cmp::min(instruction_byte_count, bytes.len())`) correctly before parsing.
+   - `VmConfig` string bounds and file paths pass properly typed validations on deserialization.
 
 3. SUPPLY CHAIN:
-   - `cargo audit` ran successfully and reported 0 vulnerabilities in 374 crate dependencies.
+   - Evaluated cargo dependencies and manually ran `cargo audit` to confirm 0 existing CVE vulnerabilities across crates.
 
 CONCLUSION:
-No active security risks or vulnerabilities found. System is secure under current scope.
+No high-priority security vulnerabilities found in input handling, arithmetic checking, unsafe pointer lifecycle, or dependency graph. System stands secure under current Warden sweep.
