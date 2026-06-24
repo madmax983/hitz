@@ -120,6 +120,27 @@ pub struct PortForward {
 
 // ── Guest agent mode ─────────────────────────────────────────────────────────
 
+///
+/// # Abstract
+///
+/// Specifies the method for providing a guest agent to the micro-VM. This enum allows
+/// the host to choose between using the default built-in agent, supplying a custom agent
+/// binary, or completely disabling agent injection.
+///
+/// # The Hero's Journey
+///
+/// ```rust
+/// use hitz_api::GuestAgentMode;
+/// use std::path::PathBuf;
+///
+/// // 1. By default, the system will inject the bundled agent.
+/// let mode = GuestAgentMode::default();
+/// assert_eq!(mode, GuestAgentMode::Auto);
+///
+/// // 2. Alternatively, you can disable it entirely if you don't need telemetry.
+/// let mode_disabled = GuestAgentMode::Disabled;
+/// ```
+///
 /// Controls whether and which guest metrics agent is injected into the initramfs.
 ///
 /// Hitz supports injecting a lightweight agent into the guest environment to

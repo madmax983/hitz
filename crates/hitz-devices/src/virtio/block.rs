@@ -29,6 +29,35 @@ const SECTOR_SIZE: u64 = 512;
 
 /// Virtio block device backed by a file.
 ///
+/// # Abstract
+///
+/// Represents a paravirtualized block storage device. This backend interacts with the
+/// guest operating system through virtio ring queues to perform asynchronous read and
+/// write operations backed by a raw host file.
+///
+/// # The Hero's Journey
+///
+/// ```no_run
+/// # use hitz_devices::VirtioBlockDevice;
+/// # use hitz_devices::VirtioMmioTransport;
+/// # use std::sync::Arc;
+/// # use hitz_hal::GuestMemAccess;
+/// # struct DummyMem;
+/// # impl GuestMemAccess for DummyMem {
+/// #     fn read_guest(&self, _gpa: u64, _buf: &mut [u8]) -> Result<(), hitz_hal::HalError> { Ok(()) }
+/// #     fn write_guest(&self, _gpa: u64, _data: &[u8]) -> Result<(), hitz_hal::HalError> { Ok(()) }
+/// # }
+/// // 1. Open the backing disk image file on the host.
+/// let disk_file = std::fs::File::open("ubuntu.img").unwrap();
+///
+/// // 2. Instantiate the virtio block device backend.
+/// let block_device = VirtioBlockDevice::new(disk_file).unwrap();
+///
+/// // 3. Wrap the block device in an MMIO transport and attach it to the bus.
+/// let mem = Arc::new(DummyMem);
+/// let transport = VirtioMmioTransport::new(block_device, mem, 5);
+/// ```
+///
 /// Processes read/write requests from the guest via virtqueue descriptor
 /// chains. Each request has three descriptors:
 /// 1. Header (device-readable): request type + sector number

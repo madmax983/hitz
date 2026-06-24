@@ -2,6 +2,33 @@
 //!
 //! Reference: virtio spec 1.2, section 5.10.
 //! Linux kernel: `include/uapi/linux/virtio_vsock.h`
+//!
+//! # Abstract
+//!
+//! Provides a virtual socket (vsock) interface to the guest, enabling zero-configuration
+//! host-to-guest communication. This acts as the host-side endpoint of the vsock link.
+//!
+//! # The Hero's Journey
+//!
+//! ```no_run
+//! # use hitz_devices::VirtioVsockDevice;
+//! # use crossbeam_channel::unbounded;
+//! # use hitz_devices::VirtioMmioTransport;
+//! # use hitz_hal::GuestMemAccess;
+//! # use std::sync::Arc;
+//! # struct DummyMem;
+//! # impl GuestMemAccess for DummyMem {
+//! #     fn read_guest(&self, _gpa: u64, _buf: &mut [u8]) -> Result<(), hitz_hal::HalError> { Ok(()) }
+//! #     fn write_guest(&self, _gpa: u64, _data: &[u8]) -> Result<(), hitz_hal::HalError> { Ok(()) }
+//! # }
+//! // 1. Create the virtio-vsock device.
+//! let (vsock_device, host_rx, host_tx) = VirtioVsockDevice::new(3);
+//!
+//! // 2. Wrap it in a virtio-mmio transport and register it to the MmioBus.
+//! let mem = Arc::new(DummyMem);
+//! let transport = VirtioMmioTransport::new(vsock_device, mem, 5);
+//! ```
+//!
 
 use std::collections::VecDeque;
 
