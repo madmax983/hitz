@@ -1053,7 +1053,7 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
 
     let cpu_bar = format!(
         "{} {:.1}%",
-        make_bar(snap.cpu.total_pct, 15),
+        make_bar(snap.cpu.total_pct.into(), 15),
         snap.cpu.total_pct
     );
     let mem_bar = format!("{} {}", make_bar(mem_pct, 15), mem_str);
@@ -1062,7 +1062,7 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
         Cell::new("CPU Total")
             .add_attribute(Attribute::Bold)
             .fg(Color::Cyan),
-        Cell::new(cpu_bar).fg(color_for_pct(snap.cpu.total_pct)),
+        Cell::new(cpu_bar).fg(color_for_pct(snap.cpu.total_pct.into())),
         Cell::new("Cores")
             .add_attribute(Attribute::Bold)
             .fg(Color::Cyan),
@@ -1178,7 +1178,7 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
         for proc in &snap.processes {
             let rss_mb = proc.rss_bytes / (1024 * 1024);
             let cpu_cell =
-                Cell::new(format!("{:.1}%", proc.cpu_pct)).fg(color_for_pct(proc.cpu_pct));
+                Cell::new(format!("{:.1}%", proc.cpu_pct)).fg(color_for_pct(proc.cpu_pct.into()));
             let _ = proc_table.add_row([
                 Cell::new(proc.pid.to_string()),
                 Cell::new(proc.name.clone()),
@@ -1437,35 +1437,49 @@ async fn handle_vm_status(args: &VmIdArgs) -> Result<()> {
             };
 
             let _ = table.add_row([
-                Cell::new("ID:").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                Cell::new("ID:")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(comfy_table::Color::Cyan),
                 Cell::new(&info.id),
             ]);
             let _ = table.add_row([
-                Cell::new("State:").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                Cell::new("State:")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(comfy_table::Color::Cyan),
                 state_cell,
             ]);
             let _ = table.add_row([
-                Cell::new("Kernel:").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                Cell::new("Kernel:")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(comfy_table::Color::Cyan),
                 Cell::new(info.config.kernel_path.display().to_string()),
             ]);
             if let Some(ref path) = info.config.initramfs_path {
                 let _ = table.add_row([
-                    Cell::new("Initramfs:").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                    Cell::new("Initramfs:")
+                        .add_attribute(comfy_table::Attribute::Bold)
+                        .fg(comfy_table::Color::Cyan),
                     Cell::new(path.display().to_string()),
                 ]);
             }
             if let Some(ref path) = info.config.disk_path {
                 let _ = table.add_row([
-                    Cell::new("Disk:").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                    Cell::new("Disk:")
+                        .add_attribute(comfy_table::Attribute::Bold)
+                        .fg(comfy_table::Color::Cyan),
                     Cell::new(path.display().to_string()),
                 ]);
             }
             let _ = table.add_row([
-                Cell::new("RAM:").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                Cell::new("RAM:")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(comfy_table::Color::Cyan),
                 Cell::new(format!("{} MiB", info.config.ram_mib)),
             ]);
             let _ = table.add_row([
-                Cell::new("CPUs:").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                Cell::new("CPUs:")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(comfy_table::Color::Cyan),
                 Cell::new(info.config.cpus.to_string()),
             ]);
             let agent_str = match info.config.guest_agent {
@@ -1474,11 +1488,15 @@ async fn handle_vm_status(args: &VmIdArgs) -> Result<()> {
                 hitz_api::GuestAgentMode::Disabled => "Disabled".to_string(),
             };
             let _ = table.add_row([
-                Cell::new("Guest Agent:").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                Cell::new("Guest Agent:")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(comfy_table::Color::Cyan),
                 Cell::new(agent_str),
             ]);
             let _ = table.add_row([
-                Cell::new("Guest CID:").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                Cell::new("Guest CID:")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(comfy_table::Color::Cyan),
                 Cell::new(info.config.guest_cid.to_string()),
             ]);
             if let Some(ref net) = info.config.net {
@@ -1488,7 +1506,9 @@ async fn handle_vm_status(args: &VmIdArgs) -> Result<()> {
                     net.host_ip, net.guest_ip, mac_str
                 );
                 let _ = table.add_row([
-                    Cell::new("Network:").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                    Cell::new("Network:")
+                        .add_attribute(comfy_table::Attribute::Bold)
+                        .fg(comfy_table::Color::Cyan),
                     Cell::new(net_str),
                 ]);
             }
@@ -1507,13 +1527,17 @@ async fn handle_vm_status(args: &VmIdArgs) -> Result<()> {
                     let _ = write!(ports_str, "0.0.0.0:{} -> {}", p.host_port, p.guest_port);
                 }
                 let _ = table.add_row([
-                    Cell::new("Ports:").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                    Cell::new("Ports:")
+                        .add_attribute(comfy_table::Attribute::Bold)
+                        .fg(comfy_table::Color::Cyan),
                     Cell::new(ports_str),
                 ]);
             }
             if let Some(reason) = &info.exit_reason {
                 let _ = table.add_row([
-                    Cell::new("Exit:").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                    Cell::new("Exit:")
+                        .add_attribute(comfy_table::Attribute::Bold)
+                        .fg(comfy_table::Color::Cyan),
                     Cell::new(reason),
                 ]);
             }
@@ -1558,11 +1582,21 @@ async fn handle_vm_list(args: &VmListArgs) -> Result<()> {
             let mut table = Table::new();
             let _ = table.load_preset(UTF8_FULL_CONDENSED);
             let _ = table.set_header([
-                Cell::new("ID").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
-                Cell::new("State").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
-                Cell::new("RAM (MiB)").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
-                Cell::new("CPUs").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
-                Cell::new("Exit Reason").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                Cell::new("ID")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(comfy_table::Color::Cyan),
+                Cell::new("State")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(comfy_table::Color::Cyan),
+                Cell::new("RAM (MiB)")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(comfy_table::Color::Cyan),
+                Cell::new("CPUs")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(comfy_table::Color::Cyan),
+                Cell::new("Exit Reason")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(comfy_table::Color::Cyan),
             ]);
 
             for info in vms {
@@ -1673,9 +1707,6 @@ async fn handle_vm_top(args: &VmIdArgs) -> Result<()> {
     use ratatui::{
         Terminal,
         backend::CrosstermBackend,
-        layout::{Constraint, Direction, Layout},
-        style::{Color, Modifier, Style},
-        widgets::{Block, Borders, Cell, Gauge, Paragraph, Row, Table},
     };
     use std::time::{Duration, Instant};
 
@@ -1755,12 +1786,185 @@ async fn handle_vm_top(args: &VmIdArgs) -> Result<()> {
     res
 }
 
+fn draw_top_header(f: &mut ratatui::Frame<'_>, vm_id: &str, area: ratatui::layout::Rect) {
+    use ratatui::{
+        style::{Color, Modifier, Style},
+        widgets::{Block, Borders, Paragraph},
+    };
+    let header = Paragraph::new(format!("Hitz Top - VM: {}", vm_id))
+        .style(
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        )
+        .block(Block::default().borders(Borders::ALL));
+    f.render_widget(header, area);
+}
+
+fn draw_top_error(f: &mut ratatui::Frame<'_>, err: &str, area: ratatui::layout::Rect) {
+    use ratatui::{
+        style::{Color, Style},
+        widgets::{Block, Borders, Paragraph},
+    };
+    let err_p = Paragraph::new(err)
+        .style(Style::default().fg(Color::Red))
+        .block(Block::default().borders(Borders::ALL).title("Error"));
+    f.render_widget(err_p, area);
+}
+
 #[allow(
-    clippy::too_many_lines,
     clippy::cast_possible_truncation,
     clippy::cast_sign_loss,
     clippy::cast_precision_loss
 )]
+fn draw_top_gauges(
+    f: &mut ratatui::Frame<'_>,
+    snap: &hitz_api::MetricsSnapshot,
+    area: ratatui::layout::Rect,
+) {
+    use ratatui::{
+        layout::{Constraint, Direction, Layout},
+        style::{Color, Style},
+        widgets::{Block, Borders, Gauge},
+    };
+
+    let top_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .split(area);
+
+    let cpu_label = format!(
+        "{:.1}% (Load: {:.2}, {:.2}, {:.2})",
+        snap.cpu.total_pct, snap.cpu.load_avg[0], snap.cpu.load_avg[1], snap.cpu.load_avg[2]
+    );
+    let cpu_gauge = Gauge::default()
+        .block(Block::default().title("CPU").borders(Borders::ALL))
+        .gauge_style(Style::default().fg(Color::Green))
+        .percent((snap.cpu.total_pct as u16).min(100))
+        .label(cpu_label);
+    f.render_widget(cpu_gauge, top_chunks[0]);
+
+    let used_mb = snap.memory.used_bytes / (1024 * 1024);
+    let total_mb = snap.memory.total_bytes / (1024 * 1024);
+    let mem_pct = if total_mb > 0 {
+        ((used_mb as f64 / total_mb as f64) * 100.0) as u16
+    } else {
+        0
+    };
+    let mem_label = format!("{used_mb} MB / {total_mb} MB");
+    let mem_gauge = Gauge::default()
+        .block(Block::default().title("Memory").borders(Borders::ALL))
+        .gauge_style(Style::default().fg(Color::Yellow))
+        .percent(mem_pct.min(100))
+        .label(mem_label);
+    f.render_widget(mem_gauge, top_chunks[1]);
+}
+
+fn draw_disk_table(
+    f: &mut ratatui::Frame<'_>,
+    snap: &hitz_api::MetricsSnapshot,
+    area: ratatui::layout::Rect,
+) {
+    use ratatui::{
+        layout::Constraint,
+        style::{Modifier, Style},
+        widgets::{Block, Borders, Cell, Row, Table},
+    };
+
+    let disk_table = Table::new(
+        snap.disks.iter().map(|d| {
+            Row::new([
+                Cell::from(d.name.as_str()),
+                Cell::from(format!("{}", d.read_bytes / 1024)),
+                Cell::from(format!("{}", d.write_bytes / 1024)),
+            ])
+        }),
+        [
+            Constraint::Percentage(40),
+            Constraint::Percentage(30),
+            Constraint::Percentage(30),
+        ],
+    )
+    .header(
+        Row::new(["Device", "Read KB", "Write KB"])
+            .style(Style::default().add_modifier(Modifier::BOLD)),
+    )
+    .block(Block::default().title("Disks").borders(Borders::ALL));
+    f.render_widget(disk_table, area);
+}
+
+fn draw_network_table(
+    f: &mut ratatui::Frame<'_>,
+    snap: &hitz_api::MetricsSnapshot,
+    area: ratatui::layout::Rect,
+) {
+    use ratatui::{
+        layout::Constraint,
+        style::{Modifier, Style},
+        widgets::{Block, Borders, Cell, Row, Table},
+    };
+
+    let net_table = Table::new(
+        snap.networks.iter().map(|n| {
+            Row::new([
+                Cell::from(n.interface.as_str()),
+                Cell::from(format!("{}", n.rx_bytes / 1024)),
+                Cell::from(format!("{}", n.tx_bytes / 1024)),
+            ])
+        }),
+        [
+            Constraint::Percentage(40),
+            Constraint::Percentage(30),
+            Constraint::Percentage(30),
+        ],
+    )
+    .header(
+        Row::new(["Interface", "Rx KB", "Tx KB"])
+            .style(Style::default().add_modifier(Modifier::BOLD)),
+    )
+    .block(Block::default().title("Networks").borders(Borders::ALL));
+    f.render_widget(net_table, area);
+}
+
+fn draw_process_table(
+    f: &mut ratatui::Frame<'_>,
+    snap: &hitz_api::MetricsSnapshot,
+    area: ratatui::layout::Rect,
+) {
+    use ratatui::{
+        layout::Constraint,
+        style::{Modifier, Style},
+        widgets::{Block, Borders, Cell, Row, Table},
+    };
+
+    let proc_table = Table::new(
+        snap.processes.iter().map(|p| {
+            Row::new([
+                Cell::from(p.pid.to_string()),
+                Cell::from(p.name.as_str()),
+                Cell::from(format!("{:.1}%", p.cpu_pct)),
+                Cell::from(format!("{} MB", p.rss_bytes / (1024 * 1024))),
+            ])
+        }),
+        [
+            Constraint::Percentage(15),
+            Constraint::Percentage(45),
+            Constraint::Percentage(20),
+            Constraint::Percentage(20),
+        ],
+    )
+    .header(
+        Row::new(["PID", "Name", "CPU", "RSS"])
+            .style(Style::default().add_modifier(Modifier::BOLD)),
+    )
+    .block(
+        Block::default()
+            .title("Top Processes")
+            .borders(Borders::ALL),
+    );
+    f.render_widget(proc_table, area);
+}
+
 fn draw_vm_top_ui(
     f: &mut ratatui::Frame<'_>,
     vm_id: &str,
@@ -1769,8 +1973,7 @@ fn draw_vm_top_ui(
 ) {
     use ratatui::{
         layout::{Constraint, Direction, Layout},
-        style::{Color, Modifier, Style},
-        widgets::{Block, Borders, Cell, Gauge, Paragraph, Row, Table},
+        widgets::{Block, Borders, Paragraph},
     };
 
     let size = f.area();
@@ -1783,57 +1986,15 @@ fn draw_vm_top_ui(
         ])
         .split(size);
 
-    // Header
-    let header = Paragraph::new(format!("Hitz Top - VM: {}", vm_id))
-        .style(
-            Style::default()
-                .fg(Color::Cyan)
-                .add_modifier(Modifier::BOLD),
-        )
-        .block(Block::default().borders(Borders::ALL));
-    f.render_widget(header, main_chunks[0]);
+    draw_top_header(f, vm_id, main_chunks[0]);
 
-    if let Some(ref err) = last_err {
-        let err_p = Paragraph::new(err.as_str())
-            .style(Style::default().fg(Color::Red))
-            .block(Block::default().borders(Borders::ALL).title("Error"));
-        f.render_widget(err_p, main_chunks[1]);
+    if let Some(err) = last_err {
+        draw_top_error(f, err, main_chunks[1]);
         return;
     }
 
-    if let Some(ref snap) = last_snap {
-        let top_chunks = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
-            .split(main_chunks[1]);
-
-        // CPU Gauge
-        let cpu_label = format!(
-            "{:.1}% (Load: {:.2}, {:.2}, {:.2})",
-            snap.cpu.total_pct, snap.cpu.load_avg[0], snap.cpu.load_avg[1], snap.cpu.load_avg[2]
-        );
-        let cpu_gauge = Gauge::default()
-            .block(Block::default().title("CPU").borders(Borders::ALL))
-            .gauge_style(Style::default().fg(Color::Green))
-            .percent((snap.cpu.total_pct as u16).min(100))
-            .label(cpu_label);
-        f.render_widget(cpu_gauge, top_chunks[0]);
-
-        // Memory Gauge
-        let used_mb = snap.memory.used_bytes / (1024 * 1024);
-        let total_mb = snap.memory.total_bytes / (1024 * 1024);
-        let mem_pct = if total_mb > 0 {
-            ((used_mb as f64 / total_mb as f64) * 100.0) as u16
-        } else {
-            0
-        };
-        let mem_label = format!("{used_mb} MB / {total_mb} MB");
-        let mem_gauge = Gauge::default()
-            .block(Block::default().title("Memory").borders(Borders::ALL))
-            .gauge_style(Style::default().fg(Color::Yellow))
-            .percent(mem_pct.min(100))
-            .label(mem_label);
-        f.render_widget(mem_gauge, top_chunks[1]);
+    if let Some(snap) = last_snap {
+        draw_top_gauges(f, snap, main_chunks[1]);
 
         let bottom_chunks = Layout::default()
             .direction(Direction::Horizontal)
@@ -1845,82 +2006,9 @@ fn draw_vm_top_ui(
             .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
             .split(bottom_chunks[0]);
 
-        // Disk Table
-        // ⚡ Bolt Optimization: Removed intermediate `.collect::<Vec<_>>()` allocation by passing
-        // the iterator directly to `Table::new`. We also replaced `vec![...]` with
-        // static arrays `[...]` for `Row::new` to eliminate heap allocations per frame on the UI hot path.
-        let disk_table = Table::new(
-            snap.disks.iter().map(|d| {
-                Row::new([
-                    Cell::from(d.name.as_str()),
-                    Cell::from(format!("{}", d.read_bytes / 1024)),
-                    Cell::from(format!("{}", d.write_bytes / 1024)),
-                ])
-            }),
-            [
-                Constraint::Percentage(40),
-                Constraint::Percentage(30),
-                Constraint::Percentage(30),
-            ],
-        )
-        .header(
-            Row::new(["Device", "Read KB", "Write KB"])
-                .style(Style::default().add_modifier(Modifier::BOLD)),
-        )
-        .block(Block::default().title("Disks").borders(Borders::ALL));
-        f.render_widget(disk_table, io_chunks[0]);
-
-        // Network Table
-        // ⚡ Bolt Optimization: Replaced `vec![...]` with arrays for zero-allocation rows.
-        let net_table = Table::new(
-            snap.networks.iter().map(|n| {
-                Row::new([
-                    Cell::from(n.interface.as_str()),
-                    Cell::from(format!("{}", n.rx_bytes / 1024)),
-                    Cell::from(format!("{}", n.tx_bytes / 1024)),
-                ])
-            }),
-            [
-                Constraint::Percentage(40),
-                Constraint::Percentage(30),
-                Constraint::Percentage(30),
-            ],
-        )
-        .header(
-            Row::new(["Interface", "Rx KB", "Tx KB"])
-                .style(Style::default().add_modifier(Modifier::BOLD)),
-        )
-        .block(Block::default().title("Networks").borders(Borders::ALL));
-        f.render_widget(net_table, io_chunks[1]);
-
-        // Processes Table
-        // ⚡ Bolt Optimization: Replaced `vec![...]` with arrays for zero-allocation rows.
-        let proc_table = Table::new(
-            snap.processes.iter().map(|p| {
-                Row::new([
-                    Cell::from(p.pid.to_string()),
-                    Cell::from(p.name.as_str()),
-                    Cell::from(format!("{:.1}%", p.cpu_pct)),
-                    Cell::from(format!("{} MB", p.rss_bytes / (1024 * 1024))),
-                ])
-            }),
-            [
-                Constraint::Percentage(15),
-                Constraint::Percentage(45),
-                Constraint::Percentage(20),
-                Constraint::Percentage(20),
-            ],
-        )
-        .header(
-            Row::new(["PID", "Name", "CPU", "RSS"])
-                .style(Style::default().add_modifier(Modifier::BOLD)),
-        )
-        .block(
-            Block::default()
-                .title("Top Processes")
-                .borders(Borders::ALL),
-        );
-        f.render_widget(proc_table, bottom_chunks[1]);
+        draw_disk_table(f, snap, io_chunks[0]);
+        draw_network_table(f, snap, io_chunks[1]);
+        draw_process_table(f, snap, bottom_chunks[1]);
     } else if last_err.is_none() {
         let loading =
             Paragraph::new("Loading metrics...").block(Block::default().borders(Borders::ALL));
@@ -2079,10 +2167,18 @@ fn handle_vm_timeline(args: &VmTimelineArgs) -> Result<()> {
     let mut table = Table::new();
     let _ = table.load_preset(UTF8_FULL_CONDENSED);
     let _ = table.set_header([
-        Cell::new("Time").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
-        Cell::new("Status").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
-        Cell::new("Reasons Added").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
-        Cell::new("Reasons Removed").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+        Cell::new("Time")
+            .add_attribute(comfy_table::Attribute::Bold)
+            .fg(comfy_table::Color::Cyan),
+        Cell::new("Status")
+            .add_attribute(comfy_table::Attribute::Bold)
+            .fg(comfy_table::Color::Cyan),
+        Cell::new("Reasons Added")
+            .add_attribute(comfy_table::Attribute::Bold)
+            .fg(comfy_table::Color::Cyan),
+        Cell::new("Reasons Removed")
+            .add_attribute(comfy_table::Attribute::Bold)
+            .fg(comfy_table::Color::Cyan),
     ]);
 
     for (line_num, line_result) in reader.lines().enumerate() {
@@ -2370,8 +2466,12 @@ async fn handle_vm_analyze(args: &VmIdArgs) -> Result<()> {
         let _ = table.load_preset(UTF8_FULL_CONDENSED);
 
         let _ = table.set_header([
-            Cell::new("Level").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
-            Cell::new("Insight").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+            Cell::new("Level")
+                .add_attribute(comfy_table::Attribute::Bold)
+                .fg(comfy_table::Color::Cyan),
+            Cell::new("Insight")
+                .add_attribute(comfy_table::Attribute::Bold)
+                .fg(comfy_table::Color::Cyan),
         ]);
 
         for insight in insights {
