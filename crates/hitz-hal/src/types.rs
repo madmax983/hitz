@@ -419,3 +419,32 @@ pub struct InterruptRequest {
     /// Interrupt vector number.
     pub vector: u8,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mem_flags_read_only() {
+        let flags = MemFlags::READ_ONLY;
+        assert!(flags.read);
+        assert!(!flags.write);
+        assert!(!flags.execute);
+    }
+
+    #[test]
+    fn mem_flags_read_write() {
+        let flags = MemFlags::READ_WRITE;
+        assert!(flags.read);
+        assert!(flags.write);
+        assert!(!flags.execute);
+    }
+
+    #[test]
+    fn mem_flags_read_write_exec() {
+        let flags = MemFlags::READ_WRITE_EXEC;
+        assert!(flags.read);
+        assert!(flags.write);
+        assert!(flags.execute);
+    }
+}
