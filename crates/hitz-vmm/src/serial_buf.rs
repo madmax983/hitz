@@ -266,7 +266,9 @@ impl SerialReader {
                 }
             }
             // Park until the writer pushes more data or closes.
-            let _ = self.notify_rx.changed().await;
+            if self.notify_rx.changed().await.is_err() {
+                return None;
+            }
         }
     }
 }
@@ -284,6 +286,31 @@ mod tests {
             .enable_all()
             .build()
             .expect("failed to build tokio runtime")
+    }
+
+    #[test]
+    fn havoc_dropped_writer_hang() {
+        let rt = test_rt();
+        rt.block_on(async {
+            let buf = SerialBuf::new();
+            let mut reader = buf.reader();
+
+            // Drop the buffer (the writer) WITHOUT calling .close()
+            drop(buf);
+
+            // This should return None because the writer is gone.
+            // If it ignores the Err from changed() and loops, it will hit a busy-loop,
+            // which will eventually time out here.
+            let result =
+                tokio::time::timeout(Duration::from_millis(100), reader.read_chunk()).await;
+
+            // We expect the read to complete with `None`. If it times out, it's a busy loop!
+            assert!(
+                result.is_ok(),
+                "HANG DETECTED: reader busy-loops when writer is dropped!"
+            );
+            assert_eq!(result.unwrap(), None);
+        });
     }
 
     #[test]
