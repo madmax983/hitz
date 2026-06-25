@@ -78,6 +78,12 @@ mod sentinel;
 #[cfg(feature = "sentinel")]
 pub use sentinel::{ConditionOperator, MetricTarget, SentinelCondition, SentinelRule};
 
+#[cfg(feature = "predict")]
+/// Prediction module for estimating time-to-exhaustion (TTE).
+mod predict;
+#[cfg(feature = "predict")]
+pub use predict::{ExhaustionPrediction, PredictExhaustion};
+
 #[cfg(test)]
 #[allow(clippy::expect_used)]
 #[allow(clippy::unwrap_used)]
