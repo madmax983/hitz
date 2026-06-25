@@ -717,6 +717,34 @@ fn run_service(arguments: &[OsString]) -> anyhow::Result<()> {
 
 // ── Main ──
 
+fn vm_state_cell(state: hitz_api::VmState) -> comfy_table::Cell {
+    use comfy_table::{Cell, Color};
+    match state {
+        hitz_api::VmState::Running => Cell::new(state.as_str()).fg(Color::Green),
+        hitz_api::VmState::Stopped => Cell::new(state.as_str()).fg(Color::Yellow),
+        hitz_api::VmState::Failed => Cell::new(state.as_str()).fg(Color::Red),
+        hitz_api::VmState::Created => Cell::new(state.as_str()).fg(Color::Cyan),
+    }
+}
+
+fn health_status_cell(status: hitz_api::HealthStatus) -> comfy_table::Cell {
+    use comfy_table::{Cell, Color};
+    match status {
+        hitz_api::HealthStatus::Healthy => Cell::new(" ✅ HEALTHY ")
+            .fg(Color::White)
+            .bg(Color::DarkGreen)
+            .add_attribute(comfy_table::Attribute::Bold),
+        hitz_api::HealthStatus::Warning => Cell::new(" ⚠️ WARN ")
+            .fg(Color::Black)
+            .bg(Color::Yellow)
+            .add_attribute(comfy_table::Attribute::Bold),
+        hitz_api::HealthStatus::Critical => Cell::new(" 🚨 CRIT ")
+            .fg(Color::White)
+            .bg(Color::DarkRed)
+            .add_attribute(comfy_table::Attribute::Bold),
+    }
+}
+
 fn main() -> ExitCode {
     let cli = Cli::parse();
 
@@ -1429,43 +1457,52 @@ async fn handle_vm_status(args: &VmIdArgs) -> Result<()> {
             let mut table = Table::new();
             let _ = table.load_preset(UTF8_FULL_CONDENSED);
 
-            let state_cell = match info.state {
-                hitz_api::VmState::Running => Cell::new("Running").fg(Color::Green),
-                hitz_api::VmState::Stopped => Cell::new("Stopped").fg(Color::Yellow),
-                hitz_api::VmState::Failed => Cell::new("Failed").fg(Color::Red),
-                hitz_api::VmState::Created => Cell::new("Created").fg(Color::Cyan),
-            };
+            let state_cell = vm_state_cell(info.state);
 
             let _ = table.add_row([
-                Cell::new("ID:").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                Cell::new("ID:")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(comfy_table::Color::Cyan),
                 Cell::new(&info.id),
             ]);
             let _ = table.add_row([
-                Cell::new("State:").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                Cell::new("State:")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(comfy_table::Color::Cyan),
                 state_cell,
             ]);
             let _ = table.add_row([
-                Cell::new("Kernel:").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                Cell::new("Kernel:")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(comfy_table::Color::Cyan),
                 Cell::new(info.config.kernel_path.display().to_string()),
             ]);
             if let Some(ref path) = info.config.initramfs_path {
                 let _ = table.add_row([
-                    Cell::new("Initramfs:").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                    Cell::new("Initramfs:")
+                        .add_attribute(comfy_table::Attribute::Bold)
+                        .fg(comfy_table::Color::Cyan),
                     Cell::new(path.display().to_string()),
                 ]);
             }
             if let Some(ref path) = info.config.disk_path {
                 let _ = table.add_row([
-                    Cell::new("Disk:").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                    Cell::new("Disk:")
+                        .add_attribute(comfy_table::Attribute::Bold)
+                        .fg(comfy_table::Color::Cyan),
                     Cell::new(path.display().to_string()),
                 ]);
             }
             let _ = table.add_row([
-                Cell::new("RAM:").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                Cell::new("RAM:")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(comfy_table::Color::Cyan),
                 Cell::new(format!("{} MiB", info.config.ram_mib)),
             ]);
             let _ = table.add_row([
-                Cell::new("CPUs:").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                Cell::new("CPUs:")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(comfy_table::Color::Cyan),
                 Cell::new(info.config.cpus.to_string()),
             ]);
             let agent_str = match info.config.guest_agent {
@@ -1474,11 +1511,15 @@ async fn handle_vm_status(args: &VmIdArgs) -> Result<()> {
                 hitz_api::GuestAgentMode::Disabled => "Disabled".to_string(),
             };
             let _ = table.add_row([
-                Cell::new("Guest Agent:").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                Cell::new("Guest Agent:")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(comfy_table::Color::Cyan),
                 Cell::new(agent_str),
             ]);
             let _ = table.add_row([
-                Cell::new("Guest CID:").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                Cell::new("Guest CID:")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(comfy_table::Color::Cyan),
                 Cell::new(info.config.guest_cid.to_string()),
             ]);
             if let Some(ref net) = info.config.net {
@@ -1488,7 +1529,9 @@ async fn handle_vm_status(args: &VmIdArgs) -> Result<()> {
                     net.host_ip, net.guest_ip, mac_str
                 );
                 let _ = table.add_row([
-                    Cell::new("Network:").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                    Cell::new("Network:")
+                        .add_attribute(comfy_table::Attribute::Bold)
+                        .fg(comfy_table::Color::Cyan),
                     Cell::new(net_str),
                 ]);
             }
@@ -1507,13 +1550,17 @@ async fn handle_vm_status(args: &VmIdArgs) -> Result<()> {
                     let _ = write!(ports_str, "0.0.0.0:{} -> {}", p.host_port, p.guest_port);
                 }
                 let _ = table.add_row([
-                    Cell::new("Ports:").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                    Cell::new("Ports:")
+                        .add_attribute(comfy_table::Attribute::Bold)
+                        .fg(comfy_table::Color::Cyan),
                     Cell::new(ports_str),
                 ]);
             }
             if let Some(reason) = &info.exit_reason {
                 let _ = table.add_row([
-                    Cell::new("Exit:").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                    Cell::new("Exit:")
+                        .add_attribute(comfy_table::Attribute::Bold)
+                        .fg(comfy_table::Color::Cyan),
                     Cell::new(reason),
                 ]);
             }
@@ -1558,20 +1605,25 @@ async fn handle_vm_list(args: &VmListArgs) -> Result<()> {
             let mut table = Table::new();
             let _ = table.load_preset(UTF8_FULL_CONDENSED);
             let _ = table.set_header([
-                Cell::new("ID").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
-                Cell::new("State").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
-                Cell::new("RAM (MiB)").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
-                Cell::new("CPUs").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
-                Cell::new("Exit Reason").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                Cell::new("ID")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(comfy_table::Color::Cyan),
+                Cell::new("State")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(comfy_table::Color::Cyan),
+                Cell::new("RAM (MiB)")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(comfy_table::Color::Cyan),
+                Cell::new("CPUs")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(comfy_table::Color::Cyan),
+                Cell::new("Exit Reason")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(comfy_table::Color::Cyan),
             ]);
 
             for info in vms {
-                let state_cell = match info.state {
-                    hitz_api::VmState::Running => Cell::new("Running").fg(Color::Green),
-                    hitz_api::VmState::Stopped => Cell::new("Stopped").fg(Color::Yellow),
-                    hitz_api::VmState::Failed => Cell::new("Failed").fg(Color::Red),
-                    hitz_api::VmState::Created => Cell::new("Created").fg(Color::Cyan),
-                };
+                let state_cell = vm_state_cell(info.state);
                 // ⚡ Bolt Optimization: Replace `.unwrap_or_else(|| "-".to_string())` with `.as_deref().unwrap_or("-")`
                 // This eliminates an unnecessary `String` allocation on the hot path of formatting CLI output.
                 let exit_reason = info.exit_reason.as_deref().unwrap_or("-");
@@ -2079,10 +2131,18 @@ fn handle_vm_timeline(args: &VmTimelineArgs) -> Result<()> {
     let mut table = Table::new();
     let _ = table.load_preset(UTF8_FULL_CONDENSED);
     let _ = table.set_header([
-        Cell::new("Time").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
-        Cell::new("Status").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
-        Cell::new("Reasons Added").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
-        Cell::new("Reasons Removed").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+        Cell::new("Time")
+            .add_attribute(comfy_table::Attribute::Bold)
+            .fg(comfy_table::Color::Cyan),
+        Cell::new("Status")
+            .add_attribute(comfy_table::Attribute::Bold)
+            .fg(comfy_table::Color::Cyan),
+        Cell::new("Reasons Added")
+            .add_attribute(comfy_table::Attribute::Bold)
+            .fg(comfy_table::Color::Cyan),
+        Cell::new("Reasons Removed")
+            .add_attribute(comfy_table::Attribute::Bold)
+            .fg(comfy_table::Color::Cyan),
     ]);
 
     for (line_num, line_result) in reader.lines().enumerate() {
@@ -2124,20 +2184,7 @@ fn handle_vm_timeline(args: &VmTimelineArgs) -> Result<()> {
             let elapsed_secs = elapsed_ms / 1000;
             let time_str = format!("T+{:02}:{:02}", elapsed_secs / 60, elapsed_secs % 60);
 
-            let status_cell = match health.status {
-                HealthStatus::Healthy => Cell::new(" ✅ HEALTHY ")
-                    .fg(Color::White)
-                    .bg(Color::DarkGreen)
-                    .add_attribute(comfy_table::Attribute::Bold),
-                HealthStatus::Warning => Cell::new(" ⚠️ WARN ")
-                    .fg(Color::Black)
-                    .bg(Color::Yellow)
-                    .add_attribute(comfy_table::Attribute::Bold),
-                HealthStatus::Critical => Cell::new(" 🚨 CRIT ")
-                    .fg(Color::White)
-                    .bg(Color::DarkRed)
-                    .add_attribute(comfy_table::Attribute::Bold),
-            };
+            let status_cell = health_status_cell(health.status);
 
             // ⚡ Bolt Optimization: Replace intermediate `Vec` heap allocations and `.join(...)`
             // with an iterator chain using `.fold(String::new(), ...)` to eliminate
@@ -2370,8 +2417,12 @@ async fn handle_vm_analyze(args: &VmIdArgs) -> Result<()> {
         let _ = table.load_preset(UTF8_FULL_CONDENSED);
 
         let _ = table.set_header([
-            Cell::new("Level").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
-            Cell::new("Insight").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+            Cell::new("Level")
+                .add_attribute(comfy_table::Attribute::Bold)
+                .fg(comfy_table::Color::Cyan),
+            Cell::new("Insight")
+                .add_attribute(comfy_table::Attribute::Bold)
+                .fg(comfy_table::Color::Cyan),
         ]);
 
         for insight in insights {
@@ -2499,12 +2550,6 @@ async fn handle_vm_dashboard(args: &VmListArgs) -> Result<()> {
                 f.render_widget(no_vms_msg, chunks[1]);
             } else {
                 let rows = vms.iter().map(|vm| {
-                    let state_str = match vm.state {
-                        hitz_api::VmState::Running => "Running",
-                        hitz_api::VmState::Stopped => "Stopped",
-                        hitz_api::VmState::Failed => "Failed",
-                        hitz_api::VmState::Created => "Created",
-                    };
                     let state_color = match vm.state {
                         hitz_api::VmState::Running => Color::Green,
                         hitz_api::VmState::Stopped => Color::Yellow,
@@ -2520,7 +2565,7 @@ async fn handle_vm_dashboard(args: &VmListArgs) -> Result<()> {
                     // accepts `&str`.
                     Row::new([
                         Cell::from(vm.id.as_str()),
-                        Cell::from(state_str).style(Style::default().fg(state_color)),
+                        Cell::from(vm.state.as_str()).style(Style::default().fg(state_color)),
                         Cell::from(vm.config.ram_mib.to_string()),
                         Cell::from(vm.config.cpus.to_string()),
                         Cell::from(exit_reason),

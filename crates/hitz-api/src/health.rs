@@ -54,6 +54,24 @@ pub enum HealthStatus {
     Critical,
 }
 
+impl std::fmt::Display for HealthStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+impl HealthStatus {
+    /// Returns the string representation of the health status.
+    #[must_use]
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            Self::Healthy => "Healthy",
+            Self::Warning => "Warning",
+            Self::Critical => "Critical",
+        }
+    }
+}
+
 /// The result of a health assessment.
 ///
 /// # Abstract

@@ -128,6 +128,25 @@ pub enum VmState {
     Failed,
 }
 
+impl std::fmt::Display for VmState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+impl VmState {
+    /// Returns the string representation of the state.
+    #[must_use]
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            Self::Created => "Created",
+            Self::Running => "Running",
+            Self::Stopped => "Stopped",
+            Self::Failed => "Failed",
+        }
+    }
+}
+
 /// Request to create a new VM with the given configuration.
 ///
 /// # Abstract
