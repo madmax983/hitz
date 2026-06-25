@@ -723,7 +723,7 @@ fn main() -> ExitCode {
     match cli.command {
         Command::Run(args) => run_vm(args).unwrap_or_else(|e| {
             use crossterm::style::Stylize;
-            eprintln!("\r\x1b[2K{}", format!("✗ Error: {e:#}").red().bold());
+            eprintln!("\r\x1b[2K{}", format!("🚫 Error: {e:#}").red().bold());
             ExitCode::FAILURE
         }),
         Command::Daemon(cmd) => {
@@ -735,7 +735,7 @@ fn main() -> ExitCode {
             result.map_or_else(
                 |e| {
                     use crossterm::style::Stylize;
-                    eprintln!("\r\x1b[2K{}", format!("✗ Error: {e:#}").red().bold());
+                    eprintln!("\r\x1b[2K{}", format!("🚫 Error: {e:#}").red().bold());
                     ExitCode::FAILURE
                 },
                 |()| ExitCode::SUCCESS,
@@ -744,7 +744,7 @@ fn main() -> ExitCode {
         Command::Vm(cmd) => run_vm_command(cmd).map_or_else(
             |e| {
                 use crossterm::style::Stylize;
-                eprintln!("\r\x1b[2K{}", format!("✗ Error: {e:#}").red().bold());
+                eprintln!("\r\x1b[2K{}", format!("🚫 Error: {e:#}").red().bold());
                 ExitCode::FAILURE
             },
             |()| ExitCode::SUCCESS,
@@ -1197,12 +1197,12 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
 
 fn format_error_response(status: hyper::StatusCode, resp: &str, error_prefix: &str) -> String {
     let msg = if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(resp) {
-        format!("✗ {error_prefix}: {}", err.message)
+        format!("🚫 {error_prefix}: {}", err.message)
     } else if let Ok(v) = serde_json::from_str::<serde_json::Value>(resp) {
         if let Some(msg) = v.get("message").and_then(|m| m.as_str()) {
-            format!("✗ {error_prefix}: {}", msg)
+            format!("🚫 {error_prefix}: {}", msg)
         } else if let Some(err) = v.get("error").and_then(|e| e.as_str()) {
-            format!("✗ {error_prefix}: {}", err)
+            format!("🚫 {error_prefix}: {}", err)
         } else {
             // ⚡ Bolt Optimization: Replace intermediate `Vec` heap allocations and `.join(...)`
             // with an iterator chain using `.fold(String::new(), ...)` to eliminate
@@ -1230,15 +1230,15 @@ fn format_error_response(status: hyper::StatusCode, resp: &str, error_prefix: &s
                 })
             });
             if parts_str.is_empty() {
-                format!("✗ {error_prefix} ({status})")
+                format!("🚫 {error_prefix} ({status})")
             } else {
-                format!("✗ {error_prefix} ({status}): {parts_str}")
+                format!("🚫 {error_prefix} ({status}): {parts_str}")
             }
         }
     } else {
         let clean = resp.trim();
         if clean.is_empty() {
-            format!("✗ {error_prefix} ({status})")
+            format!("🚫 {error_prefix} ({status})")
         } else {
             let max_len = 200;
             let display_text = if clean.chars().count() > max_len {
@@ -1247,7 +1247,7 @@ fn format_error_response(status: hyper::StatusCode, resp: &str, error_prefix: &s
             } else {
                 clean.to_string()
             };
-            format!("✗ {error_prefix} ({status}): {display_text}")
+            format!("🚫 {error_prefix} ({status}): {display_text}")
         }
     };
     format!("\r\x1b[2K{}", msg)
@@ -2097,7 +2097,7 @@ fn handle_vm_timeline(args: &VmTimelineArgs) -> Result<()> {
                 eprintln!(
                     "{}",
                     format!(
-                        "✗ Invalid or corrupted metrics data on line {}: {}",
+                        "🚫 Invalid or corrupted metrics data on line {}: {}",
                         line_num + 1,
                         e
                     )
