@@ -62,11 +62,13 @@ pub const VMADDR_CID_HOST: u32 = 2;
 
 /// Network configuration for a VM.
 ///
+/// # Abstract
+///
 /// This structure defines how the micro-VM connects to the host network.
 /// By default, Hitz sets up a point-to-point interface (like `WinTun` on Windows
 /// or `TAP` on Linux) to allow network traffic between the host and the guest.
 ///
-/// ## Examples
+/// # The Hero's Journey
 ///
 /// ```rust
 /// use hitz_api::NetConfig;
@@ -96,7 +98,12 @@ pub struct NetConfig {
 /// A single TCP port forward rule: `host_port` on the host forwards to
 /// `guest_port` inside the VM.
 ///
-/// ## Examples
+/// # Abstract
+///
+/// Defines a network mapping to allow host-side processes to reach services
+/// running inside the micro-VM on specific ports.
+///
+/// # The Hero's Journey
 ///
 /// ```rust
 /// use hitz_api::PortForward;

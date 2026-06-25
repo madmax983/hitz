@@ -38,10 +38,12 @@ use serde::{Deserialize, Serialize};
 
 /// Action that can be performed on a running VM.
 ///
+/// # Abstract
+///
 /// This enum represents the discrete commands that can be issued to
 /// the daemon to control a micro-VM's lifecycle over the REST API.
 ///
-/// ## Examples
+/// # The Hero's Journey
 ///
 /// ```rust
 /// use hitz_api::VmAction;
@@ -99,11 +101,13 @@ impl VmAction {
 
 /// Current lifecycle state of a VM.
 ///
+/// # Abstract
+///
 /// This tracks the operational status of a micro-VM from its initial
 /// creation, through active execution, until it is gracefully stopped
 /// or encounters a fatal error.
 ///
-/// ## Examples
+/// # The Hero's Journey
 ///
 /// ```rust
 /// use hitz_api::VmState;
@@ -160,7 +164,8 @@ pub enum VmState {
 /// assert_eq!(req.config.cpus, 1);
 /// ```
 ///
-/// # Details
+/// # The Fine Print
+///
 /// This request must be serialized into JSON and sent via a `PUT` request to
 /// the daemon at `/vms/{id}`.
 #[derive(Debug, Clone, Serialize, Deserialize)]

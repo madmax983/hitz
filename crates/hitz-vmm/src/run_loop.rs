@@ -23,6 +23,24 @@ use crate::mmio_decode;
 const PIC_PORTS: [u16; 4] = [0x20, 0x21, 0xA0, 0xA1];
 
 /// Reason the run loop terminated.
+///
+/// # Abstract
+///
+/// Defines the various conditions under which the vCPU run loop will exit
+/// back to the host process.
+///
+/// # The Hero's Journey
+///
+/// ```rust
+/// use hitz_vmm::run_loop::ExitReason;
+///
+/// let reason = ExitReason::Shutdown;
+/// match reason {
+///     ExitReason::Shutdown => println!("VM is shutting down gracefully."),
+///     ExitReason::Canceled => println!("VM was forcefully killed."),
+///     _ => (),
+/// }
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExitReason {
     /// Guest executed HLT.
@@ -36,6 +54,26 @@ pub enum ExitReason {
 }
 
 /// Devices shared across all vCPU threads.
+///
+/// # Abstract
+///
+/// A thread-safe container for virtual devices that need to be accessed by
+/// multiple vCPUs simultaneously. It centralizes locking for I/O operations.
+///
+/// # The Hero's Journey
+///
+/// ```rust,no_run
+/// use hitz_vmm::run_loop::SharedDevices;
+/// use hitz_devices::{MmioBus, SerialDevice};
+/// use std::io::sink;
+///
+/// let devices = SharedDevices {
+///     serial: SerialDevice::new(sink()),
+///     mmio_bus: MmioBus::new(),
+/// };
+/// ```
+///
+/// # The Fine Print
 ///
 /// Each vCPU locks this only during I/O exits (microseconds per lock).
 /// Compute-bound guests experience zero contention.
@@ -166,7 +204,9 @@ fn poll_devices<V: Vcpu, W: Write>(
     let pending_vector = devs.mmio_bus.poll_devices();
     drop(devs);
 
-    let Some(vector) = pending_vector else { return Ok(()); };
+    let Some(vector) = pending_vector else {
+        return Ok(());
+    };
     if vcpu.inject_interrupt(vector).is_err() {
         *pending_irq = Some(vector);
         vcpu.request_interrupt_window()?;
@@ -207,7 +247,9 @@ fn dispatch_exit<V: Vcpu, W: Write>(
             record_exit(exit_counter, "InterruptWindow");
             // Guest is now interruptible. WHP auto-clears the
             // deliverability notification after this exit fires.
-            let Some(vector) = pending_irq.take() else { return Ok(None); };
+            let Some(vector) = pending_irq.take() else {
+                return Ok(None);
+            };
             vcpu.inject_interrupt(vector)?;
             tracing::debug!(vector, "deferred interrupt injected via interrupt window");
             Ok(None)
@@ -320,7 +362,9 @@ fn handle_mmio_write<V: Vcpu, W: Write>(
     };
     advance_rip(vcpu, instr_len)?;
 
-    let Some(vector) = irq else { return Ok(()); };
+    let Some(vector) = irq else {
+        return Ok(());
+    };
     // Try to inject immediately. If the guest has IF=0
     // (interrupts disabled) or is in interrupt shadow,
     // WHP rejects the injection — stash the IRQ and
