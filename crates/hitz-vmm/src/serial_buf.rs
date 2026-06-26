@@ -266,7 +266,9 @@ impl SerialReader {
                 }
             }
             // Park until the writer pushes more data or closes.
-            let _ = self.notify_rx.changed().await;
+            if self.notify_rx.changed().await.is_err() {
+                return None;
+            }
         }
     }
 }
@@ -284,6 +286,22 @@ mod tests {
             .enable_all()
             .build()
             .expect("failed to build tokio runtime")
+    }
+
+    #[test]
+    fn test_reader_sender_dropped() {
+        let rt = test_rt();
+        rt.block_on(async {
+            let buf = SerialBuf::new();
+            let mut reader = buf.reader();
+            drop(buf); // Drop sender without explicitly closing
+
+            let res = tokio::time::timeout(Duration::from_millis(100), reader.read_chunk()).await;
+            assert!(
+                matches!(res, Ok(None)),
+                "Reader should detect dropped sender and return None"
+            );
+        });
     }
 
     #[test]
