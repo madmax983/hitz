@@ -77,6 +77,19 @@ impl std::fmt::Display for VmAction {
 
 impl VmAction {
     /// Returns the gerund form of the action (e.g., "Starting", "Stopping").
+    ///
+    /// # Abstract
+    /// Provides a present-participle string representation of the action, useful
+    /// for logging ongoing operations.
+    ///
+    /// # The Hero's Journey
+    ///
+    /// ```rust
+    /// use hitz_api::VmAction;
+    ///
+    /// let action = VmAction::Start;
+    /// assert_eq!(action.gerund(), "Starting");
+    /// ```
     #[must_use]
     pub const fn gerund(&self) -> &'static str {
         match self {
@@ -87,6 +100,19 @@ impl VmAction {
     }
 
     /// Returns the past tense form of the action (e.g., "started", "stopped").
+    ///
+    /// # Abstract
+    /// Provides a past-tense string representation of the action, useful
+    /// for logging completed operations.
+    ///
+    /// # The Hero's Journey
+    ///
+    /// ```rust
+    /// use hitz_api::VmAction;
+    ///
+    /// let action = VmAction::Stop;
+    /// assert_eq!(action.past_tense(), "stopped");
+    /// ```
     #[must_use]
     pub const fn past_tense(&self) -> &'static str {
         match self {

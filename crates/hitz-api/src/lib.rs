@@ -1,3 +1,5 @@
+//! # Abstract
+//!
 //! REST API types for Hitz.
 //!
 //! This crate serves as the central vocabulary for the Hitz micro-VM manager.
@@ -9,6 +11,29 @@
 //! for any target (including the Linux `musl` guest agents) and serialized
 //! effortlessly across network boundaries.
 //!
+//! # The Hero's Journey
+//!
+//! ```rust
+//! use hitz_api::{VmConfig, GuestAgentMode};
+//! use std::path::PathBuf;
+//!
+//! let config = VmConfig {
+//!     kernel_path: PathBuf::from("/vmlinux"),
+//!     initramfs_path: None,
+//!     disk_path: None,
+//!     ram_mib: 512,
+//!     cpus: 2,
+//!     cmdline: None,
+//!     net: None,
+//!     ports: vec![],
+//!     guest_cid: 3,
+//!     guest_agent: GuestAgentMode::Auto,
+//! };
+//!
+//! assert_eq!(config.cpus, 2);
+//! ```
+//!
+
 //! ## Core Concepts
 //!
 //! * **Configuration**: [`VmConfig`] describes everything needed to boot a VM.
