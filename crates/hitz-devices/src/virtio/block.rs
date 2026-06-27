@@ -631,6 +631,44 @@ mod tests {
         assert_eq!(status[0], VIRTIO_BLK_S_IOERR);
     }
 
+
+    #[test]
+    fn blk_request_missing_status_descriptor() {
+        let f = create_temp_disk(2);
+        let mut dev = VirtioBlockDevice::new(f).expect("new block device");
+        let mem = MockMem::new(0x10000);
+        let mut q = setup_queue(&mem);
+
+        // Missing status desc (chain length is 2)
+        write_desc(&mem, 0, HDR_GPA, 16, 1, 1); // F_NEXT
+        write_blk_header(&mem, HDR_GPA, VIRTIO_BLK_T_IN, 0);
+        write_desc(&mem, 1, DATA_GPA, 512, 2, 0); // F_WRITE, NO F_NEXT
+        write_avail_entry(&mem, 0, 0);
+        set_avail_idx(&mem, 1);
+
+        dev.process_queue(0, &mut q, &mem);
+        // It should gracefully fail and not write status
+    }
+
+    #[test]
+    fn config_space_partial_read() {
+        let f = create_temp_disk(2);
+        let dev = VirtioBlockDevice::new(f).unwrap();
+        let mut buf = [0u8; 4];
+
+        let cap_bytes = 2u64.to_le_bytes();
+        let offset = cap_bytes.len() as u64 - 2;
+
+        let dev_mut = dev;
+        dev_mut.read_config(offset, &mut buf);
+        assert_eq!(buf[2], 0);
+        assert_eq!(buf[3], 0);
+
+        let mut buf2 = [0u8; 4];
+        dev_mut.read_config(offset + 10, &mut buf2);
+        assert_eq!(buf2, [0, 0, 0, 0]);
+    }
+
     #[test]
     fn capacity_returns_capacity() {
         let f = create_temp_disk(10);

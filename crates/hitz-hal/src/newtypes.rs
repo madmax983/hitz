@@ -339,6 +339,60 @@ impl fmt::Display for MemSizeMiB {
 mod tests {
     use super::*;
 
+
+    #[test]
+    fn test_vmid() {
+        let id = VmId::default();
+        assert_eq!(id.as_uuid(), id.as_uuid());
+        assert_eq!(id.to_string(), id.as_uuid().to_string());
+    }
+
+    #[test]
+    fn test_vcpuid() {
+        let id = VcpuId::new(42);
+        assert_eq!(id.as_u32(), 42);
+        assert_eq!(id.to_string(), "vcpu-42");
+    }
+
+    #[test]
+    fn test_gpa_formatting() {
+        let gpa = Gpa::new(0x1234_5678);
+        assert_eq!(gpa.as_u64(), 0x1234_5678);
+        assert_eq!(gpa.to_string(), "0x0000000012345678");
+    }
+
+    #[test]
+    fn test_irqline() {
+        let irq = IrqLine::new(5);
+        assert_eq!(irq.as_u8(), 5);
+        assert_eq!(irq.to_string(), "IRQ5");
+    }
+
+    #[test]
+    fn test_mmioslot() {
+        let slot = MmioSlot::new(3);
+        assert_eq!(slot.as_u16(), 3);
+    }
+
+    #[test]
+    fn test_diskoffset() {
+        let offset = DiskOffset::new(1024);
+        assert_eq!(offset.as_u64(), 1024);
+    }
+
+    #[test]
+    fn test_macaddress() {
+        let mac = MacAddress::new([0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF]);
+        assert_eq!(mac.as_bytes(), &[0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF]);
+    }
+
+    #[test]
+    fn test_memsizemib() {
+        let mem = MemSizeMiB::new(2048);
+        assert_eq!(mem.as_mib(), 2048);
+        assert_eq!(mem.to_string(), "2048 MiB");
+    }
+
     #[test]
     fn gpa_page_alignment() {
         let addr = Gpa::new(0x1234_5678);

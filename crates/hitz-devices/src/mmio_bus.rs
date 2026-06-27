@@ -374,6 +374,20 @@ mod tests {
         bus.register(0xCFFF_0000, 0x12000, Box::new(StubDevice::new(0)));
     }
 
+
+    #[test]
+    fn find_slot_binary_search() {
+        let mut bus = MmioBus::new();
+        bus.register(0xD000_0000, 0x1000, Box::new(StubDevice::new(0x1111)));
+        bus.register(0xD000_2000, 0x1000, Box::new(StubDevice::new(0x2222)));
+        bus.register(0xD000_4000, 0x1000, Box::new(StubDevice::new(0x3333)));
+        let mut data = [0u8; 4];
+        bus.read(0xD000_2000, &mut data);
+        assert_eq!(u32::from_le_bytes(data), 0x2222);
+        bus.read(0xD000_4000, &mut data);
+        assert_eq!(u32::from_le_bytes(data), 0x3333);
+    }
+
     #[test]
     fn default_mmio_bus_and_default_device() {
         let _bus = MmioBus::default();
