@@ -266,7 +266,9 @@ impl SerialReader {
                 }
             }
             // Park until the writer pushes more data or closes.
-            let _ = self.notify_rx.changed().await;
+            if self.notify_rx.changed().await.is_err() {
+                return None;
+            }
         }
     }
 }
@@ -400,6 +402,21 @@ mod tests {
 
             assert_eq!(chunk2.len(), cap);
             assert_eq!(chunk2, data);
+        });
+    }
+
+    #[test]
+    fn dropped_writer_causes_infinite_loop() {
+        let rt = test_rt();
+        rt.block_on(async {
+            let buf = SerialBuf::new();
+            let mut reader = buf.reader();
+            drop(buf);
+            let result = tokio::time::timeout(Duration::from_millis(50), reader.read_chunk()).await;
+            assert!(
+                result.is_ok(),
+                "Infinite loop detected! Task did not return."
+            );
         });
     }
 }
