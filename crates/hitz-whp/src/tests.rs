@@ -382,7 +382,7 @@ fn make_boot_elf(load_addr: u64, code: &[u8]) -> Vec<u8> {
 #[ignore = "requires WHP enabled (Hyper-V)"]
 fn phase1_boot_elf_to_io_port_exit() {
     use hitz_boot::{BOOT_PARAMS_GPA, CMDLINE_GPA, build_boot_params, build_page_tables, load_elf};
-    use hitz_vmm::{GuestMemory, configure_regs, configure_sregs, write_gdt};
+    use hitz_vmm::test_exports::{GuestMemory, configure_regs, configure_sregs, write_gdt};
 
     // x86-64 machine code:
     //   mov al, 0x42          ; B0 42
@@ -478,9 +478,15 @@ fn phase1_boot_elf_to_io_port_exit() {
 /// GDT, ELF) and return a configured vCPU ready to run.
 ///
 /// Returns `(partition, vcpu, guest_mem)` — caller owns the lifetime.
-fn boot_elf_pipeline(code: &[u8]) -> (crate::WhpPartition, crate::WhpVcpu, hitz_vmm::GuestMemory) {
+fn boot_elf_pipeline(
+    code: &[u8],
+) -> (
+    crate::WhpPartition,
+    crate::WhpVcpu,
+    hitz_vmm::test_exports::GuestMemory,
+) {
     use hitz_boot::{BOOT_PARAMS_GPA, CMDLINE_GPA, build_boot_params, build_page_tables, load_elf};
-    use hitz_vmm::{GuestMemory, configure_regs, configure_sregs, write_gdt};
+    use hitz_vmm::test_exports::{GuestMemory, configure_regs, configure_sregs, write_gdt};
 
     let load_addr = 0x10_0000u64;
     let elf = make_boot_elf(load_addr, code);
@@ -554,7 +560,8 @@ fn phase2_serial_output_from_elf() {
 
     use hitz_devices::MmioBus;
     use hitz_devices::SerialDevice;
-    use hitz_vmm::{ExitReason, SharedDevices, run_vcpu_loop};
+    use hitz_vmm::ExitReason;
+    use hitz_vmm::test_exports::{SharedDevices, run_vcpu_loop};
 
     // x86-64 machine code that writes "Hello" to COM1 (0x3F8) then halts.
     //
@@ -617,7 +624,8 @@ fn phase2_serial_in_reads_lsr() {
 
     use hitz_devices::MmioBus;
     use hitz_devices::SerialDevice;
-    use hitz_vmm::{ExitReason, SharedDevices, run_vcpu_loop};
+    use hitz_vmm::ExitReason;
+    use hitz_vmm::test_exports::{SharedDevices, run_vcpu_loop};
 
     // x86-64 machine code:
     //   mov edx, 0x3FD        ; BA FD 03 00 00   — COM1 LSR
@@ -699,7 +707,7 @@ fn build_blk_request(req_type: u32, sector: u64) -> [u8; 16] {
 /// IDT base is at GPA 0 (from `configure_sregs`), so the entry for vector N
 /// is at GPA `N * 16`.
 ///
-fn write_idt_gate(guest_mem: &hitz_vmm::GuestMemory, vector: u8, handler_gpa: u64) {
+fn write_idt_gate(guest_mem: &hitz_vmm::test_exports::GuestMemory, vector: u8, handler_gpa: u64) {
     #[allow(clippy::cast_possible_truncation)]
     let offset_lo = (handler_gpa & 0xFFFF) as u16;
     #[allow(clippy::cast_possible_truncation)]
@@ -741,7 +749,8 @@ fn phase3_virtio_mmio_magic_read() {
     use hitz_devices::SerialDevice;
     use hitz_devices::VirtioBlockDevice;
     use hitz_devices::VirtioMmioTransport;
-    use hitz_vmm::{ExitReason, SharedDevices, run_vcpu_loop};
+    use hitz_vmm::ExitReason;
+    use hitz_vmm::test_exports::{SharedDevices, run_vcpu_loop};
 
     // x86-64 machine code:
     //   mov ebx, 0xD0000000     ; MMIO base (unmapped GPA)
@@ -835,7 +844,8 @@ fn phase3_virtio_block_read() {
     use hitz_devices::SerialDevice;
     use hitz_devices::VirtioBlockDevice;
     use hitz_devices::VirtioMmioTransport;
-    use hitz_vmm::{ExitReason, SharedDevices, run_vcpu_loop};
+    use hitz_vmm::ExitReason;
+    use hitz_vmm::test_exports::{SharedDevices, run_vcpu_loop};
 
     const IRQ_VECTOR: u8 = 5;
 
@@ -996,7 +1006,8 @@ fn phase4_apic_interrupt_delivery() {
     use hitz_devices::SerialDevice;
     use hitz_devices::VirtioBlockDevice;
     use hitz_devices::VirtioMmioTransport;
-    use hitz_vmm::{ExitReason, SharedDevices, run_vcpu_loop};
+    use hitz_vmm::ExitReason;
+    use hitz_vmm::test_exports::{SharedDevices, run_vcpu_loop};
 
     const IRQ_VECTOR: u8 = 5;
 
@@ -1185,8 +1196,8 @@ fn phase4_boot_real_linux() {
     };
     use hitz_devices::MmioBus;
     use hitz_devices::SerialDevice;
-    use hitz_vmm::{GuestMemory, configure_regs, configure_sregs, write_gdt};
-    use hitz_vmm::{SharedDevices, run_vcpu_loop};
+    use hitz_vmm::test_exports::{GuestMemory, configure_regs, configure_sregs, write_gdt};
+    use hitz_vmm::test_exports::{SharedDevices, run_vcpu_loop};
 
     // ── 1. Read env vars (skip if not set) ──
     let vmlinux_path = match std::env::var("HITZ_VMLINUX") {
