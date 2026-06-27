@@ -493,3 +493,9 @@ pub use rightsizer::{ResizeRecommendation, RightSizer};
 mod terraform;
 #[cfg(feature = "terraform")]
 pub use terraform::ToTerraform;
+
+#[cfg(feature = "optimizer")]
+/// Auto-optimizing Terraform exporter module.
+mod optimizer;
+#[cfg(feature = "optimizer")]
+pub use optimizer::OptimizeTerraform;
