@@ -266,7 +266,9 @@ impl SerialReader {
                 }
             }
             // Park until the writer pushes more data or closes.
-            let _ = self.notify_rx.changed().await;
+            if self.notify_rx.changed().await.is_err() {
+                return None;
+            }
         }
     }
 }
