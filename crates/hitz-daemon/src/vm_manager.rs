@@ -151,13 +151,18 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
         }
 
         let (tx, rx) = tokio_mpsc::unbounded_channel();
-        let meter = opentelemetry::global::meter("hitz");
-        let vm_count = Arc::new(
-            meter
-                .i64_up_down_counter("hitz.vm.count")
-                .with_description("Number of VMs by state")
-                .build(),
-        );
+        let vm_count = Arc::new({
+            static VM_COUNT: std::sync::OnceLock<opentelemetry::metrics::UpDownCounter<i64>> =
+                std::sync::OnceLock::new();
+            VM_COUNT
+                .get_or_init(|| {
+                    opentelemetry::global::meter("hitz")
+                        .i64_up_down_counter("hitz.vm.count")
+                        .with_description("Number of VMs by state")
+                        .build()
+                })
+                .clone()
+        });
         let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
 
         Ok(Self {
@@ -381,11 +386,14 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
 
         // Record guest RAM size as a one-shot gauge.
         {
-            let meter = opentelemetry::global::meter("hitz");
-            let memory_gauge = meter
-                .u64_gauge("hitz.vm.memory_bytes")
-                .with_description("Guest RAM in bytes at VM start")
-                .build();
+            static MEMORY_GAUGE: std::sync::OnceLock<opentelemetry::metrics::Gauge<u64>> =
+                std::sync::OnceLock::new();
+            let memory_gauge = MEMORY_GAUGE.get_or_init(|| {
+                opentelemetry::global::meter("hitz")
+                    .u64_gauge("hitz.vm.memory_bytes")
+                    .with_description("Guest RAM in bytes at VM start")
+                    .build()
+            });
             memory_gauge.record(
                 u64::from(boot_config.ram_mib) * 1024 * 1024,
                 &[KeyValue::new("vm.id", id.to_string())],

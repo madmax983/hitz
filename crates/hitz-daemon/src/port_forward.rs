@@ -31,15 +31,27 @@ impl PortForwardManager {
         let relay_handles: Arc<tokio::sync::Mutex<Vec<JoinHandle<()>>>> =
             Arc::new(tokio::sync::Mutex::new(Vec::with_capacity(rules.len())));
 
-        let meter = global::meter("hitz");
-        let connections_total = meter
-            .u64_counter("hitz.portfwd.connections_total")
-            .with_description("Total TCP connections accepted by port forwarders")
-            .build();
-        let relays_active = meter
-            .i64_up_down_counter("hitz.portfwd.relays_active")
-            .with_description("Currently active port-forward relay connections")
-            .build();
+        static CONNECTIONS_TOTAL: std::sync::OnceLock<opentelemetry::metrics::Counter<u64>> =
+            std::sync::OnceLock::new();
+        let connections_total = CONNECTIONS_TOTAL
+            .get_or_init(|| {
+                global::meter("hitz")
+                    .u64_counter("hitz.portfwd.connections_total")
+                    .with_description("Total TCP connections accepted by port forwarders")
+                    .build()
+            })
+            .clone();
+
+        static RELAYS_ACTIVE: std::sync::OnceLock<opentelemetry::metrics::UpDownCounter<i64>> =
+            std::sync::OnceLock::new();
+        let relays_active = RELAYS_ACTIVE
+            .get_or_init(|| {
+                global::meter("hitz")
+                    .i64_up_down_counter("hitz.portfwd.relays_active")
+                    .with_description("Currently active port-forward relay connections")
+                    .build()
+            })
+            .clone();
 
         for rule in rules {
             let host_addr = std::net::SocketAddr::from(([0, 0, 0, 0], rule.host_port));
