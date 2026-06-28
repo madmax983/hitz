@@ -322,4 +322,46 @@ mod tests {
             " 8       0 sda 9999999999999999999 0 9999999999999999999 0 9999999999999999999 0 9999999999999999999\n",
         );
     }
+
+    #[test]
+    fn test_cpu_pct_zero_total_delta() {
+        let a = CpuSample {
+            user: 1000,
+            nice: 0,
+            system: 200,
+            idle: 8800,
+            iowait: 0,
+            irq: 0,
+            softirq: 0,
+        };
+        let pct = cpu_pct(&a, &a);
+        assert!((pct - 0.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_parse_proc_meminfo_malformed() {
+        let mem = parse_proc_meminfo(
+            "MemTotal:        262144 kB\nMemFree:         131072 kB\nSwapTotal:\nSwapFree:             invalid kB\n"
+        ).unwrap();
+        assert_eq!(mem.swap_total, 0);
+        assert_eq!(mem.swap_used, 0);
+    }
+
+    #[test]
+    fn test_parse_proc_diskstats_malformed() {
+        let disks = parse_proc_diskstats(
+            "   8   0 vda 100 0 800 20 50 0 400 10 0 30\n   8   1 vdb 100 0 invalid\n   8   2 vdc\n",
+        );
+        assert_eq!(disks.len(), 1);
+    }
+
+    #[test]
+    fn test_parse_proc_net_dev_malformed() {
+        let nets = parse_proc_net_dev(
+            "Inter-|   Receive                                                |  Transmit\n face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed\n lo:    5000     40    0    0    0     0          0         0     2000      20    0    0    0     0       0          0\n eth1:    invalid     40\n eth2:    5000\n",
+        );
+        assert_eq!(nets.len(), 2);
+        assert_eq!(nets[0].interface, "eth1");
+        assert_eq!(nets[0].rx_bytes, 0);
+    }
 }
