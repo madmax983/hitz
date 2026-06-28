@@ -29,7 +29,7 @@
 //!     timestamp_ms: 1000,
 //!     cpu: CpuMetrics {
 //!         total_pct: 5.0,
-//!         per_core: vec![5.0; 4],
+//!         per_core: vec![5.0, 5.0, 5.0, 5.0],
 //!         load_avg: [0.1, 0.1, 0.1],
 //!     },
 //!     memory: MemoryMetrics {

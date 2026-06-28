@@ -1,0 +1,30 @@
+<<<<<<< SEARCH
+use crate::{MetricsDiff, MetricsSnapshot};
+use serde::{Deserialize, Serialize};
+
+/// The categorized type of workload running on the VM.
+=======
+//! Classifier module for determining workload type.
+//!
+//! # Abstract
+//! This module connects the absolute state of a system (`MetricsSnapshot`) with
+//! the relative rate of change (`MetricsDiff`) to categorize the current behavior
+//! of the VM.
+//!
+//! # The Hero's Journey
+//!
+//! ```rust
+//! use hitz_api::{WorkloadClass, WorkloadClassifier, MetricsSnapshot, MetricsDiff};
+//!
+//! // Assume we have a snapshot showing 95% CPU usage and a diff showing low I/O
+//! // let snap: MetricsSnapshot = ...;
+//! // let diff: MetricsDiff = ...;
+//! // let class = snap.classify_workload(&diff);
+//! // assert_eq!(class, WorkloadClass::ComputeBound);
+//! ```
+
+use crate::{MetricsDiff, MetricsSnapshot};
+use serde::{Deserialize, Serialize};
+
+/// The categorized type of workload running on the VM.
+>>>>>>> REPLACE
