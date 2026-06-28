@@ -43,13 +43,28 @@ pub fn resolve_agent_bytes(mode: &GuestAgentMode) -> Option<Vec<u8>> {
                 Some(AGENT_BYTES.to_vec())
             }
         }
-        GuestAgentMode::Custom(path) => match std::fs::read(path) {
-            Ok(bytes) => Some(bytes),
-            Err(e) => {
-                tracing::warn!(path = %path.display(), "failed to read custom agent: {e}");
-                None
+        GuestAgentMode::Custom(path) => {
+            use std::io::Read;
+            match std::fs::File::open(path) {
+                Ok(file) => {
+                    let mut reader = file.take(32 * 1024 * 1024); // 32 MiB cap
+                    let mut bytes = Vec::new();
+                    if let Err(e) = reader.read_to_end(&mut bytes) {
+                        tracing::warn!(path = %path.display(), "failed to read custom agent: {e}");
+                        None
+                    } else if bytes.len() == 32 * 1024 * 1024 {
+                        tracing::warn!(path = %path.display(), "custom agent exceeds 32MiB limit");
+                        None
+                    } else {
+                        Some(bytes)
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!(path = %path.display(), "failed to open custom agent: {e}");
+                    None
+                }
             }
-        },
+        }
     }
 }
 
@@ -125,6 +140,23 @@ mod tests {
             resolve_agent_bytes(&mode),
             None,
             "Custom mode with missing file should return None"
+        );
+    }
+
+    #[test]
+    fn test_resolve_agent_bytes_custom_oversized() {
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        let agent_path = temp_dir.path().join("oversized-agent");
+
+        let mut file = std::fs::File::create(&agent_path).expect("Failed to create file");
+        let buf = vec![0u8; 32 * 1024 * 1024];
+        std::io::Write::write_all(&mut file, &buf).expect("Failed to write");
+
+        let mode = GuestAgentMode::Custom(agent_path);
+        assert_eq!(
+            resolve_agent_bytes(&mode),
+            None,
+            "Custom mode with oversized file should return None"
         );
     }
 }
