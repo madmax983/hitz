@@ -493,3 +493,9 @@ pub use rightsizer::{ResizeRecommendation, RightSizer};
 mod terraform;
 #[cfg(feature = "terraform")]
 pub use terraform::ToTerraform;
+
+#[cfg(feature = "billing")]
+/// Billing module for calculating estimated run costs.
+mod billing;
+#[cfg(feature = "billing")]
+pub use billing::{BillingRates, CostEstimator};
