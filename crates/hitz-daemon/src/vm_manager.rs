@@ -847,7 +847,22 @@ fn inject_guest_agent(mut config: VmConfig, id: &str) -> VmConfig {
     let mut combined = config.initramfs_path.as_ref().map_or_else(
         || Vec::with_capacity(overlay.len()),
         |path| {
-            let mut data = std::fs::read(path).unwrap_or_default();
+            // Cap initramfs read to 512MB to prevent memory exhaustion DoS
+            use std::io::Read;
+            let mut data = std::fs::File::open(path)
+                .and_then(|file| {
+                    let mut f = file.take(512 * 1024 * 1024 + 1);
+                    let mut buf = Vec::new();
+                    f.read_to_end(&mut buf)?;
+                    if buf.len() > 512 * 1024 * 1024 {
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            "initramfs too large",
+                        ));
+                    }
+                    Ok(buf)
+                })
+                .unwrap_or_default();
             data.reserve(overlay.len());
             data
         },

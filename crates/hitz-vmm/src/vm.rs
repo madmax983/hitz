@@ -5,7 +5,7 @@
 
 use std::fmt::Write as _;
 use std::fs;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
@@ -449,6 +449,26 @@ pub fn boot_and_run<H: Hypervisor, W: Write + Send + 'static>(
 
 // --- Helper Functions ---
 
+fn read_capped(path: &std::path::Path, limit: u64) -> Result<Vec<u8>, std::io::Error> {
+    let file = std::fs::File::open(path)?;
+    let meta = file.metadata()?;
+    if meta.len() > limit {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "file exceeds size limit",
+        ));
+    }
+    let mut buf = Vec::with_capacity(meta.len() as usize);
+    file.take(limit + 1).read_to_end(&mut buf)?;
+    if buf.len() as u64 > limit {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "file exceeds size limit",
+        ));
+    }
+    Ok(buf)
+}
+
 fn setup_guest_memory(
     guest_mem: &mut GuestMemory,
     config: &VmConfig,
@@ -465,13 +485,17 @@ fn setup_guest_memory(
         guest_mem.write_slice(write.gpa, &write.data)?;
     }
 
-    let kernel_bytes = fs::read(&config.kernel_path)?;
+    // Cap kernel to 512 MB to prevent memory exhaustion
+    const MAX_KERNEL_SIZE: u64 = 512 * 1024 * 1024;
+    let kernel_bytes = read_capped(&config.kernel_path, MAX_KERNEL_SIZE)?;
     let load_result = load_elf(&kernel_bytes, guest_mem)?;
 
     let mut boot_params = build_boot_params(ram_bytes, Gpa::new(CMDLINE_GPA))?;
 
     if let Some(ref initramfs_path) = config.initramfs_path {
-        let initramfs_data = fs::read(initramfs_path)?;
+        // Cap initramfs to prevent memory exhaustion
+        const MAX_INITRAMFS_SIZE: u64 = 512 * 1024 * 1024;
+        let initramfs_data = read_capped(initramfs_path, MAX_INITRAMFS_SIZE)?;
         let initramfs_result = load_initramfs(
             &initramfs_data,
             load_result.kernel_end,
