@@ -242,12 +242,11 @@ pub fn parse_mac(s: &str) -> Result<[u8; 6], String> {
     let mut mac = [0u8; 6];
 
     for (i, byte) in mac.iter_mut().enumerate() {
-        if let Some(part) = parts.next() {
-            *byte = u8::from_str_radix(part, 16)
-                .map_err(|e| format!("invalid hex octet '{part}': {e}"))?;
-        } else {
+        let Some(part) = parts.next() else {
             return Err(format!("expected 6 colon-separated octets, got {i}"));
-        }
+        };
+        *byte =
+            u8::from_str_radix(part, 16).map_err(|e| format!("invalid hex octet '{part}': {e}"))?;
     }
 
     if parts.next().is_some() {
@@ -281,13 +280,12 @@ pub fn parse_cidr(s: &str) -> Result<([u8; 4], u8), String> {
     let mut ip = [0u8; 4];
 
     for (i, byte) in ip.iter_mut().enumerate() {
-        if let Some(octet) = octets.next() {
-            *byte = octet
-                .parse::<u8>()
-                .map_err(|e| format!("invalid octet '{octet}': {e}"))?;
-        } else {
+        let Some(octet) = octets.next() else {
             return Err(format!("expected 4 octets, got {i}"));
-        }
+        };
+        *byte = octet
+            .parse::<u8>()
+            .map_err(|e| format!("invalid octet '{octet}': {e}"))?;
     }
 
     if octets.next().is_some() {
