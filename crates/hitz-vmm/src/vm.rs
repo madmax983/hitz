@@ -11,7 +11,7 @@ use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use hitz_api::VmConfig;
+use crate::config::VmConfig;
 use hitz_boot::{
     BOOT_PARAMS_GPA, CMDLINE_GPA, RSDP_GPA, build_boot_params, build_madt, build_page_tables,
     build_rsdp, build_xsdt, load_elf, load_initramfs, set_acpi_rsdp, set_initramfs_params,
@@ -178,7 +178,7 @@ pub struct VmRunResult {
 ///
 /// # The Hero's Journey
 /// ```rust
-/// # use hitz_api::VmConfig;
+/// # use crate::config::VmConfig;
 /// # use hitz_vmm::validate_config;
 /// # use std::path::PathBuf;
 /// # use std::fs::File;
@@ -198,7 +198,7 @@ pub struct VmRunResult {
 ///     net: None,
 ///     ports: vec![],
 ///     guest_cid: 3,
-///     guest_agent: hitz_api::GuestAgentMode::Disabled,
+///     guest_agent: crate::config::GuestAgentMode::Disabled,
 /// };
 ///
 /// // Verify the configuration is sound before booting!
@@ -302,7 +302,7 @@ fn cancel_all_vcpus<V: Vcpu>(handles: &[V::CancelHandle]) {
 ///
 /// # The Hero's Journey
 /// ```rust
-/// # use hitz_api::VmConfig;
+/// # use crate::config::VmConfig;
 /// # use hitz_vmm::{boot_and_run, BootExtras};
 /// # use hitz_hal::{Hypervisor, Partition, PartitionConfig, Vcpu, VcpuExit, HalError, Gpa, VcpuId};
 /// # use std::sync::{Arc, atomic::AtomicBool};
@@ -355,7 +355,7 @@ fn cancel_all_vcpus<V: Vcpu>(handles: &[V::CancelHandle]) {
 ///     net: None,
 ///     ports: vec![],
 ///     guest_cid: 3,
-///     guest_agent: hitz_api::GuestAgentMode::Disabled,
+///     guest_agent: crate::config::GuestAgentMode::Disabled,
 /// };
 ///
 /// let hypervisor = DummyHypervisor;
@@ -759,8 +759,8 @@ mod tests {
             cmdline: None,
             net: None,
             ports: vec![],
-            guest_cid: hitz_api::DEFAULT_GUEST_CID,
-            guest_agent: hitz_api::GuestAgentMode::Auto,
+            guest_cid: crate::config::DEFAULT_GUEST_CID,
+            guest_agent: crate::config::GuestAgentMode::Auto,
         }
     }
 

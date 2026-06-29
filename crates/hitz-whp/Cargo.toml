@@ -16,7 +16,6 @@ tracing.workspace = true
 
 [dev-dependencies]
 anyhow.workspace = true
-hitz-api.workspace = true
 hitz-boot.workspace = true
 hitz-devices.workspace = true
 hitz-vmm.workspace = true

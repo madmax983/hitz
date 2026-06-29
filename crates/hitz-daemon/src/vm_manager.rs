@@ -278,7 +278,7 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
             return Err(DaemonError::Internal("Invalid VM ID".to_string()));
         }
 
-        hitz_vmm::validate_config(config)?;
+        hitz_vmm::validate_config(&into_vmm_config(config))?;
 
         let info = {
             let mut vms = self
@@ -445,7 +445,13 @@ impl<H: Hypervisor + Send + Sync + 'static> VmManager<H> {
             let _port_fwd = start_port_forwarding(&boot_config).await;
 
             let result = tokio::task::spawn_blocking(move || {
-                hitz_vmm::boot_and_run(&*hv, &boot_config, serial_buf, stop_flag, extras)
+                hitz_vmm::boot_and_run(
+                    &*hv,
+                    &into_vmm_config(&boot_config),
+                    serial_buf,
+                    stop_flag,
+                    extras,
+                )
             })
             .await;
 
@@ -1294,5 +1300,38 @@ mod tests {
             flag.load(Ordering::Relaxed),
             "stop_flag should be set to true by stop_all_and_wait"
         );
+    }
+}
+
+fn into_vmm_config(api: &hitz_api::VmConfig) -> hitz_vmm::config::VmConfig {
+    hitz_vmm::config::VmConfig {
+        kernel_path: api.kernel_path.clone(),
+        initramfs_path: api.initramfs_path.clone(),
+        disk_path: api.disk_path.clone(),
+        ram_mib: api.ram_mib,
+        cpus: api.cpus,
+        cmdline: api.cmdline.clone(),
+        net: api.net.as_ref().map(|n| hitz_vmm::config::NetConfig {
+            mac: n.mac.clone(),
+            host_ip: n.host_ip.clone(),
+            guest_ip: n.guest_ip.clone(),
+            adapter_name: n.adapter_name.clone(),
+        }),
+        ports: api
+            .ports
+            .iter()
+            .map(|p| hitz_vmm::config::PortForward {
+                host_port: p.host_port,
+                guest_port: p.guest_port,
+            })
+            .collect(),
+        guest_cid: api.guest_cid,
+        guest_agent: match &api.guest_agent {
+            hitz_api::GuestAgentMode::Auto => hitz_vmm::config::GuestAgentMode::Auto,
+            hitz_api::GuestAgentMode::Custom(p) => {
+                hitz_vmm::config::GuestAgentMode::Custom(p.clone())
+            }
+            hitz_api::GuestAgentMode::Disabled => hitz_vmm::config::GuestAgentMode::Disabled,
+        },
     }
 }

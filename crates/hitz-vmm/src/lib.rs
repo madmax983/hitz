@@ -17,7 +17,7 @@
 //! operates under the hood:
 //!
 //! ```no_run
-//! use hitz_api::VmConfig;
+//! use crate::config::VmConfig;
 //! use hitz_vmm::{boot_and_run, VmRunResult};
 //! use std::sync::atomic::{AtomicBool, Ordering};
 //! use std::sync::Arc;
@@ -68,6 +68,7 @@
 #![allow(unsafe_code)]
 
 pub(crate) mod boot_regs;
+pub mod config;
 pub(crate) mod error;
 pub(crate) mod memory;
 pub(crate) mod mmio_decode;
