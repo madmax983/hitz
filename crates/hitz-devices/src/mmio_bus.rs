@@ -89,10 +89,16 @@ impl MmioBus {
     ///
     /// # Panics
     /// Panics if the requested address range overlaps with an already registered device.
+    #[allow(clippy::expect_used)]
     pub fn register(&mut self, base_gpa: u64, size: u64, device: Box<dyn MmioDevice>) {
+        let end_gpa = base_gpa
+            .checked_add(size)
+            .expect("attempt to add with overflow");
         for slot in &self.slots {
-            let end_gpa = base_gpa + size;
-            let slot_end = slot.base + slot.size;
+            let slot_end = slot
+                .base
+                .checked_add(slot.size)
+                .expect("attempt to add with overflow");
             assert!(
                 !(base_gpa < slot_end && end_gpa > slot.base),
                 "Overlapping MMIO region: base {base_gpa:#x}, size {size:#x} overlaps with existing device at {:#x}",
@@ -110,13 +116,18 @@ impl MmioBus {
         self.slots.sort_by_key(|s| s.base);
     }
 
+    #[allow(clippy::expect_used)]
     fn find_slot(&mut self, gpa: u64) -> Option<&mut MmioSlot> {
         // ⚡ Bolt Optimization: Replace O(N) linear scan with O(log N) binary search.
         // This significantly reduces VM exit latency when many MMIO devices (like virtio) are registered.
         let idx = self.slots.partition_point(|s| s.base <= gpa);
         if idx > 0 {
             let slot = &mut self.slots[idx - 1];
-            if gpa < slot.base + slot.size {
+            let slot_end = slot
+                .base
+                .checked_add(slot.size)
+                .expect("attempt to add with overflow");
+            if gpa < slot_end {
                 return Some(slot);
             }
         }
@@ -379,5 +390,34 @@ mod tests {
         let _bus = MmioBus::default();
         let mut dev = StubDevice::new(0);
         assert_eq!(MmioDevice::poll_rx(&mut dev), None);
+    }
+}
+
+#[cfg(test)]
+mod havoc_tests {
+    use super::*;
+
+    struct DummyDevice;
+    impl MmioDevice for DummyDevice {
+        fn mmio_read(&mut self, _offset: u64, _data: &mut [u8]) {}
+        fn mmio_write(
+            &mut self,
+            _offset: u64,
+            _data: &[u8],
+            _mem: &dyn hitz_hal::GuestMemAccess,
+        ) -> Option<u8> {
+            None
+        }
+        fn poll_rx(&mut self) -> Option<u8> {
+            None
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "attempt to add with overflow")]
+    fn test_find_slot_overflow() {
+        let mut bus = MmioBus::new();
+        bus.register(u64::MAX - 100, 200, Box::new(DummyDevice));
+        let _ = bus.find_slot(u64::MAX);
     }
 }
