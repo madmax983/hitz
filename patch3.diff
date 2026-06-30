@@ -1,0 +1,11 @@
+<<<<<<< SEARCH
+use std::fmt::Write as _;
+
+#[cfg(all(
+    feature = "carbon",
+=======
+use std::fmt::Write;
+
+#[cfg(all(
+    feature = "carbon",
+>>>>>>> REPLACE

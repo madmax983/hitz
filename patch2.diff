@@ -1,0 +1,20 @@
+<<<<<<< SEARCH
+        let emissions = self.estimate_carbon(factors, config.cpus);
+        let _ = writeln!(report, "## Carbon Footprint");
+        let _ = writeln!(
+            report,
+            "- Current Emission Rate: {:.2} mg CO2/sec\n",
+            emissions
+        );
+
+        // Efficiency
+=======
+        let emissions = self.estimate_carbon(factors, config.cpus);
+        let _ = writeln!(report, "## Carbon Footprint");
+        let _ = writeln!(
+            report,
+            "- Current Emission Rate: {emissions:.2} mg CO2/sec\n"
+        );
+
+        // Efficiency
+>>>>>>> REPLACE
