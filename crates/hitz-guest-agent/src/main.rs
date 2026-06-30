@@ -64,15 +64,7 @@ fn collect_snapshot(buf: &mut String) -> MetricsSnapshot {
     read_file_into("/proc/loadavg", buf);
     let load_avg = parse_load_avg(buf);
     read_file_into("/proc/meminfo", buf);
-    let memory = parse_proc_meminfo(buf).unwrap_or(hitz_api::MemoryMetrics {
-        total_bytes: 0,
-        used_bytes: 0,
-        free_bytes: 0,
-        buffers_bytes: 0,
-        cached_bytes: 0,
-        swap_total: 0,
-        swap_used: 0,
-    });
+    let memory = parse_proc_meminfo(buf).unwrap_or_default();
     read_file_into("/proc/diskstats", buf);
     let disks = parse_proc_diskstats(buf);
     read_file_into("/proc/net/dev", buf);

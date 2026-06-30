@@ -98,7 +98,7 @@ pub enum MetricsRequest {
 ///
 /// assert_eq!(snap.memory.free_bytes, 156 * 1024 * 1024);
 /// ```
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct MetricsSnapshot {
     /// Unix timestamp in milliseconds.
     pub timestamp_ms: u64,
@@ -132,7 +132,7 @@ pub struct MetricsSnapshot {
 /// assert_eq!(cpu.per_core.len(), 2);
 /// assert!(cpu.total_pct > 0.0);
 /// ```
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct CpuMetrics {
     /// Overall CPU utilisation percentage (0.0–100.0).
     pub total_pct: f32,
@@ -164,7 +164,7 @@ pub struct CpuMetrics {
 ///
 /// assert_eq!(mem.total_bytes, mem.used_bytes + mem.free_bytes);
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct MemoryMetrics {
     /// Total system RAM in bytes.
     pub total_bytes: u64,
@@ -199,7 +199,7 @@ pub struct MemoryMetrics {
 ///
 /// assert_eq!(disk.name, "vda");
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct DiskMetrics {
     /// Block device name (e.g. `vda`).
     pub name: String,
@@ -232,7 +232,7 @@ pub struct DiskMetrics {
 ///
 /// assert_eq!(net.interface, "eth0");
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct NetMetrics {
     /// Network interface name (e.g. `eth0`).
     pub interface: String,
@@ -270,7 +270,7 @@ pub struct NetMetrics {
 ///
 /// assert_eq!(proc.pid, 1);
 /// ```
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ProcMetrics {
     /// Process ID (PID).
     pub pid: u32,

@@ -333,11 +333,7 @@ mod tests {
 
     #[test]
     fn test_cpu_metrics_default_fields() {
-        let cpu = CpuMetrics {
-            total_pct: 0.0,
-            per_core: vec![],
-            load_avg: [0.0, 0.0, 0.0],
-        };
+        let cpu = CpuMetrics::default();
         let json = serde_json::to_string(&cpu).expect("serialize/deserialize failed");
         let decoded: CpuMetrics =
             serde_json::from_str(&json).expect("serialize/deserialize failed");
@@ -346,15 +342,7 @@ mod tests {
 
     #[test]
     fn test_memory_metrics_zero_values() {
-        let mem = MemoryMetrics {
-            total_bytes: 0,
-            used_bytes: 0,
-            free_bytes: 0,
-            buffers_bytes: 0,
-            cached_bytes: 0,
-            swap_total: 0,
-            swap_used: 0,
-        };
+        let mem = MemoryMetrics::default();
         let json = serde_json::to_string(&mem).expect("serialize/deserialize failed");
         let decoded: MemoryMetrics =
             serde_json::from_str(&json).expect("serialize/deserialize failed");
