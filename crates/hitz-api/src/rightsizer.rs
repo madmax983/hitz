@@ -125,7 +125,7 @@ impl RightSizer for MetricsSnapshot {
         }
 
         // Memory Analysis
-        let ram_bytes = u64::from(config.ram_mib) * 1024 * 1024;
+        let ram_bytes = u64::from(config.ram_mib).saturating_mul(1024 * 1024);
         let used_bytes = self.memory.used_bytes;
 
         if ram_bytes > 0 {

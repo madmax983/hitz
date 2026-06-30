@@ -388,7 +388,9 @@ pub fn boot_and_run<H: Hypervisor, W: Write + Send + 'static>(
     // ── 1. Validate config ──
     validate_config(config)?;
 
-    let ram_bytes = u64::from(config.ram_mib) * 1024 * 1024;
+    let ram_bytes = u64::from(config.ram_mib)
+        .checked_mul(1024 * 1024)
+        .ok_or_else(|| VmError::Config("RAM calculation overflowed".to_string()))?;
     let gib_count = config.ram_mib.div_ceil(1024).max(1);
 
     // ── 2-7. Load Guest Memory ──
