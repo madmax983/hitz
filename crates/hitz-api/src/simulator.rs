@@ -6,7 +6,7 @@
 //! It is useful for testing, continuous integration, and validating alerting
 //! thresholds (e.g., via the [`health`](crate::health) module).
 //!
-//! # The Hero's Journey
+//! ## Examples
 //!
 //! ```rust
 //! use hitz_api::simulator::{VmSimulator, WorkloadProfile};
@@ -53,6 +53,16 @@ pub enum WorkloadProfile {
 /// tailored to the specific [`WorkloadProfile`] provided at creation. Because
 /// it implements the standard library's `Iterator` trait, you can easily compose
 /// it with other iterator adapters.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::simulator::{VmSimulator, WorkloadProfile};
+///
+/// let mut sim = VmSimulator::new(WorkloadProfile::CpuSpike);
+/// let snap = sim.next().unwrap();
+/// assert!(snap.cpu.total_pct < 20.0);
+/// ```
 #[derive(Debug)]
 pub struct VmSimulator {
     profile: WorkloadProfile,
