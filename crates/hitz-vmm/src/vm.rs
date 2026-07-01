@@ -509,7 +509,11 @@ fn build_kernel_cmdline(
     config: &VmConfig,
     extras: &BootExtras,
 ) -> Result<(), VmError> {
-    let mut cmdline = config.effective_cmdline().to_string();
+    // ⚡ Bolt Optimization: Pre-allocate `cmdline` string to eliminate dynamic heap
+    // reallocations while appending virtio options during the VM boot hot path.
+    let effective = config.effective_cmdline();
+    let mut cmdline = String::with_capacity(effective.len() + 256);
+    cmdline.push_str(effective);
 
     if config.net.is_some() {
         let net_base = VIRTIO_MMIO_BASE + VIRTIO_MMIO_SIZE;
