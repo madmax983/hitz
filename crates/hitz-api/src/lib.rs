@@ -493,3 +493,9 @@ pub use rightsizer::{ResizeRecommendation, RightSizer};
 mod terraform;
 #[cfg(feature = "terraform")]
 pub use terraform::ToTerraform;
+
+#[cfg(feature = "forecaster")]
+/// Workload trend forecasting module.
+mod forecaster;
+#[cfg(feature = "forecaster")]
+pub use forecaster::TrendForecaster;
