@@ -14,6 +14,7 @@ use hitz_devices::SerialDevice;
 use hitz_hal::{GuestMemAccess, HalError, IoPortExit, Vcpu, VcpuExit};
 use opentelemetry::KeyValue;
 use opentelemetry::metrics::Counter;
+use std::sync::OnceLock;
 
 use crate::mmio_decode;
 
@@ -132,10 +133,13 @@ pub fn run_vcpu_loop<V: Vcpu, W: Write>(
     let mut pending_irq: Option<u8> = None;
 
     // Create once; all calls are no-ops when no SDK is registered.
-    let exit_counter = opentelemetry::global::meter("hitz")
-        .u64_counter("hitz.vcpu.exits")
-        .with_description("Number of vCPU exits, labeled by exit reason")
-        .build();
+    static EXIT_COUNTER: OnceLock<Counter<u64>> = OnceLock::new();
+    let exit_counter = EXIT_COUNTER.get_or_init(|| {
+        opentelemetry::global::meter("hitz")
+            .u64_counter("hitz.vcpu.exits")
+            .with_description("Number of vCPU exits, labeled by exit reason")
+            .build()
+    });
 
     loop {
         if stop_flag.load(Ordering::Relaxed) {
@@ -166,7 +170,9 @@ fn poll_devices<V: Vcpu, W: Write>(
     let pending_vector = devs.mmio_bus.poll_devices();
     drop(devs);
 
-    let Some(vector) = pending_vector else { return Ok(()); };
+    let Some(vector) = pending_vector else {
+        return Ok(());
+    };
     if vcpu.inject_interrupt(vector).is_err() {
         *pending_irq = Some(vector);
         vcpu.request_interrupt_window()?;
@@ -207,7 +213,9 @@ fn dispatch_exit<V: Vcpu, W: Write>(
             record_exit(exit_counter, "InterruptWindow");
             // Guest is now interruptible. WHP auto-clears the
             // deliverability notification after this exit fires.
-            let Some(vector) = pending_irq.take() else { return Ok(None); };
+            let Some(vector) = pending_irq.take() else {
+                return Ok(None);
+            };
             vcpu.inject_interrupt(vector)?;
             tracing::debug!(vector, "deferred interrupt injected via interrupt window");
             Ok(None)
@@ -320,7 +328,9 @@ fn handle_mmio_write<V: Vcpu, W: Write>(
     };
     advance_rip(vcpu, instr_len)?;
 
-    let Some(vector) = irq else { return Ok(()); };
+    let Some(vector) = irq else {
+        return Ok(());
+    };
     // Try to inject immediately. If the guest has IF=0
     // (interrupts disabled) or is in interrupt shadow,
     // WHP rejects the injection — stash the IRQ and
