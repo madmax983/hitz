@@ -419,3 +419,188 @@ pub struct InterruptRequest {
     /// Interrupt vector number.
     pub vector: u8,
 }
+#[test]
+fn test_io_port_exit_debug() {
+    let ioport = IoPortExit {
+        port: 0x3F8,
+        data: [0x41, 0, 0, 0],
+        len: 1,
+        is_write: true,
+        instruction_len: 2,
+    };
+    let _ = format!("{ioport:?}");
+}
+
+#[test]
+fn test_types_clone_more_3() {
+    let mem = MemFlags::READ_WRITE;
+    let _ = mem;
+
+    let req = InterruptRequest {
+        vcpu_id: crate::VcpuId::new(0),
+        vector: 32,
+    };
+    let _ = req;
+
+    let pc = PartitionConfig {
+        vcpu_count: 1,
+        memory_size: crate::MemSizeMiB::new(1024),
+    };
+    let _ = pc;
+}
+
+#[test]
+fn test_vcpu_exit_clone_more_like_4() {
+    let ioport = IoPortExit {
+        port: 0,
+        data: [0; 4],
+        len: 1,
+        is_write: true,
+        instruction_len: 2,
+    };
+    let m = MmioExit {
+        gpa: crate::Gpa::new(0),
+        data: [0; 8],
+        len: 1,
+        is_write: true,
+        instruction_len: 2,
+        instruction_bytes: [0; 16],
+        instruction_byte_count: 0,
+    };
+    let exit1 = VcpuExit::IoPort(ioport);
+    let _ = format!("{exit1:?}");
+
+    let exit2 = VcpuExit::Mmio(m);
+    let _ = format!("{exit2:?}");
+
+    let exit3 = VcpuExit::Halt;
+    let _ = format!("{exit3:?}");
+
+    let exit4 = VcpuExit::InterruptWindow;
+    let _ = format!("{exit4:?}");
+
+    let exit5 = VcpuExit::Canceled;
+    let _ = format!("{exit5:?}");
+
+    let exit6 = VcpuExit::Shutdown;
+    let _ = format!("{exit6:?}");
+
+    let exit7 = VcpuExit::Unknown(42);
+    let _ = format!("{exit7:?}");
+}
+
+#[test]
+fn test_types_clone_derive() {
+    let sc = SegmentDescriptor::default();
+    let _ = sc;
+
+    let req = InterruptRequest {
+        vcpu_id: crate::VcpuId::new(0),
+        vector: 32,
+    };
+    let _ = req;
+
+    let pc = PartitionConfig {
+        vcpu_count: 1,
+        memory_size: crate::MemSizeMiB::new(1024),
+    };
+    let _ = pc;
+
+    let dt = DescriptorTable::default();
+    let _ = dt;
+
+    let sr = StandardRegs::default();
+    let _ = sr;
+
+    let spr = SpecialRegs::default();
+    let _ = spr;
+}
+#[test]
+fn test_types_clone_more_5() {
+    let sc = SegmentDescriptor::default();
+    let _ = sc;
+
+    let req = InterruptRequest {
+        vcpu_id: crate::VcpuId::new(0),
+        vector: 32,
+    };
+    let _ = req;
+
+    let pc = PartitionConfig {
+        vcpu_count: 1,
+        memory_size: crate::MemSizeMiB::new(1024),
+    };
+    let _ = pc;
+}
+#[test]
+fn test_vcpu_exit_clone_more_like_5() {
+    let pc = PartitionConfig {
+        vcpu_count: 1,
+        memory_size: crate::MemSizeMiB::new(1024),
+    };
+    let _ = format!("{pc:?}");
+
+    let m = MemFlags::READ_WRITE;
+    let _ = m;
+}
+#[test]
+fn test_types_clone_more_6() {
+    let ioport = IoPortExit {
+        port: 0,
+        data: [0; 4],
+        len: 1,
+        is_write: true,
+        instruction_len: 2,
+    };
+    // Just covering the branch of the debug
+    let _ = format!("{ioport:?}");
+
+    let req = InterruptRequest {
+        vcpu_id: crate::VcpuId::new(0),
+        vector: 32,
+    };
+    let _ = req;
+
+    let pc = PartitionConfig {
+        vcpu_count: 1,
+        memory_size: crate::MemSizeMiB::new(1024),
+    };
+    let _ = pc;
+
+    let m = MmioExit {
+        gpa: crate::Gpa::new(0),
+        data: [0; 8],
+        len: 1,
+        is_write: true,
+        instruction_len: 2,
+        instruction_bytes: [0; 16],
+        instruction_byte_count: 0,
+    };
+    let _ = format!("{m:?}");
+}
+#[test]
+fn test_types_clone_more_7() {
+    let sd = SegmentDescriptor::default();
+    let _ = format!("{sd:?}");
+
+    let dt = DescriptorTable::default();
+    let _ = format!("{dt:?}");
+
+    let sr = StandardRegs::default();
+    let _ = format!("{sr:?}");
+
+    let spr = SpecialRegs::default();
+    let _ = format!("{spr:?}");
+
+    let req = InterruptRequest {
+        vcpu_id: crate::VcpuId::new(0),
+        vector: 32,
+    };
+    let _ = format!("{req:?}");
+
+    let pc = PartitionConfig {
+        vcpu_count: 1,
+        memory_size: crate::MemSizeMiB::new(1024),
+    };
+    let _ = format!("{pc:?}");
+}

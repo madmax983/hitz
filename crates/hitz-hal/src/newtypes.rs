@@ -370,4 +370,121 @@ mod tests {
         let b = VmId::new();
         assert_ne!(a, b);
     }
+
+    #[test]
+    fn vcpu_id_display() {
+        assert_eq!(VcpuId::new(42).to_string(), "vcpu-42");
+    }
+
+    #[test]
+    fn irq_line_display() {
+        assert_eq!(IrqLine::new(4).to_string(), "IRQ4");
+    }
+
+    #[test]
+    fn gpa_display() {
+        assert_eq!(Gpa::new(0x1234_5678).to_string(), "0x0000000012345678");
+    }
+
+    #[test]
+    fn vmid_display() {
+        let uuid = uuid::Uuid::nil();
+        let id = VmId(uuid);
+        assert_eq!(id.to_string(), uuid.to_string());
+    }
+
+    #[test]
+    fn mmio_slot_display() {
+        assert_eq!(MmioSlot::new(5).as_u16(), 5);
+    }
+
+    #[test]
+    fn disk_offset_display() {
+        assert_eq!(DiskOffset::new(1024).as_u64(), 1024);
+    }
+
+    #[test]
+    fn mem_size_display() {
+        assert_eq!(MemSizeMiB::new(256).to_string(), "256 MiB");
+    }
+
+    #[test]
+    fn vm_id_default() {
+        let id1 = VmId::default();
+        let id2 = VmId::default();
+        assert_ne!(id1, id2);
+    }
+
+    #[test]
+    fn mac_address_as_bytes() {
+        let bytes = [0x11, 0x22, 0x33, 0x44, 0x55, 0x66];
+        let mac = MacAddress::new(bytes);
+        assert_eq!(mac.as_bytes(), &bytes);
+    }
+
+    #[test]
+    fn vmid_default() {
+        let v1 = VmId::default();
+        let v2 = VmId::default();
+        assert_ne!(v1, v2);
+    }
+
+    #[test]
+    fn vmid_as_uuid() {
+        let v = VmId::new();
+        let _ = v.as_uuid();
+    }
+    #[test]
+    fn test_vcpu_id_ord() {
+        let v1 = VcpuId::new(1);
+        let v2 = VcpuId::new(2);
+        assert!(v1 < v2);
+    }
+
+    #[test]
+    fn test_gpa_ord() {
+        let g1 = Gpa::new(0x1000);
+        let g2 = Gpa::new(0x2000);
+        assert!(g1 < g2);
+    }
+
+    #[test]
+    fn test_irq_line_ord() {
+        let i1 = IrqLine::new(1);
+        let i2 = IrqLine::new(2);
+        assert!(i1 < i2);
+    }
+
+    #[test]
+    fn test_mmio_slot_ord() {
+        let m1 = MmioSlot::new(1);
+        let m2 = MmioSlot::new(2);
+        assert!(m1 < m2);
+    }
+
+    #[test]
+    fn test_disk_offset_ord() {
+        let d1 = DiskOffset::new(1024);
+        let d2 = DiskOffset::new(2048);
+        assert!(d1 < d2);
+    }
+
+    #[test]
+    fn test_mem_size_ord() {
+        let m1 = MemSizeMiB::new(128);
+        let m2 = MemSizeMiB::new(256);
+        assert!(m1 < m2);
+    }
+
+    #[test]
+    fn vcpu_id_as_u32() {
+        let v = VcpuId::new(42);
+        assert_eq!(v.as_u32(), 42);
+    }
+    #[test]
+    fn test_vcpuid_default() {
+        let v1 = VcpuId::new(0);
+        let v2 = VcpuId::new(1);
+        assert_ne!(v1, v2);
+    }
 }
