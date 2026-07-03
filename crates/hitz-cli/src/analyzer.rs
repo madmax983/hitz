@@ -1,9 +1,36 @@
+//! CLI VM Analyzer module.
+//!
+//! # Abstract
+//! This module analyzes the state and metrics of a running Virtual Machine to generate
+//! human-readable resource insights and warnings.
+//!
+//! # The Hero's Journey
+//! ```compile_fail
+//! use hitz_cli::analyzer::{analyze_vm, WarningLevel};
+//! // Example usage assumes valid `VmInfo` and `MetricsSnapshot` are provided.
+//! ```
+
 use hitz_api::{MetricsSnapshot, VmInfo};
 
+/// The severity level of a resource insight.
+///
+/// # Abstract
+/// Used to classify how urgent an insight is.
+///
+/// # The Hero's Journey
+/// ```rust
+/// use hitz_cli::analyzer::WarningLevel;
+///
+/// let level = WarningLevel::Critical;
+/// assert_eq!(level, WarningLevel::Critical);
+/// ```
 #[derive(Debug, PartialEq, Eq)]
 pub enum WarningLevel {
+    /// The insight is purely informational.
     Info,
+    /// The insight requires attention but is not immediately fatal.
     Warning,
+    /// The insight indicates a severe problem (e.g., OOM risk).
     Critical,
 }
 
@@ -17,12 +44,47 @@ impl std::fmt::Display for WarningLevel {
     }
 }
 
+/// A generated insight about a specific resource in the VM.
+///
+/// # Abstract
+/// Encapsulates a human-readable message and its associated severity level.
+///
+/// # The Hero's Journey
+/// ```rust
+/// use hitz_cli::analyzer::{ResourceInsight, WarningLevel};
+///
+/// let insight = ResourceInsight {
+///     level: WarningLevel::Warning,
+///     message: "High CPU utilization".to_string(),
+/// };
+///
+/// assert_eq!(insight.level, WarningLevel::Warning);
+/// ```
 #[derive(Debug, PartialEq, Eq)]
 pub struct ResourceInsight {
+    /// The severity level.
     pub level: WarningLevel,
+    /// The descriptive message.
     pub message: String,
 }
 
+/// Analyzes a VM's configuration and metrics to generate insights.
+///
+/// # Abstract
+/// Evaluates CPU usage, memory pressure, and network errors to provide
+/// actionable insights.
+///
+/// # The Hero's Journey
+/// ```compile_fail
+/// use hitz_cli::analyzer::{analyze_vm, WarningLevel};
+/// use hitz_api::{MetricsSnapshot, VmInfo};
+///
+/// // Assume `info` and `metrics` are constructed
+/// let insights = analyze_vm(&info, &metrics);
+/// if let Some(insight) = insights.first() {
+///     println!("{}: {}", insight.level, insight.message);
+/// }
+/// ```
 pub fn analyze_vm(info: &VmInfo, metrics: &MetricsSnapshot) -> Vec<ResourceInsight> {
     // ⚡ Bolt Optimization: Pre-allocate capacity for up to 4 potential insights
     // (CPU, Memory, Swap, Network) to avoid dynamic heap reallocations.
