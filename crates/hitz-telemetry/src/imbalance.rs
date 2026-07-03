@@ -36,7 +36,7 @@
 //! assert!(result.imbalance_score > 0.5);
 //! ```
 
-use crate::MetricsSnapshot;
+use hitz_api::MetricsSnapshot;
 use serde::{Deserialize, Serialize};
 
 /// The computed resource imbalance score.
@@ -112,7 +112,7 @@ impl CoreImbalanceAnalyzer for MetricsSnapshot {
 #[allow(clippy::unreadable_literal, clippy::float_cmp)]
 mod tests {
     use super::*;
-    use crate::{CpuMetrics, MemoryMetrics};
+    use hitz_api::{CpuMetrics, MemoryMetrics};
 
     fn dummy_snapshot(total: f32, per_core: Vec<f32>) -> MetricsSnapshot {
         MetricsSnapshot {

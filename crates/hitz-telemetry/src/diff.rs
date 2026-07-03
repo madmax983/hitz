@@ -39,7 +39,7 @@
 //! assert_eq!(diff.elapsed_secs, 2.0);
 //! ```
 
-use crate::MetricsSnapshot;
+use hitz_api::MetricsSnapshot;
 use serde::{Deserialize, Serialize};
 
 /// Calculated rates of change per second between two [`MetricsSnapshot`]s.
@@ -291,7 +291,7 @@ impl CalculateDiff for MetricsSnapshot {
 #[allow(clippy::float_cmp, clippy::unreadable_literal, clippy::expect_used)]
 mod tests {
     use super::*;
-    use crate::{CpuMetrics, DiskMetrics, MemoryMetrics, NetMetrics};
+    use hitz_api::{CpuMetrics, DiskMetrics, MemoryMetrics, NetMetrics};
 
     fn dummy_snapshot(time_ms: u64, disk_io: u64, net_io: u64) -> MetricsSnapshot {
         MetricsSnapshot {

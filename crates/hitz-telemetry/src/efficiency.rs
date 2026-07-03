@@ -33,7 +33,7 @@
 //! assert!(score.score < 50.0);
 //! ```
 
-use crate::MetricsSnapshot;
+use hitz_api::MetricsSnapshot;
 use serde::{Deserialize, Serialize};
 
 /// The computed resource efficiency score.
@@ -133,7 +133,7 @@ impl EfficiencyScorer for MetricsSnapshot {
 #[allow(clippy::unreadable_literal)]
 mod tests {
     use super::*;
-    use crate::{CpuMetrics, MemoryMetrics};
+    use hitz_api::{CpuMetrics, MemoryMetrics};
 
     fn dummy_snapshot(cpu: f32, mem_total: u64, mem_used: u64) -> MetricsSnapshot {
         MetricsSnapshot {

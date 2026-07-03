@@ -27,7 +27,7 @@
 //! assert!(hcl.contains("cpus = 4"));
 //! ```
 
-use crate::VmConfig;
+use hitz_api::VmConfig;
 use std::fmt::Write as _;
 
 /// Trait to export structures to Terraform HCL representation.
@@ -64,8 +64,8 @@ impl ToTerraform for VmConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use hitz_api::GuestAgentMode;
     use std::path::PathBuf;
-    use crate::GuestAgentMode;
 
     #[test]
     fn test_to_terraform_basic() {

@@ -30,7 +30,7 @@
 //! assert!(prom_text.contains("hitz_cpu_total_pct{vm_id=\"my_vm\"} 12.5 1700000000000"));
 //! ```
 
-use crate::MetricsSnapshot;
+use hitz_api::MetricsSnapshot;
 
 /// Trait to convert metrics into Prometheus text exposition format.
 pub trait ToPrometheus {
@@ -257,7 +257,7 @@ impl ToPrometheus for MetricsSnapshot {
 #[allow(clippy::unreadable_literal)]
 mod tests {
     use super::*;
-    use crate::{CpuMetrics, DiskMetrics, MemoryMetrics, NetMetrics, ProcMetrics};
+    use hitz_api::{CpuMetrics, DiskMetrics, MemoryMetrics, NetMetrics, ProcMetrics};
 
     #[test]
     fn test_to_prometheus() {

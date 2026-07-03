@@ -46,7 +46,7 @@
 //! assert!(rule.evaluate(&snap));
 //! ```
 
-use crate::MetricsSnapshot;
+use hitz_api::MetricsSnapshot;
 use serde::{Deserialize, Serialize};
 
 /// Operator used to evaluate a telemetry target against a threshold.
@@ -195,7 +195,7 @@ impl SentinelRule {
 #[allow(clippy::expect_used)]
 mod tests {
     use super::*;
-    use crate::{CpuMetrics, MemoryMetrics};
+    use hitz_api::{CpuMetrics, MemoryMetrics};
 
     #[test]
     #[allow(clippy::too_many_lines)]

@@ -732,6 +732,7 @@ dependencies = [
  "hitz-api",
  "hitz-daemon",
  "hitz-hal",
+ "hitz-telemetry",
  "hitz-vmm",
  "hitz-whp",
  "http-body-util",
@@ -814,6 +815,15 @@ dependencies = [
  "thiserror 2.0.18",
  "tracing",
  "wintun",
+]
+
+[[package]]
+name = "hitz-telemetry"
+version = "0.1.0"
+dependencies = [
+ "hitz-api",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

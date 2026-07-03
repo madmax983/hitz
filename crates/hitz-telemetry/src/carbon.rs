@@ -19,7 +19,7 @@
 //! // println!("Current emission rate: {:.2} mg CO2/sec", emissions);
 //! ```
 
-use crate::MetricsSnapshot;
+use hitz_api::MetricsSnapshot;
 use serde::{Deserialize, Serialize};
 
 /// Configurable emission factors for the data center region.
@@ -179,7 +179,7 @@ impl CarbonEstimator for MetricsSnapshot {
 #[allow(clippy::unreadable_literal)]
 mod tests {
     use super::*;
-    use crate::{CpuMetrics, MemoryMetrics};
+    use hitz_api::{CpuMetrics, MemoryMetrics};
 
     fn base_snapshot(cpu_pct: f32, ram_bytes: u64) -> MetricsSnapshot {
         MetricsSnapshot {

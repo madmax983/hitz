@@ -17,7 +17,8 @@
 //! // assert_eq!(class, WorkloadClass::ComputeBound);
 //! ```
 
-use crate::{MetricsDiff, MetricsSnapshot};
+use crate::diff::MetricsDiff;
+use hitz_api::MetricsSnapshot;
 use serde::{Deserialize, Serialize};
 
 /// The categorized type of workload running on the VM.
@@ -80,7 +81,8 @@ impl WorkloadClassifier for MetricsSnapshot {
 #[allow(clippy::unreadable_literal)]
 mod tests {
     use super::*;
-    use crate::{CpuMetrics, DiskMetrics, DiskRate, MemoryMetrics, NetMetrics, NetRate};
+    use crate::diff::{DiskRate, NetRate};
+    use hitz_api::{CpuMetrics, DiskMetrics, MemoryMetrics, NetMetrics};
 
     fn base_snapshot() -> MetricsSnapshot {
         MetricsSnapshot {

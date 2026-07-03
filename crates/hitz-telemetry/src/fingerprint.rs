@@ -36,7 +36,7 @@
 //! assert_eq!(fingerprint.id, "FP-C9-R4-D0-N0");
 //! ```
 
-use crate::MetricsSnapshot;
+use hitz_api::MetricsSnapshot;
 use serde::{Deserialize, Serialize};
 
 /// A discrete identifier for a VM's resource usage profile.
@@ -103,7 +103,7 @@ impl FingerprintGenerator for MetricsSnapshot {
 #[allow(clippy::unreadable_literal)]
 mod tests {
     use super::*;
-    use crate::{CpuMetrics, DiskMetrics, MemoryMetrics, NetMetrics};
+    use hitz_api::{CpuMetrics, DiskMetrics, MemoryMetrics, NetMetrics};
 
     fn dummy_snapshot(cpu: f32, mem_pct: u64, disk_bytes: u64, net_bytes: u64) -> MetricsSnapshot {
         // Need to ensure used_bytes calculation matches the (mem_pct / 10) logic closely.

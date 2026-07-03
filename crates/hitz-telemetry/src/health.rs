@@ -28,7 +28,7 @@
 //! assert!(health.reasons[0].contains("Critical CPU usage"));
 //! ```
 
-use crate::MetricsSnapshot;
+use hitz_api::MetricsSnapshot;
 use serde::{Deserialize, Serialize};
 
 /// The overall health status of the system or component.
@@ -191,7 +191,7 @@ impl HealthCheck for MetricsSnapshot {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{CpuMetrics, MemoryMetrics, NetMetrics};
+    use hitz_api::{CpuMetrics, MemoryMetrics, NetMetrics};
 
     fn safe_metrics() -> MetricsSnapshot {
         MetricsSnapshot {

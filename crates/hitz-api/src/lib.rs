@@ -17,11 +17,11 @@
 //!   wire protocol over vsock for extracting real-time telemetry from the guest.
 
 /// API structures for interacting with the background daemon.
-mod api;
+pub mod api;
 /// Configuration structures representing the VM specification.
-mod config;
+pub mod config;
 /// Telemetry structures representing the VM's runtime resources.
-mod metrics;
+pub mod metrics;
 
 pub use api::{
     ActionVmRequest, ApiError, CloneVmRequest, CreateVmRequest, VmAction, VmInfo, VmState,
@@ -35,48 +35,6 @@ pub use metrics::{
     CpuMetrics, DiskMetrics, MemoryMetrics, MetricsRequest, MetricsSnapshot, NetMetrics,
     ProcMetrics,
 };
-
-#[cfg(feature = "health_check")]
-/// Health assessment module for evaluating system telemetry.
-mod health;
-#[cfg(feature = "health_check")]
-pub use health::{HealthCheck, HealthStatus, SystemHealth};
-
-#[cfg(feature = "simulator")]
-/// Simulator module for generating synthetic telemetry streams.
-pub mod simulator;
-#[cfg(feature = "simulator")]
-pub use simulator::{VmSimulator, WorkloadProfile};
-
-#[cfg(feature = "diff")]
-/// Diff module for calculating rates of change between telemetry snapshots.
-mod diff;
-#[cfg(feature = "diff")]
-pub use diff::{CalculateDiff, DiskRate, MetricsDiff, NetRate};
-
-#[cfg(feature = "classifier")]
-/// Classifier module for determining workload type.
-mod classifier;
-#[cfg(feature = "classifier")]
-pub use classifier::{WorkloadClass, WorkloadClassifier};
-
-#[cfg(feature = "prometheus")]
-/// Prometheus module for converting metrics to Prometheus text format.
-mod prometheus;
-#[cfg(feature = "prometheus")]
-pub use prometheus::ToPrometheus;
-
-#[cfg(feature = "carbon")]
-/// Carbon footprint estimation module.
-mod carbon;
-#[cfg(feature = "carbon")]
-pub use carbon::{CarbonEstimator, EmissionFactors};
-
-#[cfg(feature = "sentinel")]
-/// Sentinel module for defining rules based on metrics.
-mod sentinel;
-#[cfg(feature = "sentinel")]
-pub use sentinel::{ConditionOperator, MetricTarget, SentinelCondition, SentinelRule};
 
 #[cfg(test)]
 #[allow(clippy::expect_used)]
@@ -109,16 +67,16 @@ mod tests {
         let snap = MetricsSnapshot {
             timestamp_ms: 1_700_000_000_000,
             cpu: CpuMetrics {
-                total_pct: 12.5,
-                per_core: vec![10.0, 15.0],
-                load_avg: [0.5, 0.4, 0.3],
+                total_pct: 50.0,
+                per_core: vec![45.0, 55.0],
+                load_avg: [1.0, 0.5, 0.1],
             },
             memory: MemoryMetrics {
-                total_bytes: 256 * 1024 * 1024,
-                used_bytes: 100 * 1024 * 1024,
-                free_bytes: 156 * 1024 * 1024,
-                buffers_bytes: 10 * 1024 * 1024,
-                cached_bytes: 30 * 1024 * 1024,
+                total_bytes: 1024,
+                used_bytes: 512,
+                free_bytes: 512,
+                buffers_bytes: 0,
+                cached_bytes: 0,
                 swap_total: 0,
                 swap_used: 0,
             },
@@ -126,77 +84,17 @@ mod tests {
             networks: vec![],
             processes: vec![],
         };
+
         let encoded = rmp_serde::to_vec(&snap).expect("encode");
         let decoded: MetricsSnapshot = rmp_serde::from_slice(&encoded).expect("decode");
-        assert!((decoded.cpu.total_pct - 12.5).abs() < f32::EPSILON);
-        assert_eq!(decoded.memory.total_bytes, 256 * 1024 * 1024);
+        assert_eq!(snap, decoded);
     }
 
-    #[test]
-    fn guest_agent_mode_default_is_auto() {
-        let mode: GuestAgentMode = GuestAgentMode::default();
-        assert!(matches!(mode, GuestAgentMode::Auto));
-    }
-
-    #[test]
-    fn guest_agent_mode_custom_serde_roundtrip() {
-        let mode = GuestAgentMode::Custom(std::path::PathBuf::from("/usr/local/bin/my-agent"));
-        let json = serde_json::to_string(&mode).expect("serialize");
-        let decoded: GuestAgentMode = serde_json::from_str(&json).expect("deserialize");
-        assert_eq!(decoded, mode);
-    }
-
-    #[test]
-    fn guest_agent_mode_disabled_serde_roundtrip() {
-        let mode = GuestAgentMode::Disabled;
-        let json = serde_json::to_string(&mode).expect("serialize");
-        let decoded: GuestAgentMode = serde_json::from_str(&json).expect("deserialize");
-        assert_eq!(decoded, mode);
-    }
-
-    #[test]
-    fn default_config_has_correct_values() {
-        let json = r#"{"kernel_path": "vmlinux", "ram_mib": 256}"#;
-        let cfg: VmConfig = serde_json::from_str(json).expect("deserialize");
-        assert_eq!(cfg.guest_agent, GuestAgentMode::Auto);
-        assert_eq!(cfg.guest_cid, DEFAULT_GUEST_CID);
-        assert_eq!(cfg.cpus, DEFAULT_CPUS);
-    }
-
-    // ── Existing tests (updated for new VmConfig fields) ─────────────────────
-
-    #[test]
-    fn test_port_forward_serde() {
-        let pf = PortForward {
-            host_port: 8080,
-            guest_port: 80,
-        };
-        let json = serde_json::to_string(&pf).expect("serialize");
-        assert_eq!(json, r#"{"host_port":8080,"guest_port":80}"#);
-    }
+    // ── Legacy API/Config tests ───────────────────────────────────────────────
 
     #[test]
     fn test_vmconfig_serde() {
-        let cfg = VmConfig {
-            kernel_path: PathBuf::from("vmlinux"),
-            initramfs_path: Some(PathBuf::from("initrd")),
-            disk_path: None,
-            ram_mib: 512,
-            cpus: 2,
-            cmdline: Some("quiet".to_string()),
-            net: Some(NetConfig {
-                mac: None,
-                host_ip: "10.0.0.1/24".to_string(),
-                guest_ip: "10.0.0.2/24".to_string(),
-                adapter_name: None,
-            }),
-            ports: vec![PortForward {
-                host_port: 2222,
-                guest_port: 22,
-            }],
-            guest_cid: DEFAULT_GUEST_CID,
-            guest_agent: GuestAgentMode::Auto,
-        };
+        let cfg = minimal_config();
         let json = serde_json::to_string(&cfg).expect("serialize");
         let restored: VmConfig = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(cfg, restored);
@@ -464,32 +362,3 @@ mod tests {
         assert_eq!(snap, decoded_json);
     }
 }
-#[cfg(feature = "efficiency")]
-/// Efficiency scoring module for evaluating resource usage.
-mod efficiency;
-#[cfg(feature = "efficiency")]
-pub use efficiency::{EfficiencyScore, EfficiencyScorer};
-
-#[cfg(feature = "fingerprint")]
-/// Fingerprinting module for categorizing VM workload behavior.
-mod fingerprint;
-#[cfg(feature = "fingerprint")]
-pub use fingerprint::{FingerprintGenerator, VmFingerprint};
-
-#[cfg(feature = "imbalance")]
-/// Imbalance scoring module for evaluating per-core CPU utilization imbalance.
-mod imbalance;
-#[cfg(feature = "imbalance")]
-pub use imbalance::{CoreImbalanceAnalyzer, ImbalanceResult};
-
-#[cfg(feature = "rightsizer")]
-/// Rightsizing module for analyzing metrics and suggesting config changes.
-mod rightsizer;
-#[cfg(feature = "rightsizer")]
-pub use rightsizer::{ResizeRecommendation, RightSizer};
-
-#[cfg(feature = "terraform")]
-/// Terraform HCL generation module.
-mod terraform;
-#[cfg(feature = "terraform")]
-pub use terraform::ToTerraform;

@@ -1,0 +1,31 @@
+[package]
+name = "hitz-telemetry"
+description = "Analysis modules for metrics"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+hitz-api.workspace = true
+serde.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[features]
+default = []
+health_check = []
+simulator = []
+diff = []
+prometheus = []
+classifier = ["diff"]
+carbon = []
+terraform = []
+sentinel = []
+efficiency = []
+fingerprint = []
+imbalance = []
+rightsizer = []

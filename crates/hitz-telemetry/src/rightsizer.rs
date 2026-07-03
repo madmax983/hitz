@@ -50,7 +50,7 @@
 //! assert!(recommendations.len() > 0);
 //! ```
 
-use crate::{MetricsSnapshot, VmConfig};
+use hitz_api::{MetricsSnapshot, VmConfig};
 use serde::{Deserialize, Serialize};
 
 /// Specific actionable recommendation for resizing a VM.
@@ -156,7 +156,7 @@ impl RightSizer for MetricsSnapshot {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{CpuMetrics, GuestAgentMode, MemoryMetrics};
+    use hitz_api::{CpuMetrics, GuestAgentMode, MemoryMetrics};
     use std::path::PathBuf;
 
     fn test_config(cpus: u32, ram_mib: u32) -> VmConfig {

@@ -25,7 +25,7 @@
 //! This simulator implements [`Iterator`] and will run indefinitely.
 //! Ensure you place limits on consumption if running in a bounded test environment.
 
-use crate::{CpuMetrics, MemoryMetrics, MetricsSnapshot};
+use hitz_api::{CpuMetrics, MemoryMetrics, MetricsSnapshot};
 
 /// Determines the simulated workload pattern.
 ///
@@ -192,7 +192,7 @@ mod tests {
     #[allow(clippy::unwrap_used)]
     #[allow(clippy::expect_used)]
     fn test_simulator_health_check_integration() {
-        use crate::{HealthCheck, HealthStatus};
+        use crate::health::{HealthCheck, HealthStatus};
 
         let mut sim = VmSimulator::new(WorkloadProfile::CpuSpike);
 
