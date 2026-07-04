@@ -370,4 +370,60 @@ mod tests {
         let b = VmId::new();
         assert_ne!(a, b);
     }
+    #[test]
+    fn vmid_methods() {
+        let id = VmId::new();
+        assert_eq!(*id.as_uuid(), id.0);
+
+        let id_def = VmId::default();
+        assert_ne!(id, id_def);
+
+        assert_eq!(format!("{id}"), id.0.to_string());
+    }
+
+    #[test]
+    fn vcpuid_methods() {
+        let vcpu = VcpuId::new(42);
+        assert_eq!(vcpu.as_u32(), 42);
+        assert_eq!(format!("{vcpu}"), "vcpu-42");
+    }
+
+    #[test]
+    fn gpa_methods() {
+        let gpa = Gpa::new(0x1000);
+        assert_eq!(gpa.as_u64(), 0x1000);
+        assert_eq!(format!("{gpa}"), "0x0000000000001000");
+    }
+
+    #[test]
+    fn irqline_methods() {
+        let irq = IrqLine::new(5);
+        assert_eq!(irq.as_u8(), 5);
+        assert_eq!(format!("{irq}"), "IRQ5");
+    }
+
+    #[test]
+    fn mmioslot_methods() {
+        let slot = MmioSlot::new(2);
+        assert_eq!(slot.as_u16(), 2);
+    }
+
+    #[test]
+    fn diskoffset_methods() {
+        let offset = DiskOffset::new(512);
+        assert_eq!(offset.as_u64(), 512);
+    }
+
+    #[test]
+    fn macaddress_methods() {
+        let mac = MacAddress::new([0x01, 0x02, 0x03, 0x04, 0x05, 0x06]);
+        assert_eq!(mac.as_bytes(), &[0x01, 0x02, 0x03, 0x04, 0x05, 0x06]);
+    }
+
+    #[test]
+    fn memsizemib_methods() {
+        let mem = MemSizeMiB::new(256);
+        assert_eq!(mem.as_mib(), 256);
+        assert_eq!(format!("{mem}"), "256 MiB");
+    }
 }
