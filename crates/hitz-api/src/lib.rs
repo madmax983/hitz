@@ -463,6 +463,26 @@ mod tests {
             serde_json::from_str(&encoded_json).expect("serialize/deserialize failed");
         assert_eq!(snap, decoded_json);
     }
+    #[test]
+    fn test_vmaction_display() {
+        assert_eq!(VmAction::Start.to_string(), "start");
+        assert_eq!(VmAction::Stop.to_string(), "stop");
+        assert_eq!(VmAction::Restart.to_string(), "restart");
+    }
+
+    #[test]
+    fn test_vmaction_gerund() {
+        assert_eq!(VmAction::Start.gerund(), "Starting");
+        assert_eq!(VmAction::Stop.gerund(), "Stopping");
+        assert_eq!(VmAction::Restart.gerund(), "Restarting");
+    }
+
+    #[test]
+    fn test_vmaction_past_tense() {
+        assert_eq!(VmAction::Start.past_tense(), "started");
+        assert_eq!(VmAction::Stop.past_tense(), "stopped");
+        assert_eq!(VmAction::Restart.past_tense(), "restarted");
+    }
 }
 #[cfg(feature = "efficiency")]
 /// Efficiency scoring module for evaluating resource usage.

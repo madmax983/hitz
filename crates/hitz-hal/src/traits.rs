@@ -269,3 +269,60 @@ pub trait Vcpu: Send {
     /// IF=1 and the vCPU is not in an interrupt shadow.
     fn request_interrupt_window(&mut self) -> Result<(), HalError>;
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct DummyVcpu;
+
+    impl Vcpu for DummyVcpu {
+        type CancelHandle = bool;
+
+        fn run(&mut self) -> Result<VcpuExit, HalError> {
+            unreachable!()
+        }
+
+        fn cancel_handle(&self) -> Self::CancelHandle {
+            true
+        }
+
+        fn cancel_via(handle: &Self::CancelHandle) -> Result<(), HalError> {
+            if *handle {
+                Ok(())
+            } else {
+                Err(HalError::VcpuCancel("cancel failed".to_string()))
+            }
+        }
+
+        fn get_regs(&self) -> Result<StandardRegs, HalError> {
+            unreachable!()
+        }
+
+        fn set_regs(&mut self, _regs: &StandardRegs) -> Result<(), HalError> {
+            unreachable!()
+        }
+
+        fn get_sregs(&self) -> Result<SpecialRegs, HalError> {
+            unreachable!()
+        }
+
+        fn set_sregs(&mut self, _sregs: &SpecialRegs) -> Result<(), HalError> {
+            unreachable!()
+        }
+
+        fn inject_interrupt(&mut self, _vector: u8) -> Result<(), HalError> {
+            unreachable!()
+        }
+
+        fn request_interrupt_window(&mut self) -> Result<(), HalError> {
+            unreachable!()
+        }
+    }
+
+    #[test]
+    fn vcpu_cancel_default() {
+        let vcpu = DummyVcpu;
+        assert!(vcpu.cancel().is_ok());
+    }
+}
