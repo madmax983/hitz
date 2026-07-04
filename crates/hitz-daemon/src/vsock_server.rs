@@ -6,7 +6,11 @@
 use crossbeam_channel::{Receiver, Sender};
 use hitz_api::{MetricsSnapshot, VSOCK_METRICS_PORT};
 use hitz_devices::{VSOCK_BUF_ALLOC, VsockHdr, VsockOp, VsockPacket};
-use opentelemetry::KeyValue;
+use opentelemetry::{
+    KeyValue,
+    metrics::{Counter, Gauge},
+};
+use std::sync::OnceLock;
 use tokio::sync::watch;
 
 /// Receive loop for a single VM's vsock metrics stream.
@@ -93,11 +97,49 @@ fn handle_packet(
     }
 }
 
+struct OtelInstruments {
+    cpu_usage: Gauge<f64>,
+    cpu_usage_per_core: Gauge<f64>,
+    memory_used_bytes: Gauge<u64>,
+    memory_total_bytes: Gauge<u64>,
+    disk_read_bytes_total: Counter<u64>,
+    disk_write_bytes_total: Counter<u64>,
+    net_rx_bytes_total: Counter<u64>,
+    net_tx_bytes_total: Counter<u64>,
+}
+
+static INSTRUMENTS: OnceLock<OtelInstruments> = OnceLock::new();
+
 /// Publish a [`MetricsSnapshot`] to the global `OTel` meter.
 ///
 /// All calls are no-ops when no `OTel` provider is registered.
 pub fn publish_to_otel(vm_id: &str, snap: &MetricsSnapshot) {
-    let meter = opentelemetry::global::meter("hitz");
+    let instruments = INSTRUMENTS.get_or_init(|| {
+        let meter = opentelemetry::global::meter("hitz");
+        OtelInstruments {
+            cpu_usage: meter
+                .f64_gauge("hitz.guest.cpu_usage")
+                .with_description("Guest overall CPU utilisation percentage")
+                .build(),
+            cpu_usage_per_core: meter.f64_gauge("hitz.guest.cpu_usage_per_core").build(),
+            memory_used_bytes: meter
+                .u64_gauge("hitz.guest.memory_used_bytes")
+                .with_description("Guest memory in use")
+                .build(),
+            memory_total_bytes: meter
+                .u64_gauge("hitz.guest.memory_total_bytes")
+                .with_description("Guest total RAM")
+                .build(),
+            disk_read_bytes_total: meter
+                .u64_counter("hitz.guest.disk_read_bytes_total")
+                .build(),
+            disk_write_bytes_total: meter
+                .u64_counter("hitz.guest.disk_write_bytes_total")
+                .build(),
+            net_rx_bytes_total: meter.u64_counter("hitz.guest.net_rx_bytes_total").build(),
+            net_tx_bytes_total: meter.u64_counter("hitz.guest.net_tx_bytes_total").build(),
+        }
+    });
 
     // ⚡ Bolt Optimization:
     // We pre-allocate the `vm.id` KeyValue to avoid `vm_id.to_string()` heap allocations
@@ -106,41 +148,31 @@ pub fn publish_to_otel(vm_id: &str, snap: &MetricsSnapshot) {
     let vm_id_kv = KeyValue::new("vm.id", vm_id.to_string());
     let labels = [vm_id_kv.clone()];
 
-    meter
-        .f64_gauge("hitz.guest.cpu_usage")
-        .with_description("Guest overall CPU utilisation percentage")
-        .build()
+    instruments
+        .cpu_usage
         .record(f64::from(snap.cpu.total_pct), &labels);
 
     for (i, &pct) in snap.cpu.per_core.iter().enumerate() {
         let core_labels = [vm_id_kv.clone(), KeyValue::new("cpu", i as i64)];
-        meter
-            .f64_gauge("hitz.guest.cpu_usage_per_core")
-            .build()
+        instruments
+            .cpu_usage_per_core
             .record(f64::from(pct), &core_labels);
     }
 
-    meter
-        .u64_gauge("hitz.guest.memory_used_bytes")
-        .with_description("Guest memory in use")
-        .build()
+    instruments
+        .memory_used_bytes
         .record(snap.memory.used_bytes, &labels);
-
-    meter
-        .u64_gauge("hitz.guest.memory_total_bytes")
-        .with_description("Guest total RAM")
-        .build()
+    instruments
+        .memory_total_bytes
         .record(snap.memory.total_bytes, &labels);
 
     for disk in &snap.disks {
         let disk_labels = [vm_id_kv.clone(), KeyValue::new("disk", disk.name.clone())];
-        meter
-            .u64_counter("hitz.guest.disk_read_bytes_total")
-            .build()
+        instruments
+            .disk_read_bytes_total
             .add(disk.read_bytes, &disk_labels);
-        meter
-            .u64_counter("hitz.guest.disk_write_bytes_total")
-            .build()
+        instruments
+            .disk_write_bytes_total
             .add(disk.write_bytes, &disk_labels);
     }
 
@@ -149,13 +181,11 @@ pub fn publish_to_otel(vm_id: &str, snap: &MetricsSnapshot) {
             vm_id_kv.clone(),
             KeyValue::new("interface", net.interface.clone()),
         ];
-        meter
-            .u64_counter("hitz.guest.net_rx_bytes_total")
-            .build()
+        instruments
+            .net_rx_bytes_total
             .add(net.rx_bytes, &net_labels);
-        meter
-            .u64_counter("hitz.guest.net_tx_bytes_total")
-            .build()
+        instruments
+            .net_tx_bytes_total
             .add(net.tx_bytes, &net_labels);
     }
 
