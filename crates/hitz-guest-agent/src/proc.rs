@@ -284,6 +284,118 @@ mod tests {
         assert!((pct - 25.0_f32).abs() < 1.0);
     }
 
+    #[test]
+    fn should_calculate_cpu_pct_table_driven() {
+        struct TestCase {
+            name: &'static str,
+            prev: CpuSample,
+            curr: CpuSample,
+            expected_pct: f32,
+        }
+
+        let cases = vec![
+            TestCase {
+                name: "normal utilization",
+                prev: CpuSample {
+                    user: 1000,
+                    nice: 0,
+                    system: 200,
+                    idle: 8800,
+                    iowait: 0,
+                    irq: 0,
+                    softirq: 0,
+                },
+                curr: CpuSample {
+                    user: 1200,
+                    nice: 0,
+                    system: 250,
+                    idle: 9550,
+                    iowait: 0,
+                    irq: 0,
+                    softirq: 0,
+                },
+                expected_pct: 25.0, // delta_active = 250, delta_total = 1000
+            },
+            TestCase {
+                name: "zero total delta",
+                prev: CpuSample {
+                    user: 100,
+                    nice: 0,
+                    system: 0,
+                    idle: 0,
+                    iowait: 0,
+                    irq: 0,
+                    softirq: 0,
+                },
+                curr: CpuSample {
+                    user: 100,
+                    nice: 0,
+                    system: 0,
+                    idle: 0,
+                    iowait: 0,
+                    irq: 0,
+                    softirq: 0,
+                },
+                expected_pct: 0.0,
+            },
+            TestCase {
+                name: "100 percent utilization",
+                prev: CpuSample {
+                    user: 100,
+                    nice: 0,
+                    system: 0,
+                    idle: 900,
+                    iowait: 0,
+                    irq: 0,
+                    softirq: 0,
+                },
+                curr: CpuSample {
+                    user: 200,
+                    nice: 0,
+                    system: 0,
+                    idle: 900,
+                    iowait: 0,
+                    irq: 0,
+                    softirq: 0,
+                },
+                expected_pct: 100.0, // delta_active = 100, delta_total = 100
+            },
+            TestCase {
+                name: "counter wraparound backward delta",
+                prev: CpuSample {
+                    user: 1000,
+                    nice: 0,
+                    system: 0,
+                    idle: 9000,
+                    iowait: 0,
+                    irq: 0,
+                    softirq: 0,
+                },
+                curr: CpuSample {
+                    user: 100,
+                    nice: 0,
+                    system: 0,
+                    idle: 900,
+                    iowait: 0,
+                    irq: 0,
+                    softirq: 0,
+                },
+                expected_pct: 0.0, // saturating_sub results in 0 total delta
+            },
+        ];
+
+        for case in cases {
+            let pct = cpu_pct(&case.prev, &case.curr);
+            assert!(
+                (pct - case.expected_pct).abs() < f32::EPSILON,
+                "Case '{}' failed: expected {}, got {}",
+                case.name,
+                case.expected_pct,
+                pct
+            );
+        }
+    }
+
     use proptest::prelude::*;
 
     proptest! {
