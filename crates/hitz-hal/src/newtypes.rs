@@ -370,4 +370,42 @@ mod tests {
         let b = VmId::new();
         assert_ne!(a, b);
     }
+
+    #[test]
+    fn vm_id_default() {
+        let a = VmId::default();
+        let b = VmId::default();
+        assert_ne!(a, b);
+    }
+
+    #[test]
+    fn vm_id_display() {
+        let id = VmId::new();
+        let uuid_str = id.as_uuid().to_string();
+        assert_eq!(id.to_string(), uuid_str);
+    }
+
+    #[test]
+    fn vcpu_id_display() {
+        let id = VcpuId::new(42);
+        assert_eq!(id.to_string(), "vcpu-42");
+    }
+
+    #[test]
+    fn gpa_display() {
+        let gpa = Gpa::new(0x1234_5678);
+        assert_eq!(gpa.to_string(), "0x0000000012345678");
+    }
+
+    #[test]
+    fn irq_line_display() {
+        let irq = IrqLine::new(7);
+        assert_eq!(irq.to_string(), "IRQ7");
+    }
+
+    #[test]
+    fn mem_size_mib_display() {
+        let size = MemSizeMiB::new(2048);
+        assert_eq!(size.to_string(), "2048 MiB");
+    }
 }
