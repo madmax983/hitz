@@ -39,6 +39,8 @@ pub struct VirtioBlockDevice {
     disk: File,
     /// Disk capacity in 512-byte sectors.
     capacity: u64,
+    /// Pre-allocated buffer for I/O operations to eliminate heap allocations per request.
+    buffer: Vec<u8>,
 }
 
 impl VirtioBlockDevice {
@@ -62,7 +64,11 @@ impl VirtioBlockDevice {
     pub fn new(disk: File) -> std::io::Result<Self> {
         let metadata = disk.metadata()?;
         let capacity = metadata.len() / SECTOR_SIZE;
-        Ok(Self { disk, capacity })
+        Ok(Self {
+            disk,
+            capacity,
+            buffer: Vec::with_capacity(65536),
+        })
     }
 
     /// Returns the disk capacity in 512-byte sectors.
@@ -194,12 +200,12 @@ impl VirtioBlockDevice {
             return VIRTIO_BLK_S_IOERR;
         }
 
-        let mut buf = vec![0u8; len as usize];
-        if self.disk.read_exact(&mut buf).is_err() {
+        self.buffer.resize(len as usize, 0);
+        if self.disk.read_exact(&mut self.buffer).is_err() {
             return VIRTIO_BLK_S_IOERR;
         }
 
-        if mem.write_guest(gpa, &buf).is_err() {
+        if mem.write_guest(gpa, &self.buffer).is_err() {
             return VIRTIO_BLK_S_IOERR;
         }
 
@@ -231,8 +237,8 @@ impl VirtioBlockDevice {
             return VIRTIO_BLK_S_IOERR;
         }
 
-        let mut buf = vec![0u8; len as usize];
-        if mem.read_guest(gpa, &mut buf).is_err() {
+        self.buffer.resize(len as usize, 0);
+        if mem.read_guest(gpa, &mut self.buffer).is_err() {
             return VIRTIO_BLK_S_IOERR;
         }
 
@@ -240,7 +246,7 @@ impl VirtioBlockDevice {
             return VIRTIO_BLK_S_IOERR;
         }
 
-        if self.disk.write_all(&buf).is_err() {
+        if self.disk.write_all(&self.buffer).is_err() {
             return VIRTIO_BLK_S_IOERR;
         }
 
