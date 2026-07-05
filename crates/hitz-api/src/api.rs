@@ -292,3 +292,53 @@ pub struct ApiError {
     /// A human-readable, descriptive error message explaining the failure.
     pub message: String,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_vmaction_display_and_helpers() {
+        assert_eq!(VmAction::Start.to_string(), "start");
+        assert_eq!(VmAction::Stop.to_string(), "stop");
+        assert_eq!(VmAction::Restart.to_string(), "restart");
+
+        assert_eq!(VmAction::Start.gerund(), "Starting");
+        assert_eq!(VmAction::Stop.gerund(), "Stopping");
+        assert_eq!(VmAction::Restart.gerund(), "Restarting");
+
+        assert_eq!(VmAction::Start.past_tense(), "started");
+        assert_eq!(VmAction::Stop.past_tense(), "stopped");
+        assert_eq!(VmAction::Restart.past_tense(), "restarted");
+    }
+
+    #[test]
+    fn test_vmaction_debug_and_display() {
+        let start = VmAction::Start;
+        assert_eq!(format!("{start:?}"), "Start");
+        assert_eq!(format!("{start}"), "start");
+
+        let stop = VmAction::Stop;
+        assert_eq!(format!("{stop:?}"), "Stop");
+        assert_eq!(format!("{stop}"), "stop");
+
+        let restart = VmAction::Restart;
+        assert_eq!(format!("{restart:?}"), "Restart");
+        assert_eq!(format!("{restart}"), "restart");
+    }
+
+    #[test]
+    fn test_vmstate_debug() {
+        let created = VmState::Created;
+        assert_eq!(format!("{created:?}"), "Created");
+
+        let running = VmState::Running;
+        assert_eq!(format!("{running:?}"), "Running");
+
+        let stopped = VmState::Stopped;
+        assert_eq!(format!("{stopped:?}"), "Stopped");
+
+        let failed = VmState::Failed;
+        assert_eq!(format!("{failed:?}"), "Failed");
+    }
+}

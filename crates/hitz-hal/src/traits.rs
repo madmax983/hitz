@@ -58,8 +58,8 @@ pub trait GuestMemAccess: Send + Sync {
 /// # impl Vcpu for DummyVcpu {
 /// #     type CancelHandle = ();
 /// #     fn run(&mut self) -> Result<hitz_hal::VcpuExit, HalError> { unreachable!() }
-/// #     fn cancel_handle(&self) -> () { () }
-/// #     fn cancel_via(_: &()) -> Result<(), HalError> { Ok(()) }
+/// #     fn cancel_handle(&self) {}
+/// #     fn cancel_via((): &()) -> Result<(), HalError> { Ok(()) }
 /// #     fn get_regs(&self) -> Result<hitz_hal::StandardRegs, HalError> { unreachable!() }
 /// #     fn set_regs(&mut self, _: &hitz_hal::StandardRegs) -> Result<(), HalError> { Ok(()) }
 /// #     fn get_sregs(&self) -> Result<hitz_hal::SpecialRegs, HalError> { unreachable!() }
@@ -113,8 +113,8 @@ pub trait Hypervisor: Send + Sync {
 /// # impl Vcpu for DummyVcpu {
 /// #     type CancelHandle = ();
 /// #     fn run(&mut self) -> Result<hitz_hal::VcpuExit, HalError> { unreachable!() }
-/// #     fn cancel_handle(&self) -> () { () }
-/// #     fn cancel_via(_: &()) -> Result<(), HalError> { Ok(()) }
+/// #     fn cancel_handle(&self) {}
+/// #     fn cancel_via((): &()) -> Result<(), HalError> { Ok(()) }
 /// #     fn get_regs(&self) -> Result<hitz_hal::StandardRegs, HalError> { unreachable!() }
 /// #     fn set_regs(&mut self, _: &hitz_hal::StandardRegs) -> Result<(), HalError> { Ok(()) }
 /// #     fn get_sregs(&self) -> Result<hitz_hal::SpecialRegs, HalError> { unreachable!() }
@@ -186,8 +186,8 @@ pub trait Partition: Send + Sync {
 /// # impl Vcpu for DummyVcpu {
 /// #     type CancelHandle = ();
 /// #     fn run(&mut self) -> Result<hitz_hal::VcpuExit, HalError> { Ok(VcpuExit::Halt) }
-/// #     fn cancel_handle(&self) -> () { () }
-/// #     fn cancel_via(_: &()) -> Result<(), HalError> { Ok(()) }
+/// #     fn cancel_handle(&self) {}
+/// #     fn cancel_via((): &()) -> Result<(), HalError> { Ok(()) }
 /// #     fn get_regs(&self) -> Result<hitz_hal::StandardRegs, HalError> { unreachable!() }
 /// #     fn set_regs(&mut self, _: &hitz_hal::StandardRegs) -> Result<(), HalError> { Ok(()) }
 /// #     fn get_sregs(&self) -> Result<hitz_hal::SpecialRegs, HalError> { unreachable!() }
@@ -268,4 +268,46 @@ pub trait Vcpu: Send {
     /// causing the next `run` to exit with `VcpuExit::InterruptWindow` once
     /// IF=1 and the vCPU is not in an interrupt shadow.
     fn request_interrupt_window(&mut self) -> Result<(), HalError>;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct DummyVcpu;
+
+    impl Vcpu for DummyVcpu {
+        type CancelHandle = ();
+        fn run(&mut self) -> Result<VcpuExit, HalError> {
+            Ok(VcpuExit::Halt)
+        }
+        fn cancel_handle(&self) {}
+        fn cancel_via((): &()) -> Result<(), HalError> {
+            Ok(())
+        }
+        fn get_regs(&self) -> Result<StandardRegs, HalError> {
+            Ok(StandardRegs::default())
+        }
+        fn set_regs(&mut self, _: &StandardRegs) -> Result<(), HalError> {
+            Ok(())
+        }
+        fn get_sregs(&self) -> Result<SpecialRegs, HalError> {
+            Ok(SpecialRegs::default())
+        }
+        fn set_sregs(&mut self, _: &SpecialRegs) -> Result<(), HalError> {
+            Ok(())
+        }
+        fn inject_interrupt(&mut self, _: u8) -> Result<(), HalError> {
+            Ok(())
+        }
+        fn request_interrupt_window(&mut self) -> Result<(), HalError> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn test_vcpu_cancel() {
+        let vcpu = DummyVcpu;
+        assert!(vcpu.cancel().is_ok());
+    }
 }
