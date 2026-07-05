@@ -310,8 +310,9 @@ fn handle_mmio_write<V: Vcpu, W: Write>(
         let regs = vcpu.get_regs()?;
         mmio_decode::register_value(&regs, decoded.register)
     };
-    let size = usize::from(decoded.size).min(8);
-    data[..size].copy_from_slice(&value.to_le_bytes()[..size]);
+    let size = usize::from(mmio.len).min(8);
+    let copy_size = usize::from(decoded.size).min(size);
+    data[..copy_size].copy_from_slice(&value.to_le_bytes()[..copy_size]);
 
     // Lock → device write → unlock, then handle IRQ.
     let irq = {
