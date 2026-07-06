@@ -370,4 +370,71 @@ mod tests {
         let b = VmId::new();
         assert_ne!(a, b);
     }
+
+    #[test]
+    fn vcpu_id_as_u32() {
+        let id = VcpuId::new(42);
+        assert_eq!(id.as_u32(), 42);
+    }
+
+    #[test]
+    fn vcpu_id_display() {
+        let id = VcpuId::new(42);
+        assert_eq!(id.to_string(), "vcpu-42");
+    }
+
+    #[test]
+    fn gpa_as_u64() {
+        let gpa = Gpa::new(0x1000);
+        assert_eq!(gpa.as_u64(), 0x1000);
+    }
+
+    #[test]
+    fn gpa_display() {
+        let gpa = Gpa::new(0x1234_5678);
+        assert_eq!(gpa.to_string(), "0x0000000012345678");
+    }
+
+    #[test]
+    fn irq_line_as_u8() {
+        let irq = IrqLine::new(5);
+        assert_eq!(irq.as_u8(), 5);
+    }
+
+    #[test]
+    fn irq_line_display() {
+        let irq = IrqLine::new(5);
+        assert_eq!(irq.to_string(), "IRQ5");
+    }
+
+    #[test]
+    fn mmio_slot_as_u16() {
+        let slot = MmioSlot::new(1);
+        assert_eq!(slot.as_u16(), 1);
+    }
+
+    #[test]
+    fn disk_offset_as_u64() {
+        let offset = DiskOffset::new(4096);
+        assert_eq!(offset.as_u64(), 4096);
+    }
+
+    #[test]
+    fn mac_address_as_bytes() {
+        let bytes = [0x11, 0x22, 0x33, 0x44, 0x55, 0x66];
+        let mac = MacAddress::new(bytes);
+        assert_eq!(mac.as_bytes(), &bytes);
+    }
+
+    #[test]
+    fn mem_size_mib_as_mib() {
+        let size = MemSizeMiB::new(1024);
+        assert_eq!(size.as_mib(), 1024);
+    }
+
+    #[test]
+    fn mem_size_mib_display() {
+        let size = MemSizeMiB::new(1024);
+        assert_eq!(size.to_string(), "1024 MiB");
+    }
 }
