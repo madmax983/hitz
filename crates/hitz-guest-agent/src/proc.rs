@@ -322,4 +322,67 @@ mod tests {
             " 8       0 sda 9999999999999999999 0 9999999999999999999 0 9999999999999999999 0 9999999999999999999\n",
         );
     }
+
+    #[test]
+    fn test_cpu_pct_zero_total_delta() {
+        let a = CpuSample {
+            user: 1000,
+            nice: 0,
+            system: 200,
+            idle: 8800,
+            iowait: 0,
+            irq: 0,
+            softirq: 0,
+        };
+        let b = CpuSample {
+            user: 1000,
+            nice: 0,
+            system: 200,
+            idle: 8800,
+            iowait: 0,
+            irq: 0,
+            softirq: 0,
+        };
+        let pct = cpu_pct(&a, &b);
+        assert!((pct - 0.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn parse_meminfo_missing_total() {
+        let mem = parse_proc_meminfo("MemFree: 1000 kB\n");
+        assert!(mem.is_none());
+    }
+
+    #[test]
+    fn parse_net_dev_lo_skipped() {
+        let content = "Inter-|   Receive                                                |  Transmit\n\
+         face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed\n\
+         lo:      5000     40    0    0    0     0          0         0     2000      20    0    0    0     0       0          0\n";
+        let nets = parse_proc_net_dev(content);
+        assert_eq!(nets.len(), 0);
+    }
+
+    #[test]
+    fn parse_meminfo_ignored_keys() {
+        let mem = parse_proc_meminfo("MemTotal: 1000 kB\nIgnoredKey: 2000 kB\n").unwrap();
+        assert_eq!(mem.total_bytes, 1000 * 1024);
+    }
+
+    #[test]
+    fn parse_meminfo_empty_line() {
+        let mem = parse_proc_meminfo("\nMemTotal: 1000 kB\n").unwrap();
+        assert_eq!(mem.total_bytes, 1000 * 1024);
+    }
+
+    #[test]
+    fn parse_meminfo_missing_val() {
+        let mem = parse_proc_meminfo("MemTotal:\nMemTotal: 1000 kB\n").unwrap();
+        assert_eq!(mem.total_bytes, 1000 * 1024);
+    }
+
+    #[test]
+    fn parse_meminfo_invalid_val() {
+        let mem = parse_proc_meminfo("MemTotal: abc\nMemTotal: 1000 kB\n").unwrap();
+        assert_eq!(mem.total_bytes, 1000 * 1024);
+    }
 }
