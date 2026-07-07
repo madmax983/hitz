@@ -269,3 +269,66 @@ pub trait Vcpu: Send {
     /// IF=1 and the vCPU is not in an interrupt shadow.
     fn request_interrupt_window(&mut self) -> Result<(), HalError>;
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::{SpecialRegs, StandardRegs, VcpuExit};
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    struct DummyVcpu {
+        was_canceled: Arc<AtomicBool>,
+    }
+
+    impl Vcpu for DummyVcpu {
+        type CancelHandle = Arc<AtomicBool>;
+
+        fn run(&mut self) -> Result<VcpuExit, HalError> {
+            Ok(VcpuExit::Halt)
+        }
+
+        fn cancel_handle(&self) -> Self::CancelHandle {
+            Arc::clone(&self.was_canceled)
+        }
+
+        fn cancel_via(handle: &Self::CancelHandle) -> Result<(), HalError> {
+            handle.store(true, Ordering::SeqCst);
+            Ok(())
+        }
+
+        fn get_regs(&self) -> Result<StandardRegs, HalError> {
+            unimplemented!()
+        }
+
+        fn set_regs(&mut self, _regs: &StandardRegs) -> Result<(), HalError> {
+            unimplemented!()
+        }
+
+        fn get_sregs(&self) -> Result<SpecialRegs, HalError> {
+            unimplemented!()
+        }
+
+        fn set_sregs(&mut self, _sregs: &SpecialRegs) -> Result<(), HalError> {
+            unimplemented!()
+        }
+
+        fn inject_interrupt(&mut self, _vector: u8) -> Result<(), HalError> {
+            unimplemented!()
+        }
+
+        fn request_interrupt_window(&mut self) -> Result<(), HalError> {
+            unimplemented!()
+        }
+    }
+
+    #[test]
+    fn test_vcpu_cancel() {
+        let was_canceled = Arc::new(AtomicBool::new(false));
+        let vcpu = DummyVcpu {
+            was_canceled: Arc::clone(&was_canceled),
+        };
+        assert!(vcpu.cancel().is_ok());
+        assert!(was_canceled.load(Ordering::SeqCst));
+    }
+}
