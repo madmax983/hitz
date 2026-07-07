@@ -3,7 +3,7 @@
 //! # Abstract
 //! Calculates an efficiency score based on resource usage.
 //!
-//! # The Hero's Journey
+//! ## Examples
 //!
 //! ```rust
 //! use hitz_api::{EfficiencyScorer, EfficiencyScore, MetricsSnapshot, CpuMetrics, MemoryMetrics};

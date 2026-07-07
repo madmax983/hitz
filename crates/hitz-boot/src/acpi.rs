@@ -7,7 +7,7 @@
 //! Linux kernel can discover multiple vCPUs. Tables are placed in the BIOS
 //! read-only region (`0x000E_xxxx`) which the E820 map marks as reserved.
 //!
-//! # The Hero's Journey
+//! ## Examples
 //!
 //! ```rust
 //! use hitz_boot::{build_rsdp, build_xsdt, build_madt};

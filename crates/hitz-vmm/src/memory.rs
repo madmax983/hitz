@@ -9,7 +9,7 @@
 //! This module translates between Guest Physical Addresses (GPA) and Host
 //! Virtual Addresses (HVA).
 //!
-//! # The Hero's Journey
+//! ## Examples
 //! ```
 //! # use hitz_vmm::memory::GuestMemory;
 //! # use hitz_hal::Gpa;

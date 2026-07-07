@@ -37,7 +37,7 @@ const TX_QUEUE: u16 = 1;
 /// channels, allowing an asynchronous host network thread to inject received ethernet
 /// frames and drain transmitted frames.
 ///
-/// # The Hero's Journey
+/// ## Examples
 ///
 /// ```no_run
 /// # use hitz_devices::VirtioNetDevice;

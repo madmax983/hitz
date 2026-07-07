@@ -11,7 +11,7 @@
 //! a virtual machine without needing to know if they are running on Windows
 //! Hypervisor Platform (WHP) or Linux KVM.
 //!
-//! # The Hero's Journey
+//! ## Examples
 //!
 //! ```rust
 //! use hitz_hal::{MemSizeMiB, PartitionConfig};

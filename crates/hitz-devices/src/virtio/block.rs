@@ -48,7 +48,7 @@ impl VirtioBlockDevice {
     /// Create a block device backed by the given file.
     /// The capacity is determined from the file's current length.
     ///
-    /// # The Hero's Journey
+    /// ## Examples
     /// ```rust
     /// use hitz_devices::VirtioBlockDevice;
     /// use tempfile::tempfile;

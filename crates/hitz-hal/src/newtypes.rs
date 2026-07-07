@@ -14,7 +14,7 @@ use uuid::Uuid;
 /// Wraps a UUID to uniquely identify a VM instance. Prevents mixing up
 /// VM IDs with other UUIDs or strings.
 ///
-/// # The Hero's Journey
+/// ## Examples
 ///
 /// ```rust
 /// use hitz_hal::VmId;
@@ -59,7 +59,7 @@ impl fmt::Display for VmId {
 ///
 /// Strongly-typed identifier for a vCPU.
 ///
-/// # The Hero's Journey
+/// ## Examples
 ///
 /// ```rust
 /// use hitz_hal::VcpuId;
@@ -99,7 +99,7 @@ impl fmt::Display for VcpuId {
 /// accidental mix-ups with host physical addresses, host virtual addresses,
 /// or guest virtual addresses.
 ///
-/// # The Hero's Journey
+/// ## Examples
 ///
 /// ```rust
 /// use hitz_hal::Gpa;
@@ -156,7 +156,7 @@ impl fmt::Display for Gpa {
 ///
 /// Strongly typed wrapper for an IRQ number.
 ///
-/// # The Hero's Journey
+/// ## Examples
 ///
 /// ```rust
 /// use hitz_hal::IrqLine;
@@ -193,7 +193,7 @@ impl fmt::Display for IrqLine {
 ///
 /// Identifies a registered MMIO region or device slot.
 ///
-/// # The Hero's Journey
+/// ## Examples
 ///
 /// ```rust
 /// use hitz_hal::MmioSlot;
@@ -225,7 +225,7 @@ impl MmioSlot {
 /// Byte offset inside a virtual disk, helping prevent confusion with
 /// memory offsets or sector indices.
 ///
-/// # The Hero's Journey
+/// ## Examples
 ///
 /// ```rust
 /// use hitz_hal::DiskOffset;
@@ -256,7 +256,7 @@ impl DiskOffset {
 ///
 /// Represents a 6-byte hardware address.
 ///
-/// # The Hero's Journey
+/// ## Examples
 ///
 /// ```rust
 /// use hitz_hal::MacAddress;
@@ -298,7 +298,7 @@ impl fmt::Display for MacAddress {
 /// Explicitly typed wrapper for memory capacity in MiB.
 /// Prevents the classic "is this bytes, KiB, or MiB?" bug.
 ///
-/// # The Hero's Journey
+/// ## Examples
 ///
 /// ```rust
 /// use hitz_hal::MemSizeMiB;

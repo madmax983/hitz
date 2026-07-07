@@ -6,7 +6,7 @@
 //! for converting raw, monotonically increasing counters (like bytes read from disk)
 //! into actionable metrics (like bytes/sec).
 //!
-//! # The Hero's Journey
+//! ## Examples
 //!
 //! ```rust
 //! use hitz_api::{MetricsSnapshot, CpuMetrics, MemoryMetrics};
@@ -157,7 +157,7 @@ pub struct NetRate {
 /// an absolute value at a specific point in time (like a snapshot of counters)
 /// to produce a relative rate of change when compared to an older snapshot.
 ///
-/// # The Hero's Journey
+/// ## Examples
 ///
 /// ```rust
 /// use hitz_api::CalculateDiff;

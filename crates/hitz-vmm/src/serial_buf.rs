@@ -7,7 +7,7 @@
 //! tracks its own read position and is woken via [`tokio::sync::Notify`]
 //! when new data arrives (or the buffer is closed).
 //!
-//! # The Hero's Journey
+//! ## Examples
 //! ```
 //! # use hitz_vmm::serial_buf::SerialBuf;
 //! # use std::io::Write;

@@ -11,7 +11,7 @@
 //! bridging the gap between raw `WinTun` packets and the `virtio-net` device
 //! backend located in `hitz-devices`.
 //!
-//! # The Hero's Journey
+//! ## Examples
 //!
 //! Establishing a network link involves creating a `NetIoHandle` which manages
 //! the `WinTun` adapter and spawns an I/O loop to shuttle packets between

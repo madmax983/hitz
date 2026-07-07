@@ -46,7 +46,7 @@ impl Trigger for NoopTrigger {
 /// COM port for the guest. It serves as the primary console for early boot messages
 /// and standard I/O interaction with the Linux kernel via PIO (Port I/O).
 ///
-/// # The Hero's Journey
+/// ## Examples
 ///
 /// ```
 /// # use hitz_devices::SerialDevice;

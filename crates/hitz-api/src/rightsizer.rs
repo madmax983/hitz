@@ -5,7 +5,7 @@
 //! current configuration (`VmConfig`) to provide actionable recommendations
 //! for scaling resources up or down, optimizing for both performance and cost.
 //!
-//! # The Hero's Journey
+//! ## Examples
 //!
 //! ```rust
 //! use hitz_api::{RightSizer, ResizeRecommendation, VmConfig, MetricsSnapshot, CpuMetrics, MemoryMetrics, GuestAgentMode};

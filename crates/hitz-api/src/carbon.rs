@@ -5,7 +5,7 @@
 //! utilization of a system (`MetricsSnapshot`) with configurable emission factors
 //! to estimate the real-time CO2 emissions of the VM.
 //!
-//! # The Hero's Journey
+//! ## Examples
 //!
 //! ```rust
 //! use hitz_api::{CarbonEstimator, EmissionFactors, MetricsSnapshot};

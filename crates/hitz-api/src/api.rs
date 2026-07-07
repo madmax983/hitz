@@ -6,7 +6,7 @@
 //! It includes types for creating VMs, controlling their lifecycle, and
 //! interrogating their state.
 //!
-//! # The Hero's Journey
+//! ## Examples
 //!
 //! ```rust
 //! use hitz_api::{CreateVmRequest, VmConfig, GuestAgentMode};
@@ -135,7 +135,7 @@ pub enum VmState {
 /// asking to instantiate a new micro-VM. It wraps the core [`VmConfig`] so the
 /// daemon knows exactly how to build the partition.
 ///
-/// # The Hero's Journey
+/// ## Examples
 /// ```rust
 /// use hitz_api::{CreateVmRequest, VmConfig, GuestAgentMode};
 /// use std::path::PathBuf;
@@ -176,7 +176,7 @@ pub struct CreateVmRequest {
 /// Instead of separate endpoints for starting, stopping, or restarting, a single
 /// `POST /vms/{id}/action` endpoint accepts this payload.
 ///
-/// # The Hero's Journey
+/// ## Examples
 /// ```rust
 /// use hitz_api::{ActionVmRequest, VmAction};
 ///
@@ -201,7 +201,7 @@ pub struct ActionVmRequest {
 /// specified destination ID. This is particularly useful for spawning multiple
 /// identical workers.
 ///
-/// # The Hero's Journey
+/// ## Examples
 /// ```rust
 /// use hitz_api::CloneVmRequest;
 ///
@@ -229,7 +229,7 @@ pub struct CloneVmRequest {
 /// The daemon responds with this payload when querying a specific VM or listing
 /// all VMs.
 ///
-/// # The Hero's Journey
+/// ## Examples
 /// ```rust
 /// use hitz_api::{VmInfo, VmState, VmConfig, GuestAgentMode};
 /// use std::path::PathBuf;
@@ -276,7 +276,7 @@ pub struct VmInfo {
 /// daemon returns this structured error detailing what went wrong. It's the
 /// first line of defense for debugging CLI interactions.
 ///
-/// # The Hero's Journey
+/// ## Examples
 /// ```rust
 /// use hitz_api::ApiError;
 ///

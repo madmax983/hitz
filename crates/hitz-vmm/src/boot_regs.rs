@@ -196,7 +196,7 @@ const fn build_tss_descriptor(base: u64, limit: u64) -> (u64, u64) {
 /// Bootstraps the Global Descriptor Table (GDT) directly into guest memory.
 /// This enables the VM to transition seamlessly into 64-bit long mode.
 ///
-/// # The Hero's Journey
+/// ## Examples
 ///
 /// ```rust
 /// use hitz_vmm::GuestMemory;
@@ -234,7 +234,7 @@ pub fn write_gdt(mem: &GuestMemory) -> Result<(), MemError> {
 /// 32-bit protected mode. It configures the CPU's control registers, EFER, and segment
 /// descriptors to point to the correct GDT/IDT locations.
 ///
-/// # The Hero's Journey
+/// ## Examples
 ///
 /// ```rust
 /// # use hitz_vmm::boot_regs::configure_sregs;
@@ -323,7 +323,7 @@ pub fn configure_sregs(vcpu: &mut impl Vcpu, pml4_gpa: Gpa) -> Result<(), hitz_h
 /// pointer to the kernel's entry point and passes the location of the `boot_params`
 /// structure as required by the Linux boot protocol.
 ///
-/// # The Hero's Journey
+/// ## Examples
 ///
 /// ```rust
 /// # use hitz_vmm::boot_regs::configure_regs;

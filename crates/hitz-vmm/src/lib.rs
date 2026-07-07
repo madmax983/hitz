@@ -10,7 +10,7 @@
 //! setting up page tables via `boot_regs`), and routing device I/O through a shared
 //! memory bus, it ensures a seamless experience when booting micro-VMs.
 //!
-//! # The Hero's Journey
+//! ## Examples
 //!
 //! To start a VM, one typically uses the [`boot_and_run`] function, supplying a configuration
 //! and necessary file paths. Here is a conceptual snippet showing how the VM boot sequence

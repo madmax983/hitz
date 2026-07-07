@@ -16,7 +16,7 @@ use std::io::Write;
 /// cpio archives directly in memory. It is primarily used to construct the
 /// initramfs injected into the guest during the Linux boot sequence.
 ///
-/// # The Hero's Journey
+/// ## Examples
 ///
 /// ```rust
 /// use hitz_boot::CpioBuilder;

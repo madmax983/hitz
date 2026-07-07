@@ -5,7 +5,7 @@
 //! of a system based on its telemetry metrics. It defines what it means to be
 //! healthy, warns when things are getting hot, and screams when the system is on fire.
 //!
-//! # The Hero's Journey
+//! ## Examples
 //! ```rust
 //! use hitz_api::{HealthCheck, HealthStatus};
 //! use hitz_api::{MetricsSnapshot, CpuMetrics, MemoryMetrics};
@@ -37,7 +37,7 @@ use serde::{Deserialize, Serialize};
 /// An enum representing the three states of being for a micro-VM:
 /// perfectly fine, starting to sweat, and actively melting down.
 ///
-/// # The Hero's Journey
+/// ## Examples
 /// ```rust
 /// use hitz_api::HealthStatus;
 ///
@@ -61,7 +61,7 @@ pub enum HealthStatus {
 /// [`HealthStatus`], but if things aren't [`HealthStatus::Healthy`], it provides
 /// human-readable reasons explaining *why*.
 ///
-/// # The Hero's Journey
+/// ## Examples
 /// ```rust
 /// use hitz_api::{SystemHealth, HealthStatus};
 ///
@@ -88,7 +88,7 @@ pub struct SystemHealth {
 /// should implement this trait. It provides a standard interface for
 /// getting a [`SystemHealth`] report.
 ///
-/// # The Hero's Journey
+/// ## Examples
 /// ```rust
 /// use hitz_api::{HealthCheck, SystemHealth, HealthStatus};
 ///

@@ -17,7 +17,7 @@ use crate::types::{MemFlags, PartitionConfig, SpecialRegs, StandardRegs, VcpuExi
 /// This is the key abstraction that decouples `hitz-devices` (virtio stack)
 /// from `hitz-vmm` (memory management), preventing circular dependencies.
 ///
-/// # The Hero's Journey
+/// ## Examples
 ///
 /// ```rust
 /// use hitz_hal::{GuestMemAccess, HalError};
@@ -48,7 +48,7 @@ pub trait GuestMemAccess: Send + Sync {
 /// there is only one instance of this per process. It acts as a factory
 /// for creating [`Partition`] instances.
 ///
-/// # The Hero's Journey
+/// ## Examples
 ///
 /// ```rust
 /// use hitz_hal::{Hypervisor, PartitionConfig, HalError, MemSizeMiB};
@@ -104,7 +104,7 @@ pub trait Hypervisor: Send + Sync {
 /// the physical memory mappings (RAM) and acts as a factory for its
 /// virtual processors ([`Vcpu`]).
 ///
-/// # The Hero's Journey
+/// ## Examples
 ///
 /// ```rust
 /// use hitz_hal::{Partition, VcpuId, HalError, Gpa, MemFlags};
@@ -178,7 +178,7 @@ pub trait Partition: Send + Sync {
 /// enters the guest execution context and blocks until the guest exits
 /// due to an event like I/O, MMIO, or HLT.
 ///
-/// # The Hero's Journey
+/// ## Examples
 ///
 /// ```rust
 /// use hitz_hal::{Vcpu, HalError, VcpuExit};

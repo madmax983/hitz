@@ -4,7 +4,7 @@
 //! This module provides a trait and implementation for converting hitz-api
 //! telemetry (`MetricsSnapshot`) into the Prometheus text-based exposition format.
 //!
-//! # The Hero's Journey
+//! ## Examples
 //!
 //! ```rust
 //! use hitz_api::{MetricsSnapshot, CpuMetrics, MemoryMetrics, ToPrometheus};

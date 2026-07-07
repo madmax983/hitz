@@ -4,7 +4,7 @@
 //! No dependency on `vm-memory` or `virtio-queue` crates. All descriptor,
 //! available, and used ring accesses go through [`GuestMemAccess`].
 //!
-//! # The Hero's Journey
+//! ## Examples
 //! ```
 //! # use hitz_devices::VirtQueue;
 //! // 1. Create a queue of a power of two size.
@@ -35,7 +35,7 @@ const MAX_QUEUE_SIZE: u16 = 256;
 /// pointers to the three vital areas in guest memory: the Descriptor Table, the
 /// Available Ring, and the Used Ring.
 ///
-/// # The Hero's Journey
+/// ## Examples
 ///
 /// Typically, `VirtQueue` instances are created automatically by the `VirtioMmioTransport`
 /// layer as the guest OS initializes them. Your backend device interacts with them
@@ -225,7 +225,7 @@ impl VirtQueue {
 /// Represents a chain of descriptors starting from the head descriptor.
 /// It yields `Descriptor` elements containing the address, length, and access rights.
 ///
-/// # The Hero's Journey
+/// ## Examples
 /// ```
 /// # use hitz_devices::VirtQueue;
 /// // Handled internally by `VirtQueue`.
@@ -249,7 +249,7 @@ pub struct DescriptorChain {
 /// Defines a single buffer's guest physical address, its size in bytes,
 /// and whether it's writable by the device.
 ///
-/// # The Hero's Journey
+/// ## Examples
 /// ```
 /// use hitz_devices::virtio::queue::Descriptor;
 ///

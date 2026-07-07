@@ -6,7 +6,7 @@
 //! It is useful for testing, continuous integration, and validating alerting
 //! thresholds (e.g., via the [`health`](crate::health) module).
 //!
-//! # The Hero's Journey
+//! ## Examples
 //!
 //! ```rust
 //! use hitz_api::simulator::{VmSimulator, WorkloadProfile};

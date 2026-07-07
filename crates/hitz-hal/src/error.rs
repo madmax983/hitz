@@ -7,7 +7,7 @@
 /// The central error type for all HAL operations. Encapsulates platform-specific
 /// failure codes and provides context for cross-platform debugging.
 ///
-/// # The Hero's Journey
+/// ## Examples
 ///
 /// ```rust
 /// use hitz_hal::HalError;

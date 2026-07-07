@@ -12,7 +12,7 @@
 //! `boot_params.hdr.ramdisk_image` during early boot. This module provides
 //! the logic to load that archive into guest RAM securely and handle alignment.
 //!
-//! # The Hero's Journey
+//! ## Examples
 //!
 //! ```rust
 //! use hitz_boot::{load_initramfs, BootError};

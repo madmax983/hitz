@@ -5,7 +5,7 @@
 //! into virtqueue operations and device config accesses. This is the "glue"
 //! between the guest driver and a [`VirtioBackend`].
 //!
-//! # The Hero's Journey
+//! ## Examples
 //! ```
 //! # use hitz_devices::VirtioMmioTransport;
 //! # use hitz_devices::VirtioBackend;

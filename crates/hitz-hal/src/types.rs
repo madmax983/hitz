@@ -8,7 +8,7 @@ use crate::newtypes::{Gpa, MemSizeMiB, VcpuId};
 ///
 /// Defines the fundamental parameters required to bootstrap a new VM.
 ///
-/// # The Hero's Journey
+/// ## Examples
 ///
 /// ```rust
 /// use hitz_hal::{PartitionConfig, MemSizeMiB};
@@ -36,7 +36,7 @@ pub struct PartitionConfig {
 /// Represents the various reasons a virtual CPU might stop execution
 /// and return control to the Virtual Machine Monitor (VMM).
 ///
-/// # The Hero's Journey
+/// ## Examples
 ///
 /// ```rust
 /// use hitz_hal::VcpuExit;
@@ -74,7 +74,7 @@ pub enum VcpuExit {
 /// Provides the necessary context when the guest accesses memory-mapped I/O,
 /// allowing the VMM to emulate the device behavior.
 ///
-/// # The Hero's Journey
+/// ## Examples
 ///
 /// ```rust
 /// use hitz_hal::{MmioExit, Gpa};
@@ -123,7 +123,7 @@ pub struct MmioExit {
 ///
 /// Provides the context when the guest executes an `IN` or `OUT` instruction.
 ///
-/// # The Hero's Journey
+/// ## Examples
 ///
 /// ```rust
 /// use hitz_hal::IoPortExit;
@@ -166,7 +166,7 @@ pub struct IoPortExit {
 /// Represents the standard state of a vCPU that needs to be saved/restored
 /// or modified by the VMM.
 ///
-/// # The Hero's Journey
+/// ## Examples
 ///
 /// ```rust
 /// use hitz_hal::StandardRegs;
@@ -225,7 +225,7 @@ pub struct StandardRegs {
 /// Defines a segment in the x86 architecture. Used for CS, DS, ES, FS, GS,
 /// and SS registers.
 ///
-/// # The Hero's Journey
+/// ## Examples
 ///
 /// ```rust
 /// use hitz_hal::SegmentDescriptor;
@@ -268,7 +268,7 @@ pub struct SegmentDescriptor {
 ///
 /// Represents the Global or Interrupt Descriptor Table register.
 ///
-/// # The Hero's Journey
+/// ## Examples
 ///
 /// ```rust
 /// use hitz_hal::DescriptorTable;
@@ -295,7 +295,7 @@ pub struct DescriptorTable {
 ///
 /// Holds the state of system-level configuration registers for a vCPU.
 ///
-/// # The Hero's Journey
+/// ## Examples
 ///
 /// ```rust
 /// use hitz_hal::SpecialRegs;
@@ -347,7 +347,7 @@ pub struct SpecialRegs {
 ///
 /// Defines access rights (Read, Write, Execute) for a mapped memory region.
 ///
-/// # The Hero's Journey
+/// ## Examples
 ///
 /// ```rust
 /// use hitz_hal::MemFlags;
@@ -399,7 +399,7 @@ impl MemFlags {
 ///
 /// Encapsulates the target vCPU and the vector of the interrupt.
 ///
-/// # The Hero's Journey
+/// ## Examples
 ///
 /// ```rust
 /// use hitz_hal::{InterruptRequest, VcpuId};

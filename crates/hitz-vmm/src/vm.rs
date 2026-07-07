@@ -52,7 +52,7 @@ const MIN_RAM_MIB: u32 = 2;
 /// Provides external dependencies (like vsock channels) to the VM execution
 /// environment.
 ///
-/// # The Hero's Journey
+/// ## Examples
 /// ```rust
 /// # use hitz_vmm::BootExtras;
 /// #
@@ -97,7 +97,7 @@ impl BootExtras {
 /// Represents the various failure modes that can occur when configuring,
 /// booting, or running a micro-VM.
 ///
-/// # The Hero's Journey
+/// ## Examples
 /// ```rust
 /// # use hitz_vmm::VmError;
 /// # use std::io;
@@ -147,7 +147,7 @@ pub enum VmError {
 /// Encapsulates the outcome of the VM's execution lifecycle. When [`boot_and_run`]
 /// completes (either normally or via an error/cancellation), it yields this struct.
 ///
-/// # The Hero's Journey
+/// ## Examples
 /// ```rust
 /// # use hitz_vmm::VmRunResult;
 /// # use hitz_vmm::run_loop::ExitReason;
@@ -176,7 +176,7 @@ pub struct VmRunResult {
 /// exist on the host filesystem. This prevents the VM from attempting a boot sequence
 /// that is doomed to fail due to missing dependencies.
 ///
-/// # The Hero's Journey
+/// ## Examples
 /// ```rust
 /// # use hitz_api::VmConfig;
 /// # use hitz_vmm::validate_config;
@@ -300,7 +300,7 @@ fn cancel_all_vcpus<V: Vcpu>(handles: &[V::CancelHandle]) {
 /// from parsing the kernel and laying out guest memory, to spawning the vCPU thread and
 /// routing MMIO/PIO requests.
 ///
-/// # The Hero's Journey
+/// ## Examples
 /// ```rust
 /// # use hitz_api::VmConfig;
 /// # use hitz_vmm::{boot_and_run, BootExtras};

@@ -6,7 +6,7 @@
 //! (CPU, RAM), boot assets (kernel, initramfs), and host integration settings
 //! (networking, port forwarding, and guest agent injection).
 //!
-//! # The Hero's Journey
+//! ## Examples
 //!
 //! ```rust
 //! use hitz_api::{VmConfig, NetConfig, GuestAgentMode};

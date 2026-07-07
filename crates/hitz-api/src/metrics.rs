@@ -6,7 +6,7 @@
 //! The primary payload is the [`MetricsSnapshot`], which provides an absolute
 //! point-in-time view of CPU, memory, disk, network, and process utilization.
 //!
-//! # The Hero's Journey
+//! ## Examples
 //!
 //! ```rust
 //! use hitz_api::{MetricsSnapshot, CpuMetrics, MemoryMetrics};

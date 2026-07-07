@@ -13,7 +13,7 @@
 //! trait. No external ELF crate is used -- the header structures are defined
 //! inline so the crate compiles cleanly on Windows.
 //!
-//! # The Hero's Journey
+//! ## Examples
 //!
 //! ```rust
 //! use hitz_boot::{load_elf, GuestMemWriter};

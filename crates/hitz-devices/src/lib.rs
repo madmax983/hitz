@@ -14,7 +14,7 @@
 //! Currently supported devices include a 16550A-compatible serial console ([`SerialDevice`]),
 //! a virtio-block storage backend ([`VirtioBlockDevice`]), and a virtio-net network interface ([`VirtioNetDevice`]).
 //!
-//! # The Hero's Journey
+//! ## Examples
 //!
 //! Devices are instantiated during the VM setup phase and registered with the central `MmioBus`.
 //! Here is a simplified illustration of how devices are attached to the bus:

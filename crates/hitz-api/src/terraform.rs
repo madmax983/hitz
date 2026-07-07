@@ -4,7 +4,7 @@
 //! Converts a `VmConfig` into a Terraform HCL resource block, allowing users to
 //! export their running or desired VM configurations into Infrastructure-as-Code.
 //!
-//! # The Hero's Journey
+//! ## Examples
 //! ```rust
 //! use hitz_api::{VmConfig, ToTerraform, GuestAgentMode};
 //! use std::path::PathBuf;
@@ -64,8 +64,8 @@ impl ToTerraform for VmConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
     use crate::GuestAgentMode;
+    use std::path::PathBuf;
 
     #[test]
     fn test_to_terraform_basic() {

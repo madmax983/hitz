@@ -47,7 +47,7 @@ struct MmioSlot {
 /// devices (which implement the [`MmioDevice`] trait) and routes `mmio_read` and
 /// `mmio_write` calls to the correct device based on the address.
 ///
-/// # The Hero's Journey
+/// ## Examples
 ///
 /// ```
 /// # use hitz_devices::{MmioBus, MmioDevice};

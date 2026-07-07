@@ -12,7 +12,7 @@
 //! sequence of [`MemWrite`] chunks that the caller writes into guest
 //! physical memory — `hitz-boot` never touches guest RAM directly.
 //!
-//! # The Hero's Journey
+//! ## Examples
 //!
 //! ```rust
 //! use hitz_boot::build_page_tables;

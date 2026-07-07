@@ -5,7 +5,7 @@
 //! into a discrete identifier (a "fingerprint"). This allows for rapid clustering,
 //! pattern matching, or caching of VMs exhibiting similar resource profiles.
 //!
-//! # The Hero's Journey
+//! ## Examples
 //!
 //! ```rust
 //! use hitz_api::{FingerprintGenerator, MetricsSnapshot, CpuMetrics, MemoryMetrics};

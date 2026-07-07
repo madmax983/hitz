@@ -5,7 +5,7 @@
 //! the relative rate of change (`MetricsDiff`) to categorize the current behavior
 //! of the VM.
 //!
-//! # The Hero's Journey
+//! ## Examples
 //!
 //! ```rust
 //! use hitz_api::{WorkloadClass, WorkloadClassifier, MetricsSnapshot, MetricsDiff};

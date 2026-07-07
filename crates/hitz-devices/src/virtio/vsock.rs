@@ -187,7 +187,7 @@ impl VirtioVsockDevice {
     /// It returns the device itself along with a receiver and sender channel pair
     /// that allows the host runtime to exchange packets with the guest.
     ///
-    /// # The Hero's Journey
+    /// ## Examples
     /// ```rust
     /// use hitz_devices::VirtioVsockDevice;
     ///

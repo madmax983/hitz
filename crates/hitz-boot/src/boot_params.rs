@@ -8,7 +8,7 @@
 //! pointers to the kernel command line and initrd. This module provides
 //! the structures and builders to generate a compliant `boot_params` struct.
 //!
-//! # The Hero's Journey
+//! ## Examples
 //!
 //! ```rust
 //! use hitz_boot::{build_boot_params, set_initramfs_params};

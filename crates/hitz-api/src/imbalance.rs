@@ -5,7 +5,7 @@
 //! of a VM. High imbalance suggests single-threaded bottlenecks in an otherwise
 //! idle multi-core VM.
 //!
-//! # The Hero's Journey
+//! ## Examples
 //!
 //! ```rust
 //! use hitz_api::{CoreImbalanceAnalyzer, ImbalanceResult, MetricsSnapshot, CpuMetrics, MemoryMetrics};

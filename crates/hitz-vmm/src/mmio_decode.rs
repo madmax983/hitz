@@ -46,7 +46,7 @@ pub(crate) struct DecodedMmio {
 /// identifies the source/destination register, the size of the access, and any
 /// immediate values involved.
 ///
-/// # The Hero's Journey
+/// ## Examples
 ///
 /// ```rust
 /// use hitz_vmm::mmio_decode::decode_mmio_instruction;
