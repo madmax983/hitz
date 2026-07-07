@@ -2469,12 +2469,8 @@ async fn handle_vm_dashboard(args: &VmListArgs) -> Result<()> {
                 .constraints([Constraint::Length(3), Constraint::Min(5)].as_ref())
                 .split(f.area());
 
-            let mut header_text =
+            let header_text =
                 " Hitz VM Dashboard | Polling GET /vms | Press 'q' or 'ESC' to exit ".to_string();
-            if let Some(ref e) = err_msg {
-                use std::fmt::Write;
-                let _ = write!(header_text, "| Error: {e}");
-            }
 
             let header = Paragraph::new(header_text).block(
                 Block::default()
@@ -2488,7 +2484,16 @@ async fn handle_vm_dashboard(args: &VmListArgs) -> Result<()> {
             );
             f.render_widget(header, chunks[0]);
 
-            if vms.is_empty() {
+            if let Some(ref e) = err_msg {
+                let err_msg_ui = Paragraph::new(format!("🚫 Connection Failed\n\n{}", e))
+                    .style(Style::default().fg(Color::Red))
+                    .block(
+                        Block::default()
+                            .borders(Borders::ALL)
+                            .title(" Daemon Offline "),
+                    );
+                f.render_widget(err_msg_ui, chunks[1]);
+            } else if vms.is_empty() {
                 let no_vms_msg = Paragraph::new("ℹ️  No VMs running.")
                     .style(Style::default().fg(Color::Blue))
                     .block(
