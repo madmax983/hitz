@@ -56,7 +56,7 @@ where
 {
     // ⚡ Bolt Optimization: Avoid cloning the HTTP method.
     // It's cheaper to borrow it or let it remain bound to the request.
-    let method = req.method().clone();
+    let method = req.method();
     let path = req.uri().path().to_string();
 
     let span = tracing::info_span!(
@@ -67,7 +67,7 @@ where
     );
 
     let result = async {
-        match (&method, path.as_str()) {
+        match (method, path.as_str()) {
             (&Method::GET, "/vms") => handle_list(manager),
             _ if path.starts_with("/vms/") => {
                 let mut segments = path.splitn(4, '/');
@@ -75,7 +75,7 @@ where
                 match segments.nth(2) {
                     Some(id) if !id.is_empty() => {
                         let suffix = segments.next();
-                        route_vm(req, &method, id, suffix, manager).await
+                        route_vm(req, method, id, suffix, manager).await
                     }
                     _ => Ok(error_response(StatusCode::BAD_REQUEST, "missing VM ID")),
                 }
