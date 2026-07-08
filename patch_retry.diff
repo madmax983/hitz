@@ -1,0 +1,26 @@
+--- crates/hitz-daemon/tests/integration.rs
++++ crates/hitz-daemon/tests/integration.rs
+@@ -42,12 +42,22 @@
+     manager.start("test-vm").await.expect("Failed to start VM");
+
+-    // Wait a bit for the VM to boot and network to initialize
+-    tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+-
+-    // Connect to the HOST mapped port, not the guest IP!
+     use std::io::{Read, Write};
+     use std::net::TcpStream;
+
+-    let mut stream = TcpStream::connect("127.0.0.1:19999").expect("Failed to connect to host-mapped port");
++    // Retry loop for connecting to the HOST mapped port
++    let mut stream = None;
++    for _ in 0..20 {
++        if let Ok(s) = TcpStream::connect("127.0.0.1:19999") {
++            stream = Some(s);
++            break;
++        }
++        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
++    }
++
++    let mut stream = stream.expect("Failed to connect to host-mapped port within timeout");
+     stream.set_read_timeout(Some(std::time::Duration::from_secs(2))).unwrap();
+     stream.set_write_timeout(Some(std::time::Duration::from_secs(2))).unwrap();
