@@ -5,16 +5,19 @@
 //! module decodes the subset of `MOV` encodings that Linux uses for
 //! virtio-MMIO register accesses:
 //!
-//! | Opcode   | Meaning                      | Size  |
-//! |----------|------------------------------|-------|
-//! | `89 /r`  | `MOV r/m32, r32`             | 4     |
-//! | `8B /r`  | `MOV r32, r/m32`             | 4     |
-//! | `88 /r`  | `MOV r/m8, r8`               | 1     |
-//! | `8A /r`  | `MOV r8, r/m8`               | 1     |
-//! | `C7 /0`  | `MOV r/m32, imm32`           | 4     |
-//! | `66 + …` | 16-bit operand-size override | 2     |
+//! | Opcode      | Meaning                      | Size  |
+//! |-------------|------------------------------|-------|
+//! | `89 /r`     | `MOV r/m32, r32`             | 4     |
+//! | `8B /r`     | `MOV r32, r/m32`             | 4     |
+//! | `88 /r`     | `MOV r/m8, r8`               | 1     |
+//! | `8A /r`     | `MOV r8, r/m8`               | 1     |
+//! | `C7 /0`     | `MOV r/m32, imm32`           | 4     |
+//! | `66 + …`    | 16-bit operand-size override | 2     |
+//! | `REX.W + …` | 64-bit operand-size override | 8     |
 //!
-//! REX prefixes (`0x40–0x4F`) are handled for `R8–R15` access.
+//! REX prefixes (`0x40–0x4F`) are handled both for `R8–R15` access (REX.R)
+//! and for the 64-bit operand size (REX.W). REX.W takes precedence over the
+//! `0x66` prefix when both are present.
 
 use hitz_hal::StandardRegs;
 
@@ -26,7 +29,7 @@ pub(crate) struct DecodedMmio {
     ///
     /// 0=RAX, 1=RCX, 2=RDX, 3=RBX, 4=RSP, 5=RBP, 6=RSI, 7=RDI, 8–15=R8–R15.
     pub register: u8,
-    /// Access size in bytes: 1, 2, or 4.
+    /// Access size in bytes: 1, 2, 4, or 8 (8 requires a REX.W prefix).
     pub size: u8,
     /// For `MOV r/m32, imm32` instructions (`C7 /0`), the immediate value.
     pub immediate: Option<u32>,
@@ -77,6 +80,9 @@ pub fn decode_mmio_instruction(bytes: &[u8]) -> Option<DecodedMmio> {
     let (has_operand_size_prefix, rex) = parse_prefixes(bytes, &mut pos)?;
 
     let rex_r = (rex >> 2) & 1;
+    // REX.W (bit 3, `rex & 0x08`) promotes the operand to 64-bit and takes
+    // precedence over the 0x66 operand-size prefix.
+    let rex_w = ((rex >> 3) & 1) == 1;
 
     let opcode = *bytes.get(pos)?;
     pos += 1;
@@ -90,15 +96,16 @@ pub fn decode_mmio_instruction(bytes: &[u8]) -> Option<DecodedMmio> {
 
     // -- 5. Opcode-specific decoding --------------------------------------------
     match opcode {
-        // MOV r/m, r (write) or MOV r, r/m (read) — 8/32-bit variants
+        // MOV r/m, r (write) or MOV r, r/m (read) — 8/16/32/64-bit variants
         0x88..=0x8B => Some(decode_mov_r_rm(
             opcode,
             has_operand_size_prefix,
+            rex_w,
             reg_field,
             pos,
         )),
-        // MOV r/m32, imm32
-        0xC7 => decode_mov_rm_imm(bytes, has_operand_size_prefix, modrm, pos),
+        // MOV r/m, imm
+        0xC7 => decode_mov_rm_imm(bytes, has_operand_size_prefix, rex_w, modrm, pos),
         _ => None,
     }
 }
@@ -144,20 +151,33 @@ fn parse_sib_and_disp(bytes: &[u8], modrm: u8, pos: &mut usize) -> Option<()> {
     Some(())
 }
 
-#[allow(clippy::cast_possible_truncation)]
-const fn decode_mov_r_rm(
-    opcode: u8,
-    has_operand_size_prefix: bool,
-    reg_field: u8,
-    pos: usize,
-) -> DecodedMmio {
-    let size = if opcode & 1 == 0 {
-        1 // 0x88, 0x8A = byte
+/// Compute the operand size in bytes following x86-64 precedence.
+///
+/// Order matters: a byte-variant opcode is always 1 byte; otherwise `REX.W`
+/// promotes to 8 bytes and **overrides** the `0x66` operand-size prefix; a
+/// lone `0x66` selects 2 bytes; the default is 4 bytes.
+const fn operand_size(is_byte: bool, rex_w: bool, has_operand_size_prefix: bool) -> u8 {
+    if is_byte {
+        1
+    } else if rex_w {
+        8
     } else if has_operand_size_prefix {
         2
     } else {
         4
-    };
+    }
+}
+
+#[allow(clippy::cast_possible_truncation)]
+const fn decode_mov_r_rm(
+    opcode: u8,
+    has_operand_size_prefix: bool,
+    rex_w: bool,
+    reg_field: u8,
+    pos: usize,
+) -> DecodedMmio {
+    // 0x88 / 0x8A are the byte-variant opcodes (low bit clear).
+    let size = operand_size(opcode & 1 == 0, rex_w, has_operand_size_prefix);
     DecodedMmio {
         register: reg_field,
         size,
@@ -170,6 +190,7 @@ const fn decode_mov_r_rm(
 const fn decode_mov_rm_imm(
     bytes: &[u8],
     has_operand_size_prefix: bool,
+    rex_w: bool,
     modrm: u8,
     mut pos: usize,
 ) -> Option<DecodedMmio> {
@@ -178,8 +199,18 @@ const fn decode_mov_rm_imm(
         return None;
     }
 
-    // Read the 4-byte immediate (or 2-byte with operand size prefix).
-    let imm_size = if has_operand_size_prefix { 2 } else { 4 };
+    // The access width follows the standard operand-size precedence (REX.W
+    // wins over 0x66). 0xC7 is never a byte-variant opcode.
+    let size = operand_size(false, rex_w, has_operand_size_prefix);
+
+    // The encoded immediate itself is at most imm32: a 64-bit store
+    // (`C7` with REX.W) still uses a sign-extended imm32, so only 0x66
+    // *without* REX.W narrows the immediate to 2 bytes.
+    let imm_size = if has_operand_size_prefix && !rex_w {
+        2
+    } else {
+        4
+    };
     if pos + imm_size > bytes.len() {
         return None;
     }
@@ -192,7 +223,7 @@ const fn decode_mov_rm_imm(
 
     Some(DecodedMmio {
         register: 0, // C7 /0 uses an immediate, not a register source
-        size: imm_size as u8,
+        size,
         immediate: Some(imm),
         instruction_len: pos as u8,
     })
@@ -411,6 +442,145 @@ mod tests {
         assert_eq!(decoded.register, 0);
         assert_eq!(decoded.size, 2);
         assert_eq!(decoded.instruction_len, 7);
+    }
+
+    // -- REX.W (64-bit operand) tests -----------------------------------------
+
+    #[test]
+    fn decode_no_rex_is_32bit() {
+        // 89 0D xx xx xx xx = MOV [rip+disp32], ecx (no REX → 4-byte access)
+        let bytes = [0x89, 0x0D, 0x00, 0x00, 0x00, 0x00];
+        let decoded = decode_mmio_instruction(&bytes).expect("should decode");
+        assert_eq!(decoded.size, 4, "no REX.W → 32-bit access");
+    }
+
+    #[test]
+    fn decode_rexw_write_is_64bit() {
+        // 48 89 0D xx xx xx xx = MOV [rip+disp32], rcx (REX.W → 8-byte access)
+        // REX = 0x48 => REX.W = 1
+        // Length: REX(1) + opcode(1) + ModR/M(1) + disp32(4) = 7
+        let bytes = [0x48, 0x89, 0x0D, 0x00, 0x00, 0x00, 0x00];
+        let decoded = decode_mmio_instruction(&bytes).expect("should decode");
+        assert_eq!(decoded.register, 1, "register should be RCX (1)");
+        assert_eq!(decoded.size, 8, "REX.W → 64-bit access");
+        assert_eq!(decoded.immediate, None);
+        assert_eq!(decoded.instruction_len, 7);
+
+        // The decoded 8-byte width must let the write path emit all 64 bits
+        // (before this fix, size==4 silently truncated the high dword).
+        let value: u64 = 0x1122_3344_5566_7788;
+        let size = usize::from(decoded.size);
+        let mut data = [0u8; 8];
+        data[..size].copy_from_slice(&value.to_le_bytes()[..size]);
+        assert_eq!(
+            u64::from_le_bytes(data),
+            value,
+            "8-byte write must preserve the full 64-bit register value"
+        );
+    }
+
+    #[test]
+    fn decode_rexw_read_is_64bit() {
+        // 48 8B 05 xx xx xx xx = MOV rax, [rip+disp32] (REX.W → 8-byte access)
+        // Length: REX(1) + opcode(1) + ModR/M(1) + disp32(4) = 7
+        let bytes = [0x48, 0x8B, 0x05, 0x00, 0x00, 0x00, 0x00];
+        let decoded = decode_mmio_instruction(&bytes).expect("should decode");
+        assert_eq!(decoded.register, 0, "register should be RAX (0)");
+        assert_eq!(decoded.size, 8, "REX.W → 64-bit access");
+        assert_eq!(decoded.instruction_len, 7);
+    }
+
+    #[test]
+    fn decode_rexw_byte_variant_stays_1() {
+        // 48 88 05 xx xx xx xx = MOV [rip+disp32], al
+        // REX.W on a byte-variant opcode (0x88) does not widen the operand.
+        let bytes = [0x48, 0x88, 0x05, 0x00, 0x00, 0x00, 0x00];
+        let decoded = decode_mmio_instruction(&bytes).expect("should decode");
+        assert_eq!(decoded.size, 1, "byte-variant opcode ignores REX.W");
+    }
+
+    #[test]
+    fn decode_rexw_with_rex_r_r8_is_64bit() {
+        // 4C 89 05 xx xx xx xx = MOV [rip+disp32], r8
+        // REX = 0x4C => REX.W = 1, REX.R = 1
+        // reg = (000 | R<<3) = 8 => R8
+        let bytes = [0x4C, 0x89, 0x05, 0x00, 0x00, 0x00, 0x00];
+        let decoded = decode_mmio_instruction(&bytes).expect("should decode");
+        assert_eq!(decoded.register, 8, "register should be R8 (8)");
+        assert_eq!(decoded.size, 8, "REX.W → 64-bit access even with REX.R");
+    }
+
+    #[test]
+    fn decode_rexw_overrides_operand_size_prefix() {
+        // Both 0x66 (→2) and REX.W (→8) are present; REX.W must win.
+        // parse_prefixes accepts the two prefixes in either order, so test both.
+        // 66 48 89 0D xx xx xx xx
+        let prefix_first = [0x66, 0x48, 0x89, 0x0D, 0x00, 0x00, 0x00, 0x00];
+        let decoded = decode_mmio_instruction(&prefix_first).expect("should decode");
+        assert_eq!(
+            decoded.size, 8,
+            "REX.W must override the 0x66 operand-size prefix"
+        );
+        assert_eq!(decoded.instruction_len, 8);
+
+        // 48 66 89 0D xx xx xx xx  (REX byte first)
+        let rex_first = [0x48, 0x66, 0x89, 0x0D, 0x00, 0x00, 0x00, 0x00];
+        let decoded = decode_mmio_instruction(&rex_first).expect("should decode");
+        assert_eq!(
+            decoded.size, 8,
+            "REX.W must override 0x66 regardless of prefix order"
+        );
+    }
+
+    #[test]
+    fn decode_c7_rexw_imm_is_64bit_access_with_imm32() {
+        // 48 C7 05 dd dd dd dd ii ii ii ii = MOV qword ptr [rip+disp32], imm32
+        // REX.W → 8-byte access, but the encoded immediate is still a
+        // (sign-extended) imm32, so imm_size stays 4.
+        // Length: REX(1) + opcode(1) + ModR/M(1) + disp32(4) + imm32(4) = 11
+        let bytes = [
+            0x48, 0xC7, 0x05, 0x10, 0x20, 0x30, 0x40, // REX.W + opcode + ModR/M + disp32
+            0x78, 0x56, 0x34, 0x12, // imm32 = 0x12345678
+        ];
+        let decoded = decode_mmio_instruction(&bytes).expect("should decode");
+        assert_eq!(decoded.register, 0);
+        assert_eq!(decoded.size, 8, "REX.W → 64-bit store");
+        assert_eq!(decoded.immediate, Some(0x1234_5678));
+        assert_eq!(decoded.instruction_len, 11);
+    }
+
+    #[test]
+    fn decode_c7_rexw_overrides_operand_size_prefix() {
+        // 66 48 C7 05 dd dd dd dd ii ii ii ii
+        // 0x66 alone would make this a 16-bit store with a 2-byte immediate;
+        // REX.W overrides it → 8-byte access with a 4-byte immediate.
+        let bytes = [
+            0x66, 0x48, 0xC7, 0x05, 0x10, 0x20, 0x30,
+            0x40, // prefixes + opcode + ModR/M + disp32
+            0x78, 0x56, 0x34, 0x12, // imm32 (must NOT be read as imm16)
+        ];
+        let decoded = decode_mmio_instruction(&bytes).expect("should decode");
+        assert_eq!(decoded.size, 8, "REX.W overrides 0x66 for C7 too");
+        assert_eq!(
+            decoded.immediate,
+            Some(0x1234_5678),
+            "REX.W keeps the immediate at imm32, not imm16"
+        );
+        assert_eq!(decoded.instruction_len, 12);
+    }
+
+    #[test]
+    fn operand_size_precedence() {
+        // Byte opcode always wins.
+        assert_eq!(operand_size(true, true, true), 1);
+        assert_eq!(operand_size(true, false, false), 1);
+        // REX.W beats the 0x66 prefix.
+        assert_eq!(operand_size(false, true, true), 8);
+        assert_eq!(operand_size(false, true, false), 8);
+        // 0x66 alone.
+        assert_eq!(operand_size(false, false, true), 2);
+        // Default.
+        assert_eq!(operand_size(false, false, false), 4);
     }
 
     #[test]
