@@ -40,6 +40,22 @@ use crate::MetricsSnapshot;
 use serde::{Deserialize, Serialize};
 
 /// A discrete identifier for a VM's resource usage profile.
+///
+/// # Abstract
+/// Encapsulates a formatted string representing the quantized buckets for CPU, RAM,
+/// Disk, and Network usage of a VM snapshot.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::VmFingerprint;
+///
+/// let fp = VmFingerprint {
+///     id: "FP-C9-R4-D0-N0".to_string(),
+/// };
+///
+/// assert_eq!(fp.id, "FP-C9-R4-D0-N0");
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct VmFingerprint {
     /// The formatted fingerprint string (e.g., "FP-C9-R4-D0-N0").
