@@ -723,7 +723,7 @@ fn main() -> ExitCode {
     match cli.command {
         Command::Run(args) => run_vm(args).unwrap_or_else(|e| {
             use crossterm::style::Stylize;
-            eprintln!("\r\x1b[2K{}", format!("✗ Error: {e:#}").red().bold());
+            eprintln!("\r\x1b[2K{}", format!("✗ Error: {e}").red().bold());
             ExitCode::FAILURE
         }),
         Command::Daemon(cmd) => {
@@ -735,7 +735,7 @@ fn main() -> ExitCode {
             result.map_or_else(
                 |e| {
                     use crossterm::style::Stylize;
-                    eprintln!("\r\x1b[2K{}", format!("✗ Error: {e:#}").red().bold());
+                    eprintln!("\r\x1b[2K{}", format!("✗ Error: {e}").red().bold());
                     ExitCode::FAILURE
                 },
                 |()| ExitCode::SUCCESS,
@@ -744,7 +744,7 @@ fn main() -> ExitCode {
         Command::Vm(cmd) => run_vm_command(cmd).map_or_else(
             |e| {
                 use crossterm::style::Stylize;
-                eprintln!("\r\x1b[2K{}", format!("✗ Error: {e:#}").red().bold());
+                eprintln!("\r\x1b[2K{}", format!("✗ Error: {e}").red().bold());
                 ExitCode::FAILURE
             },
             |()| ExitCode::SUCCESS,
@@ -1796,7 +1796,12 @@ fn draw_vm_top_ui(
     if let Some(ref err) = last_err {
         let err_p = Paragraph::new(err.as_str())
             .style(Style::default().fg(Color::Red))
-            .block(Block::default().borders(Borders::ALL).title("Error"));
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .padding(ratatui::widgets::Padding::symmetric(1, 1))
+                    .title(" Error "),
+            );
         f.render_widget(err_p, main_chunks[1]);
         return;
     }
@@ -1813,7 +1818,12 @@ fn draw_vm_top_ui(
             snap.cpu.total_pct, snap.cpu.load_avg[0], snap.cpu.load_avg[1], snap.cpu.load_avg[2]
         );
         let cpu_gauge = Gauge::default()
-            .block(Block::default().title("CPU").borders(Borders::ALL))
+            .block(
+                Block::default()
+                    .title(" CPU ")
+                    .borders(Borders::ALL)
+                    .padding(ratatui::widgets::Padding::symmetric(1, 0)),
+            )
             .gauge_style(Style::default().fg(Color::Green))
             .percent((snap.cpu.total_pct as u16).min(100))
             .label(cpu_label);
@@ -1829,7 +1839,12 @@ fn draw_vm_top_ui(
         };
         let mem_label = format!("{used_mb} MB / {total_mb} MB");
         let mem_gauge = Gauge::default()
-            .block(Block::default().title("Memory").borders(Borders::ALL))
+            .block(
+                Block::default()
+                    .title(" Memory ")
+                    .borders(Borders::ALL)
+                    .padding(ratatui::widgets::Padding::symmetric(1, 0)),
+            )
             .gauge_style(Style::default().fg(Color::Yellow))
             .percent(mem_pct.min(100))
             .label(mem_label);
@@ -1917,8 +1932,9 @@ fn draw_vm_top_ui(
         )
         .block(
             Block::default()
-                .title("Top Processes")
-                .borders(Borders::ALL),
+                .title(" Top Processes ")
+                .borders(Borders::ALL)
+                .padding(ratatui::widgets::Padding::symmetric(1, 0)),
         );
         f.render_widget(proc_table, bottom_chunks[1]);
     } else if last_err.is_none() {
@@ -2547,6 +2563,7 @@ async fn handle_vm_dashboard(args: &VmListArgs) -> Result<()> {
                 .block(
                     Block::default()
                         .borders(Borders::ALL)
+                        .padding(ratatui::widgets::Padding::symmetric(1, 0))
                         .title(" Virtual Machines "),
                 );
 
