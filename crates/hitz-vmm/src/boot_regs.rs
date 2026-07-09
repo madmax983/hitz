@@ -246,7 +246,7 @@ pub fn write_gdt(mem: &GuestMemory) -> Result<(), MemError> {
 /// #     fn run(&mut self) -> Result<VcpuExit, hitz_hal::HalError> { Ok(VcpuExit::Halt) }
 /// #     fn get_regs(&self) -> Result<StandardRegs, hitz_hal::HalError> { Ok(StandardRegs::default()) }
 /// #     fn set_regs(&mut self, _regs: &StandardRegs) -> Result<(), hitz_hal::HalError> { Ok(()) }
-/// #     fn get_sregs(&self) -> Result<SpecialRegs, hitz_hal::HalError> { unimplemented!() }
+/// #     fn get_sregs(&self) -> Result<SpecialRegs, hitz_hal::HalError> { Ok(SpecialRegs::default()) }
 /// #     fn set_sregs(&mut self, _sregs: &SpecialRegs) -> Result<(), hitz_hal::HalError> { Ok(()) }
 /// #     fn inject_interrupt(&mut self, _vector: u8) -> Result<(), hitz_hal::HalError> { Ok(()) }
 /// #     fn request_interrupt_window(&mut self) -> Result<(), hitz_hal::HalError> { Ok(()) }
@@ -335,7 +335,7 @@ pub fn configure_sregs(vcpu: &mut impl Vcpu, pml4_gpa: Gpa) -> Result<(), hitz_h
 /// #     fn run(&mut self) -> Result<VcpuExit, hitz_hal::HalError> { Ok(VcpuExit::Halt) }
 /// #     fn get_regs(&self) -> Result<StandardRegs, hitz_hal::HalError> { Ok(StandardRegs::default()) }
 /// #     fn set_regs(&mut self, _regs: &StandardRegs) -> Result<(), hitz_hal::HalError> { Ok(()) }
-/// #     fn get_sregs(&self) -> Result<SpecialRegs, hitz_hal::HalError> { unimplemented!() }
+/// #     fn get_sregs(&self) -> Result<SpecialRegs, hitz_hal::HalError> { Ok(SpecialRegs::default()) }
 /// #     fn set_sregs(&mut self, _sregs: &SpecialRegs) -> Result<(), hitz_hal::HalError> { Ok(()) }
 /// #     fn inject_interrupt(&mut self, _vector: u8) -> Result<(), hitz_hal::HalError> { Ok(()) }
 /// #     fn request_interrupt_window(&mut self) -> Result<(), hitz_hal::HalError> { Ok(()) }

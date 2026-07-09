@@ -258,6 +258,15 @@ mod tests {
     }
 
     #[test]
+    fn test_cpu_pct_zero_total_delta() {
+        let prev = CpuSample { user: 100, nice: 0, system: 50, idle: 1000, iowait: 0, irq: 0, softirq: 0 };
+        let curr = CpuSample { user: 100, nice: 0, system: 50, idle: 1000, iowait: 0, irq: 0, softirq: 0 };
+        // delta is 0
+        let pct = cpu_pct(&prev, &curr);
+        assert!((pct - 0.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
     fn cpu_utilisation_from_two_samples() {
         // a: active=1200, total=10000
         // b: active=1450, total=11000  →  delta_active=250, delta_total=1000 → 25%

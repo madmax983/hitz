@@ -365,6 +365,12 @@ mod tests {
     }
 
     #[test]
+    fn vmid_default() {
+        let id = VmId::default();
+        assert!(!id.as_uuid().is_nil());
+    }
+
+    #[test]
     fn vm_id_uniqueness() {
         let a = VmId::new();
         let b = VmId::new();

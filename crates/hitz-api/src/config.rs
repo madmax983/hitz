@@ -306,3 +306,24 @@ mod tests {
         assert_eq!(GuestAgentMode::default(), GuestAgentMode::Auto);
     }
 }
+
+#[cfg(test)]
+mod additional_tests {
+    use super::*;
+
+    #[test]
+    fn test_guestagentmode_debug_clone_eq() {
+        let mode1 = GuestAgentMode::Auto;
+        let mode2 = mode1.clone();
+        assert_eq!(mode1, mode2);
+        assert_eq!(format!("{mode1:?}"), "Auto");
+
+        let custom1 = GuestAgentMode::Custom(PathBuf::from("/bin"));
+        let custom2 = custom1.clone();
+        assert_eq!(custom1, custom2);
+
+        let dis1 = GuestAgentMode::Disabled;
+        let dis2 = GuestAgentMode::Disabled;
+        assert_eq!(dis1, dis2);
+    }
+}

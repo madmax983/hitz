@@ -77,12 +77,13 @@ fn record_exit(counter: &Counter<u64>, reason: &'static str) {
 ///     fn run(&mut self) -> Result<VcpuExit, hitz_hal::HalError> { Ok(VcpuExit::Halt) }
 ///     fn get_regs(&self) -> Result<StandardRegs, hitz_hal::HalError> { Ok(StandardRegs::default()) }
 ///     fn set_regs(&mut self, _regs: &StandardRegs) -> Result<(), hitz_hal::HalError> { Ok(()) }
-///     fn get_sregs(&self) -> Result<SpecialRegs, hitz_hal::HalError> { unimplemented!() }
+///     fn get_sregs(&self) -> Result<SpecialRegs, hitz_hal::HalError> { Ok(SpecialRegs::default()) }
 ///     fn set_sregs(&mut self, _sregs: &SpecialRegs) -> Result<(), hitz_hal::HalError> { Ok(()) }
 ///     fn inject_interrupt(&mut self, _vector: u8) -> Result<(), hitz_hal::HalError> { Ok(()) }
 ///     fn request_interrupt_window(&mut self) -> Result<(), hitz_hal::HalError> { Ok(()) }
-///     fn cancel_handle(&self) -> hitz_hal::VcpuCancelHandle { unimplemented!() }
-///     fn cancel_via(_handle: &hitz_hal::VcpuCancelHandle) -> Result<(), hitz_hal::HalError> { Ok(()) }
+///     type CancelHandle = ();
+///     fn cancel_handle(&self) -> Self::CancelHandle {}
+///     fn cancel_via(_handle: &Self::CancelHandle) -> Result<(), hitz_hal::HalError> { Ok(()) }
 /// }
 ///
 /// struct DummyMem;
@@ -590,7 +591,7 @@ mod tests {
                 VcpuExit::Unknown(c) => Ok(VcpuExit::Unknown(*c)),
                 VcpuExit::Shutdown => Ok(VcpuExit::Shutdown),
                 VcpuExit::InterruptWindow => Ok(VcpuExit::InterruptWindow),
-                _ => unimplemented!(),
+                _ => Ok(VcpuExit::Halt), // Default fallback for tests
             };
             if let VcpuExit::InterruptWindow = self.exit {
                 self.exit = VcpuExit::Halt;
