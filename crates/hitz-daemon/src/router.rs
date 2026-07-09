@@ -126,8 +126,7 @@ async fn handle_create<H>(
 where
     H: Hypervisor + Send + Sync + 'static,
 {
-    let body = req
-        .into_body()
+    let body = http_body_util::Limited::new(req.into_body(), 1024 * 1024)
         .collect()
         .await
         .map_err(|e| DaemonError::Internal(format!("failed to read request body: {e}")))?;
@@ -181,8 +180,7 @@ async fn handle_action<H>(
 where
     H: Hypervisor + Send + Sync + 'static,
 {
-    let body = req
-        .into_body()
+    let body = http_body_util::Limited::new(req.into_body(), 1024 * 1024)
         .collect()
         .await
         .map_err(|e| DaemonError::Internal(format!("failed to read request body: {e}")))?;
@@ -205,8 +203,7 @@ async fn handle_clone<H>(
 where
     H: Hypervisor + Send + Sync + 'static,
 {
-    let body = req
-        .into_body()
+    let body = http_body_util::Limited::new(req.into_body(), 1024 * 1024)
         .collect()
         .await
         .map_err(|e| DaemonError::Internal(format!("failed to read request body: {e}")))?;
@@ -314,9 +311,24 @@ mod tests {
 
     async fn extract_body_string(body: BoxBody<Bytes, Infallible>) -> String {
         use http_body_util::BodyExt;
-        let collected = body.collect().await.expect("collect body");
+        let collected = http_body_util::Limited::new(body, 1024 * 1024)
+            .collect()
+            .await
+            .expect("collect body");
         let bytes = collected.to_bytes();
         String::from_utf8(bytes.to_vec()).expect("valid utf8")
+    }
+
+    #[tokio::test]
+    async fn should_reject_payload_over_limit_in_extract() {
+        use http_body_util::{BodyExt, Full};
+        let large_body = Full::new(Bytes::from(vec![b'A'; 1024 * 1024 + 1])).boxed();
+
+        let res = http_body_util::Limited::new(large_body, 1024 * 1024)
+            .collect()
+            .await;
+
+        assert!(res.is_err(), "Expected error for body over limit");
     }
 
     #[tokio::test]
