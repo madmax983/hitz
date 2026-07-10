@@ -493,3 +493,9 @@ pub use rightsizer::{ResizeRecommendation, RightSizer};
 mod terraform;
 #[cfg(feature = "terraform")]
 pub use terraform::ToTerraform;
+
+#[cfg(feature = "zombie")]
+/// Zombie VM detection module.
+mod zombie;
+#[cfg(feature = "zombie")]
+pub use zombie::{ZombieDetector, ZombieScore};
