@@ -65,10 +65,12 @@
 
 pub(crate) mod mmio_bus;
 pub(crate) mod serial;
-pub mod virtio;
+mod virtio;
 
 pub use mmio_bus::{MmioBus, MmioDevice};
 pub use serial::SerialDevice;
+pub use virtio::Descriptor;
+pub use virtio::DescriptorChain;
 pub use virtio::VirtQueue;
 pub use virtio::VirtioBackend;
 pub use virtio::VirtioBlockDevice;
