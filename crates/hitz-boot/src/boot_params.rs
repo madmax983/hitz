@@ -481,4 +481,15 @@ mod tests {
             "acpi_rsdp_addr must be at offset 0x070"
         );
     }
+
+    #[test]
+    fn test_boot_params_as_bytes_returns_correct_length_and_data() {
+        let mut bp = BootParams::default();
+        bp.hdr.setup_sects = 42;
+        let bytes = bp.as_bytes();
+        assert_eq!(bytes.len(), 4096);
+        // setup_sects is at offset 0x1F1 in standard boot protocol.
+        // We can just verify the field matches.
+        assert_eq!(bytes[0x1F1], 42);
+    }
 }
