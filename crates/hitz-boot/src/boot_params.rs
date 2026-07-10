@@ -226,6 +226,22 @@ impl core::fmt::Debug for BootParams {
 ///
 /// Returns [`BootError::InvalidBootParams`] if `ram_bytes` is too small to
 /// hold even the kernel load region (below 2 MiB).
+/// Builds the Linux zero-page (boot parameters).
+///
+/// # Abstract
+/// Constructs the traditional `boot_params` structure required by the
+/// Linux kernel for booting. It populates the E820 memory map and sets
+/// the command line pointer.
+///
+/// # The Hero's Journey
+/// ```rust
+/// use hitz_boot::build_boot_params;
+/// use hitz_hal::Gpa;
+///
+/// let cmdline_addr = Gpa::new(0x20000);
+/// let params = build_boot_params(1024 * 1024 * 1024, cmdline_addr).unwrap();
+/// assert_eq!(params.hdr.cmd_line_ptr.to_ne_bytes(), 0x20000u32.to_ne_bytes());
+/// ```
 #[allow(clippy::cast_possible_truncation)] // cmd_line_ptr is always < 4 GiB
 pub fn build_boot_params(ram_bytes: u64, cmdline_gpa: Gpa) -> Result<BootParams, BootError> {
     if ram_bytes < 0x20_0000 {
@@ -289,6 +305,22 @@ pub fn build_boot_params(ram_bytes: u64, cmdline_gpa: Gpa) -> Result<BootParams,
 ///
 /// Returns `BootError::InvalidBootParams` if GPA or size exceeds `u32::MAX`
 /// (Linux boot protocol limitation).
+/// Sets the initramfs address and size in the boot parameters.
+///
+/// # Abstract
+/// Modifies an existing `BootParams` structure to inform the kernel
+/// about the location and size of an injected initramfs image.
+///
+/// # The Hero's Journey
+/// ```rust
+/// use hitz_boot::{build_boot_params, set_initramfs_params};
+/// use hitz_hal::Gpa;
+///
+/// let mut params = build_boot_params(1024 * 1024 * 1024, Gpa::new(0x20000)).unwrap();
+/// set_initramfs_params(&mut params, Gpa::new(0x8000000), 4096).unwrap();
+/// assert_eq!(params.hdr.ramdisk_image.to_ne_bytes(), 0x8000000u32.to_ne_bytes());
+/// assert_eq!(params.hdr.ramdisk_size.to_ne_bytes(), 4096u32.to_ne_bytes());
+/// ```
 #[allow(clippy::cast_possible_truncation)]
 pub fn set_initramfs_params(bp: &mut BootParams, gpa: Gpa, size: u64) -> Result<(), BootError> {
     let gpa_val = gpa.as_u64();

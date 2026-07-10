@@ -32,7 +32,20 @@ impl CpuSample {
     }
 }
 
-/// Calculate CPU utilisation % between two samples.
+/// Calculates the CPU utilization percentage between two samples.
+///
+/// # Abstract
+/// Given a previous and a current CPU sample, this function computes
+/// the percentage of time the CPU spent doing work versus being idle.
+///
+/// # The Hero's Journey
+/// ```rust,ignore
+/// let prev = get_cpu_sample();
+/// sleep(1000);
+/// let curr = get_cpu_sample();
+/// let pct = cpu_pct(&prev, &curr);
+/// println!("CPU usage: {}%", pct);
+/// ```
 #[must_use]
 pub fn cpu_pct(prev: &CpuSample, curr: &CpuSample) -> f32 {
     let total_delta = curr.total().saturating_sub(prev.total());
@@ -46,7 +59,18 @@ pub fn cpu_pct(prev: &CpuSample, curr: &CpuSample) -> f32 {
     }
 }
 
-/// Parse `/proc/stat` into per-CPU samples (index 0 = aggregate "cpu" line).
+/// Parses `/proc/stat` to extract CPU usage metrics.
+///
+/// # Abstract
+/// Reads the Linux stat file format and extracts the raw tick counts
+/// for the overall system and each individual CPU core.
+///
+/// # The Hero's Journey
+/// ```rust,ignore
+/// let content = std::fs::read_to_string("/proc/stat").unwrap();
+/// let samples = parse_proc_stat_sample(&content);
+/// println!("Found {} CPU cores", samples.len() - 1);
+/// ```
 #[must_use]
 pub fn parse_proc_stat_sample(content: &str) -> Vec<CpuSample> {
     content
@@ -70,9 +94,21 @@ pub fn parse_proc_stat_sample(content: &str) -> Vec<CpuSample> {
         .collect()
 }
 
-/// Parse `/proc/meminfo` into [`MemoryMetrics`].
+/// Parses `/proc/meminfo` to extract detailed memory usage metrics.
 ///
 /// Returns `None` if `MemTotal` is missing.
+///
+/// # Abstract
+/// Reads the Linux meminfo file format and extracts key metrics like
+/// total RAM, free RAM, buffers, cache, and swap usage.
+///
+/// # The Hero's Journey
+/// ```rust,ignore
+/// let content = std::fs::read_to_string("/proc/meminfo").unwrap();
+/// if let Some(mem) = parse_proc_meminfo(&content) {
+///     println!("Total memory: {} bytes", mem.total_bytes);
+/// }
+/// ```
 #[must_use]
 pub fn parse_proc_meminfo(content: &str) -> Option<MemoryMetrics> {
     let mut total = 0u64;
@@ -118,9 +154,22 @@ pub fn parse_proc_meminfo(content: &str) -> Option<MemoryMetrics> {
     })
 }
 
-/// Parse `/proc/diskstats` into a list of [`DiskMetrics`].
+/// Parses `/proc/diskstats` to extract I/O metrics for block devices.
 ///
 /// Only includes devices with entries present in the file.
+///
+/// # Abstract
+/// Reads the Linux diskstats file format and extracts read/write
+/// counts and byte volumes for each physical or virtual block device.
+///
+/// # The Hero's Journey
+/// ```rust,ignore
+/// let content = std::fs::read_to_string("/proc/diskstats").unwrap();
+/// let disks = parse_proc_diskstats(&content);
+/// for disk in disks {
+///     println!("Disk {}: {} bytes read", disk.name, disk.read_bytes);
+/// }
+/// ```
 #[must_use]
 pub fn parse_proc_diskstats(content: &str) -> Vec<DiskMetrics> {
     content
@@ -146,9 +195,22 @@ pub fn parse_proc_diskstats(content: &str) -> Vec<DiskMetrics> {
         .collect()
 }
 
-/// Parse `/proc/net/dev` into a list of [`NetMetrics`].
+/// Parses `/proc/net/dev` to extract network interface metrics.
 ///
 /// Skips the two header lines and the loopback interface.
+///
+/// # Abstract
+/// Reads the Linux network device statistics file and extracts packet
+/// and byte counts for rx/tx on each network interface.
+///
+/// # The Hero's Journey
+/// ```rust,ignore
+/// let content = std::fs::read_to_string("/proc/net/dev").unwrap();
+/// let nets = parse_proc_net_dev(&content);
+/// for net in nets {
+///     println!("Interface {}: {} bytes received", net.interface, net.rx_bytes);
+/// }
+/// ```
 #[must_use]
 pub fn parse_proc_net_dev(content: &str) -> Vec<NetMetrics> {
     content

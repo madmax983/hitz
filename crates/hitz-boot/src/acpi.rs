@@ -104,6 +104,19 @@ fn acpi_checksum(data: &[u8]) -> u8 {
 /// assert_eq!(&rsdp[0..8], b"RSD PTR ");
 /// assert_eq!(rsdp[15], 2); // ACPI 2.0+
 /// ```
+/// Builds the ACPI Root System Description Pointer (RSDP).
+///
+/// # Abstract
+/// Constructs the RSDP structure which is the entry point for the OS
+/// to discover ACPI tables. It points to the XSDT.
+///
+/// # The Hero's Journey
+/// ```rust
+/// use hitz_boot::build_rsdp;
+///
+/// let rsdp = build_rsdp();
+/// assert_eq!(&rsdp[0..8], b"RSD PTR ");
+/// ```
 #[must_use]
 pub fn build_rsdp() -> [u8; 36] {
     let mut rsdp = [0u8; 36];
@@ -264,6 +277,19 @@ impl MadtLapicEntry {
 /// # Errors
 ///
 /// Returns [`BootError::InvalidBootParams`] if `cpu_count` is 0 or exceeds 255.
+/// Builds the ACPI Multiple APIC Description Table (MADT).
+///
+/// # Abstract
+/// Constructs the MADT which tells the guest OS about the available
+/// processors (vCPUs) and the interrupt controller (APIC) configuration.
+///
+/// # The Hero's Journey
+/// ```rust
+/// use hitz_boot::build_madt;
+///
+/// let madt = build_madt(4).unwrap();
+/// assert_eq!(&madt[0..4], b"APIC");
+/// ```
 #[allow(clippy::cast_possible_truncation)]
 pub fn build_madt(cpu_count: u32) -> Result<Vec<u8>, BootError> {
     if cpu_count == 0 {
