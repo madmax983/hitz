@@ -493,3 +493,8 @@ pub use rightsizer::{ResizeRecommendation, RightSizer};
 mod terraform;
 #[cfg(feature = "terraform")]
 pub use terraform::ToTerraform;
+#[cfg(feature = "scheduler")]
+/// Fleet scheduler logic.
+pub mod scheduler;
+#[cfg(feature = "scheduler")]
+pub use scheduler::*;
