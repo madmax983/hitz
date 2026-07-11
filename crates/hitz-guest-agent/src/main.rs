@@ -164,8 +164,14 @@ fn read_uptime_secs() -> f64 {
 fn parse_proc_pid_stat(pid: u32, content: &str) -> Option<hitz_api::ProcMetrics> {
     let open = content.find('(')?;
     let close = content.rfind(')')?;
-    let name = content.get(open + 1..close)?.to_string();
-    let remaining = content.get(close + 2..)?;
+
+    let start = open.saturating_add(1);
+    if start > close {
+        return None;
+    }
+
+    let name = content.get(start..close)?.to_string();
+    let remaining = content.get(close.saturating_add(2)..)?;
     let mut iter = remaining.split_ascii_whitespace();
 
     // According to proc(5) for /proc/[pid]/stat:
@@ -293,6 +299,23 @@ mod tests {
         assert_eq!(parse_load_avg(""), [0.0, 0.0, 0.0]);
         assert_eq!(parse_load_avg("invalid"), [0.0, 0.0, 0.0]);
         assert_eq!(parse_load_avg("1.23 invalid 7.89"), [1.23, 0.0, 7.89]);
+    }
+
+    #[test]
+    fn test_parse_proc_pid_stat_edge_cases() {
+        let cases = vec![
+            "1 (a",
+            "1 a)",
+            "1 ()",
+            "1 (a)",
+            "1 (a)S 1 1 1 1 1 1 1 1 1 1 100 200 1 1 1 1 1 1 1 1 50",
+            "1 (a) S 1 1 1 1 1 1 1 1 1 1 100 200 1 1 1 1 1 1 1 1 50",
+            "1 (a) b) S 1 1 1 1 1 1 1 1 1 1 100 200 1 1 1 1 1 1 1 1 50",
+        ];
+
+        for case in cases {
+            let _ = parse_proc_pid_stat(1, case);
+        }
     }
 
     #[test]
