@@ -493,3 +493,8 @@ pub use rightsizer::{ResizeRecommendation, RightSizer};
 mod terraform;
 #[cfg(feature = "terraform")]
 pub use terraform::ToTerraform;
+#[cfg(feature = "cost")]
+/// Financial operations and cost analysis.
+mod cost;
+#[cfg(feature = "cost")]
+pub use cost::{CostAnalyzer, CostEstimate, CostRates};
