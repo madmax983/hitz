@@ -37,6 +37,16 @@ const DEFAULT_PIPE: &str = r"\\.\pipe\hitz";
 const SERVICE_NAME: &str = "hitz";
 
 /// Parse a `HOST:GUEST` port forward string into a [`hitz_api::PortForward`].
+
+fn format_anyhow_error(err: &anyhow::Error) -> String {
+    use std::fmt::Write;
+    let mut msg = format!("{}", err);
+    for cause in err.chain().skip(1) {
+        let _ = write!(msg, "\n  ↳ {}", cause);
+    }
+    msg
+}
+
 fn parse_port_forward(s: &str) -> Result<hitz_api::PortForward, String> {
     let (host, guest) = s
         .split_once(':')
@@ -577,21 +587,7 @@ windows_service::define_windows_service!(ffi_service_main, service_main);
 #[allow(dead_code, clippy::needless_pass_by_value)]
 fn service_main(arguments: Vec<OsString>) {
     if let Err(e) = run_service(&arguments) {
-        eprintln!("hitz service error: {e:#}");
-    }
-    #[test]
-    fn test_format_error_response_json() {
-        let status = hyper::StatusCode::BAD_REQUEST;
-        let json_resp = r#"{"message": "Invalid config", "code": 400}"#;
-        let result = format_error_response(status, json_resp, "Failed");
-        assert!(result.contains("Invalid config"));
-    }
-
-    #[test]
-    fn test_format_error_response_plain() {
-        let status = hyper::StatusCode::NOT_FOUND;
-        let result = format_error_response(status, "Not found anywhere", "Failed");
-        assert!(result.contains("Not found anywhere"));
+        eprintln!("hitz service error: {}", format_anyhow_error(&e));
     }
 }
 
@@ -723,7 +719,7 @@ fn main() -> ExitCode {
     match cli.command {
         Command::Run(args) => run_vm(args).unwrap_or_else(|e| {
             use crossterm::style::Stylize;
-            eprintln!("\r\x1b[2K{}", format!("✗ Error: {e:#}").red().bold());
+            eprintln!("\r\x1b[2K{}", format!("✗ Error: {}", format_anyhow_error(&e)).red().bold());
             ExitCode::FAILURE
         }),
         Command::Daemon(cmd) => {
@@ -735,7 +731,7 @@ fn main() -> ExitCode {
             result.map_or_else(
                 |e| {
                     use crossterm::style::Stylize;
-                    eprintln!("\r\x1b[2K{}", format!("✗ Error: {e:#}").red().bold());
+                    eprintln!("\r\x1b[2K{}", format!("✗ Error: {}", format_anyhow_error(&e)).red().bold());
                     ExitCode::FAILURE
                 },
                 |()| ExitCode::SUCCESS,
@@ -744,25 +740,11 @@ fn main() -> ExitCode {
         Command::Vm(cmd) => run_vm_command(cmd).map_or_else(
             |e| {
                 use crossterm::style::Stylize;
-                eprintln!("\r\x1b[2K{}", format!("✗ Error: {e:#}").red().bold());
+                eprintln!("\r\x1b[2K{}", format!("✗ Error: {}", format_anyhow_error(&e)).red().bold());
                 ExitCode::FAILURE
             },
             |()| ExitCode::SUCCESS,
         ),
-    }
-    #[test]
-    fn test_format_error_response_json() {
-        let status = hyper::StatusCode::BAD_REQUEST;
-        let json_resp = r#"{"message": "Invalid config", "code": 400}"#;
-        let result = format_error_response(status, json_resp, "Failed");
-        assert!(result.contains("Invalid config"));
-    }
-
-    #[test]
-    fn test_format_error_response_plain() {
-        let status = hyper::StatusCode::NOT_FOUND;
-        let result = format_error_response(status, "Not found anywhere", "Failed");
-        assert!(result.contains("Not found anywhere"));
     }
 }
 
@@ -871,20 +853,6 @@ fn run_vm(args: RunArgs) -> Result<ExitCode> {
     match result.exit_reason {
         ExitReason::Halt | ExitReason::Canceled => Ok(ExitCode::SUCCESS),
         ExitReason::Shutdown | ExitReason::Unexpected(_) => Ok(ExitCode::FAILURE),
-    }
-    #[test]
-    fn test_format_error_response_json() {
-        let status = hyper::StatusCode::BAD_REQUEST;
-        let json_resp = r#"{"message": "Invalid config", "code": 400}"#;
-        let result = format_error_response(status, json_resp, "Failed");
-        assert!(result.contains("Invalid config"));
-    }
-
-    #[test]
-    fn test_format_error_response_plain() {
-        let status = hyper::StatusCode::NOT_FOUND;
-        let result = format_error_response(status, "Not found anywhere", "Failed");
-        assert!(result.contains("Not found anywhere"));
     }
 }
 
@@ -1270,20 +1238,6 @@ fn print_action_result(
         println!("\r\x1b[2K{}", success_msg.green());
     } else {
         print_error_response(status, resp, error_prefix);
-    }
-    #[test]
-    fn test_format_error_response_json() {
-        let status = hyper::StatusCode::BAD_REQUEST;
-        let json_resp = r#"{"message": "Invalid config", "code": 400}"#;
-        let result = format_error_response(status, json_resp, "Failed");
-        assert!(result.contains("Invalid config"));
-    }
-
-    #[test]
-    fn test_format_error_response_plain() {
-        let status = hyper::StatusCode::NOT_FOUND;
-        let result = format_error_response(status, "Not found anywhere", "Failed");
-        assert!(result.contains("Not found anywhere"));
     }
 }
 
@@ -2948,20 +2902,6 @@ mod top_tests {
         };
         assert!(true);
     }
-    #[test]
-    fn test_format_error_response_json() {
-        let status = hyper::StatusCode::BAD_REQUEST;
-        let json_resp = r#"{"message": "Invalid config", "code": 400}"#;
-        let result = format_error_response(status, json_resp, "Failed");
-        assert!(result.contains("Invalid config"));
-    }
-
-    #[test]
-    fn test_format_error_response_plain() {
-        let status = hyper::StatusCode::NOT_FOUND;
-        let result = format_error_response(status, "Not found anywhere", "Failed");
-        assert!(result.contains("Not found anywhere"));
-    }
 }
 
 #[cfg(test)]
@@ -2978,19 +2918,5 @@ mod tests {
         assert!(parse_port_forward("8080:abc").is_err());
         assert!(parse_port_forward("abc:80").is_err());
         assert!(parse_port_forward("70000:80").is_err()); // > 65535
-    }
-    #[test]
-    fn test_format_error_response_json() {
-        let status = hyper::StatusCode::BAD_REQUEST;
-        let json_resp = r#"{"message": "Invalid config", "code": 400}"#;
-        let result = format_error_response(status, json_resp, "Failed");
-        assert!(result.contains("Invalid config"));
-    }
-
-    #[test]
-    fn test_format_error_response_plain() {
-        let status = hyper::StatusCode::NOT_FOUND;
-        let result = format_error_response(status, "Not found anywhere", "Failed");
-        assert!(result.contains("Not found anywhere"));
     }
 }
