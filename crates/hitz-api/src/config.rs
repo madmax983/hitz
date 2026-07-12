@@ -305,4 +305,14 @@ mod tests {
     fn test_guest_agent_mode_default() {
         assert_eq!(GuestAgentMode::default(), GuestAgentMode::Auto);
     }
+
+    #[test]
+    fn test_guest_agent_mode_custom_equality() {
+        let mode1 = GuestAgentMode::Custom(std::path::PathBuf::from("/path1"));
+        let mode2 = GuestAgentMode::Custom(std::path::PathBuf::from("/path1"));
+        let mode3 = GuestAgentMode::Custom(std::path::PathBuf::from("/path2"));
+
+        assert_eq!(mode1, mode2);
+        assert_ne!(mode1, mode3);
+    }
 }
