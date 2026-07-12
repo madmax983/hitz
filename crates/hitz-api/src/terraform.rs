@@ -38,7 +38,10 @@ pub trait ToTerraform {
 
 impl ToTerraform for VmConfig {
     fn to_terraform(&self, resource_name: &str) -> String {
-        let mut hcl = format!("resource \"hitz_vm\" \"{resource_name}\" {{\n");
+        // ⚡ Bolt Optimization: Eliminated `format!` heap reallocation by pre-allocating the String
+        // capacity to a reasonable size and using `writeln!` instead.
+        let mut hcl = String::with_capacity(512);
+        let _ = writeln!(hcl, "resource \"hitz_vm\" \"{resource_name}\" {{");
         let _ = writeln!(hcl, "  kernel_path = \"{}\"", self.kernel_path.display());
 
         if let Some(initramfs) = &self.initramfs_path {
