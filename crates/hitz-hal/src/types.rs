@@ -419,3 +419,104 @@ pub struct InterruptRequest {
     /// Interrupt vector number.
     pub vector: u8,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_standard_regs() {
+        let regs = StandardRegs::default();
+        assert_eq!(regs.rip, 0);
+        assert_eq!(regs.rflags, 0);
+        assert_eq!(regs.rax, 0);
+        assert_eq!(regs.rbx, 0);
+        assert_eq!(regs.rcx, 0);
+        assert_eq!(regs.rdx, 0);
+        assert_eq!(regs.rsi, 0);
+        assert_eq!(regs.rdi, 0);
+        assert_eq!(regs.rsp, 0);
+        assert_eq!(regs.rbp, 0);
+        assert_eq!(regs.r8, 0);
+        assert_eq!(regs.r9, 0);
+        assert_eq!(regs.r10, 0);
+        assert_eq!(regs.r11, 0);
+        assert_eq!(regs.r12, 0);
+        assert_eq!(regs.r13, 0);
+        assert_eq!(regs.r14, 0);
+        assert_eq!(regs.r15, 0);
+    }
+
+    #[test]
+    fn default_segment_descriptor() {
+        let seg = SegmentDescriptor::default();
+        assert_eq!(seg.base, 0);
+        assert_eq!(seg.limit, 0);
+        assert_eq!(seg.selector, 0);
+        assert_eq!(seg.type_, 0);
+        assert_eq!(seg.present, 0);
+        assert_eq!(seg.dpl, 0);
+        assert_eq!(seg.db, 0);
+        assert_eq!(seg.granularity, 0);
+        assert_eq!(seg.long_mode, 0);
+        assert_eq!(seg.s, 0);
+    }
+
+    #[test]
+    fn default_descriptor_table() {
+        let desc = DescriptorTable::default();
+        assert_eq!(desc.base, 0);
+        assert_eq!(desc.limit, 0);
+    }
+
+    #[test]
+    fn default_special_regs() {
+        let sregs = SpecialRegs::default();
+        assert_eq!(sregs.cr0, 0);
+        assert_eq!(sregs.cr3, 0);
+        assert_eq!(sregs.cr4, 0);
+        assert_eq!(sregs.efer, 0);
+        assert_eq!(sregs.cs.base, 0);
+        assert_eq!(sregs.gdt.limit, 0);
+        assert_eq!(sregs.idt.base, 0);
+        assert_eq!(sregs.ds.base, 0);
+        assert_eq!(sregs.es.base, 0);
+        assert_eq!(sregs.fs.base, 0);
+        assert_eq!(sregs.gs.base, 0);
+        assert_eq!(sregs.ss.base, 0);
+        assert_eq!(sregs.tr.base, 0);
+        assert_eq!(sregs.ldt.base, 0);
+    }
+
+    #[test]
+    fn vcpu_exit_debug() {
+        let exit = VcpuExit::Halt;
+        assert_eq!(format!("{:?}", exit), "Halt");
+        let exit = VcpuExit::InterruptWindow;
+        assert_eq!(format!("{:?}", exit), "InterruptWindow");
+        let exit = VcpuExit::Canceled;
+        assert_eq!(format!("{:?}", exit), "Canceled");
+        let exit = VcpuExit::Shutdown;
+        assert_eq!(format!("{:?}", exit), "Shutdown");
+        let exit = VcpuExit::Unknown(123);
+        assert_eq!(format!("{:?}", exit), "Unknown(123)");
+        let exit = VcpuExit::IoPort(IoPortExit {
+            port: 0x3F8,
+            data: [0, 0, 0, 0],
+            len: 1,
+            is_write: true,
+            instruction_len: 2,
+        });
+        assert!(format!("{:?}", exit).contains("IoPort"));
+        let exit = VcpuExit::Mmio(MmioExit {
+            gpa: Gpa::new(0x1000),
+            data: [0; 8],
+            len: 4,
+            is_write: true,
+            instruction_len: 2,
+            instruction_bytes: [0; 16],
+            instruction_byte_count: 2,
+        });
+        assert!(format!("{:?}", exit).contains("Mmio"));
+    }
+}

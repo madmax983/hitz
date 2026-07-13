@@ -370,4 +370,57 @@ mod tests {
         let b = VmId::new();
         assert_ne!(a, b);
     }
+
+    #[test]
+    fn vcpu_id_display_and_ordering() {
+        let v1 = VcpuId::new(1);
+        let v2 = VcpuId::new(2);
+        assert_eq!(format!("{}", v1), "vcpu-1");
+        assert!(v1 < v2);
+    }
+
+    #[test]
+    fn irq_line_display_and_ordering() {
+        let irq1 = IrqLine::new(5);
+        let irq2 = IrqLine::new(10);
+        assert_eq!(format!("{}", irq1), "IRQ5");
+        assert!(irq1 < irq2);
+    }
+
+    #[test]
+    fn mmio_slot_display_and_ordering() {
+        let s1 = MmioSlot::new(1);
+        let s2 = MmioSlot::new(2);
+        assert!(s1 < s2);
+    }
+
+    #[test]
+    fn disk_offset_display_and_ordering() {
+        let d1 = DiskOffset::new(100);
+        let d2 = DiskOffset::new(200);
+        assert!(d1 < d2);
+    }
+
+    #[test]
+    fn vm_id_default_display() {
+        let id = VmId::default();
+        let s = format!("{}", id);
+        assert_eq!(s.len(), 36); // UUID string length
+    }
+
+    #[test]
+    fn mem_size_mib_display_and_ordering() {
+        let m1 = MemSizeMiB::new(128);
+        let m2 = MemSizeMiB::new(256);
+        assert_eq!(format!("{}", m1), "128 MiB");
+        assert!(m1 < m2);
+    }
+
+    #[test]
+    fn gpa_display_and_ordering() {
+        let g1 = Gpa::new(0x1000);
+        let g2 = Gpa::new(0x2000);
+        assert_eq!(format!("{}", g1), "0x0000000000001000");
+        assert!(g1 < g2);
+    }
 }
