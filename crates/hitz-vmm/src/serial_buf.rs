@@ -266,8 +266,12 @@ impl SerialReader {
                 }
             }
             // Park until the writer pushes more data or closes.
-            if self.notify_rx.changed().await.is_err() {
-                return None;
+            match self.notify_rx.changed().await {
+                Ok(_) => continue,
+                Err(_) => {
+                    // The writer has been dropped. Break any blocking readers.
+                    return None;
+                }
             }
         }
     }
