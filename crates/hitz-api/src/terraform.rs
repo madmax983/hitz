@@ -38,7 +38,13 @@ pub trait ToTerraform {
 
 impl ToTerraform for VmConfig {
     fn to_terraform(&self, resource_name: &str) -> String {
-        let mut hcl = format!("resource \"hitz_vm\" \"{resource_name}\" {{\n");
+        // ⚡ Bolt Optimization:
+        // Replaced initial `format!` with `String::with_capacity(256)`.
+        // The `format!` macro allocates a buffer sized exactly for its content.
+        // Subsequent `writeln!` calls would force immediate heap reallocations
+        // as the string grew. Pre-allocating capacity avoids these reallocations.
+        let mut hcl = String::with_capacity(256);
+        let _ = writeln!(hcl, "resource \"hitz_vm\" \"{resource_name}\" {{");
         let _ = writeln!(hcl, "  kernel_path = \"{}\"", self.kernel_path.display());
 
         if let Some(initramfs) = &self.initramfs_path {
@@ -64,8 +70,8 @@ impl ToTerraform for VmConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
     use crate::GuestAgentMode;
+    use std::path::PathBuf;
 
     #[test]
     fn test_to_terraform_basic() {
