@@ -38,7 +38,7 @@ use std::sync::Arc;
 use hitz_hal::GuestMemAccess;
 
 use crate::mmio_bus::MmioDevice;
-use crate::virtio::queue::VirtQueue;
+use crate::virtio::VirtQueue;
 
 // -- MMIO register offsets ----------------------------------------------------
 

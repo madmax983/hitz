@@ -7,8 +7,8 @@ use std::collections::VecDeque;
 
 use crossbeam_channel::{Receiver, Sender};
 
+use crate::virtio::VirtQueue;
 use crate::virtio::mmio_transport::VirtioBackend;
-use crate::virtio::queue::VirtQueue;
 
 // ── Protocol constants ────────────────────────────────────────────────────────
 

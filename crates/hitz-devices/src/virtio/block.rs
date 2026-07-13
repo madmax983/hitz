@@ -11,8 +11,8 @@ use std::io::{Read, Seek, SeekFrom, Write};
 
 use hitz_hal::GuestMemAccess;
 
+use crate::virtio::VirtQueue;
 use crate::virtio::mmio_transport::VirtioBackend;
-use crate::virtio::queue::VirtQueue;
 
 /// Virtio block request type: read from disk.
 const VIRTIO_BLK_T_IN: u32 = 0;
@@ -77,7 +77,7 @@ impl VirtioBlockDevice {
     /// (data + status byte).
     fn process_request(
         &mut self,
-        chain: &mut crate::virtio::queue::DescriptorChain,
+        chain: &mut crate::virtio::DescriptorChain,
         mem: &dyn GuestMemAccess,
     ) -> u32 {
         // 1. Read the request header (16 bytes from first descriptor).

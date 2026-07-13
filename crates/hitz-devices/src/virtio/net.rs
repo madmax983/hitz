@@ -11,8 +11,8 @@ use std::collections::VecDeque;
 use crossbeam_channel::{Receiver, Sender};
 use hitz_hal::GuestMemAccess;
 
+use crate::virtio::VirtQueue;
 use crate::virtio::mmio_transport::VirtioBackend;
-use crate::virtio::queue::VirtQueue;
 
 /// Size of the virtio-net header prepended to every frame.
 const VIRTIO_NET_HDR_SIZE: usize = 12;
