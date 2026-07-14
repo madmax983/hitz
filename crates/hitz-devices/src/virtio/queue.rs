@@ -151,6 +151,19 @@ impl VirtQueue {
     /// On success, returns a [`DescriptorChain`] that iterates over
     /// the descriptors in the chain, plus the head index for later
     /// use in [`push_used`](Self::push_used).
+    ///
+    /// # The Hero's Journey
+    ///
+    /// ```rust,ignore
+    /// // Assuming `queue` is a valid `VirtQueue` and `mem` is a `GuestMemAccess`
+    /// if let Some(mut chain) = queue.pop_chain(&mem) {
+    ///     let head = chain.head_index();
+    ///     while let Some(desc) = chain.next_descriptor(&mem) {
+    ///         // Process descriptor...
+    ///     }
+    ///     queue.push_used(&mem, head, 0);
+    /// }
+    /// ```
     #[allow(rustdoc::private_intra_doc_links)]
     pub fn pop_chain(&mut self, mem: &dyn GuestMemAccess) -> Option<DescriptorChain> {
         if !self.ready {
@@ -187,6 +200,14 @@ impl VirtQueue {
     ///
     /// `head_idx` is the descriptor chain head (from [`DescriptorChain::head_index`]).
     /// `len` is the total number of bytes written to device-writable descriptors.
+    ///
+    /// # The Hero's Journey
+    ///
+    /// ```rust,ignore
+    /// // After processing a descriptor chain, mark it as used and specify
+    /// // how many bytes were written back to the guest.
+    /// queue.push_used(&mem, chain_head_index, bytes_written);
+    /// ```
     #[allow(rustdoc::private_intra_doc_links)]
     pub fn push_used(&self, mem: &dyn GuestMemAccess, head_idx: u16, len: u32) {
         // Read current used.idx.
@@ -279,6 +300,18 @@ impl DescriptorChain {
     /// Read the next descriptor in the chain from guest memory.
     ///
     /// Returns `None` when the chain is exhausted or on read error.
+    ///
+    /// # The Hero's Journey
+    ///
+    /// ```rust,ignore
+    /// while let Some(desc) = chain.next_descriptor(&mem) {
+    ///     if desc.is_device_writable {
+    ///         // Write data to the guest at `desc.gpa`
+    ///     } else {
+    ///         // Read data from the guest at `desc.gpa`
+    ///     }
+    /// }
+    /// ```
     pub fn next_descriptor(&mut self, mem: &dyn GuestMemAccess) -> Option<Descriptor> {
         let idx = self.next_idx?;
 
