@@ -3,7 +3,7 @@
 mod block;
 mod mmio_transport;
 mod net;
-pub mod queue;
+pub(crate) mod queue;
 mod vsock;
 
 pub use block::VirtioBlockDevice;
