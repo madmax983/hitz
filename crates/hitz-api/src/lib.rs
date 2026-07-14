@@ -493,3 +493,9 @@ pub use rightsizer::{ResizeRecommendation, RightSizer};
 mod terraform;
 #[cfg(feature = "terraform")]
 pub use terraform::ToTerraform;
+
+#[cfg(feature = "cost")]
+/// Cloud Billing Estimator Module
+pub mod cost;
+#[cfg(feature = "cost")]
+pub use cost::{CostEstimator, EstimatedCost, PricingModel};

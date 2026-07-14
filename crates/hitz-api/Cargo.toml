@@ -22,6 +22,7 @@ simulator = []
 diff = []
 prometheus = []
 classifier = ["diff"]
+cost = []
 carbon = []
 terraform = []
 
