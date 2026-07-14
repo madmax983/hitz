@@ -425,4 +425,292 @@ mod tests {
 
         dev.process_tx(&mut q, &mem);
     }
+
+    #[test]
+    fn tx_process_reads_guest_memory() {
+        let mac = [0x02, 0x00, 0x00, 0x00, 0x00, 0x01];
+        let (dev, tx_receiver, _rx_sender) = VirtioNetDevice::new(mac);
+
+        let mem = MockMem::new(0x10000);
+        let mut q = VirtQueue::new(16);
+        q.configure(0, 0x1000, 0x2000);
+        q.set_ready(true);
+        set_avail_idx(&mem, 0);
+        mem.write_bytes(0x2000 + 2, &0u16.to_le_bytes());
+
+        let virtio_hdr = vec![0u8; VIRTIO_NET_HDR_SIZE];
+        let eth_frame = vec![0xAB; 64];
+        let mut full_frame = virtio_hdr;
+        full_frame.extend_from_slice(&eth_frame);
+
+        mem.write_bytes(0x4000, &full_frame);
+
+        write_desc(&mem, 0, 0x4000, full_frame.len() as u32, 0, 0);
+        write_avail_entry(&mem, 0, 0);
+        set_avail_idx(&mem, 1);
+
+        dev.process_tx(&mut q, &mem);
+
+        let received = tx_receiver.try_recv().expect("should receive frame");
+        assert_eq!(received, eth_frame);
+    }
+
+    #[test]
+    fn tx_process_guest_read_fails() {
+        let mac = [0x02, 0x00, 0x00, 0x00, 0x00, 0x01];
+        let (dev, tx_receiver, _rx_sender) = VirtioNetDevice::new(mac);
+
+        let mem = MockMem::new(0x10000);
+        let mut q = VirtQueue::new(16);
+        q.configure(0, 0x1000, 0x2000);
+        q.set_ready(true);
+        set_avail_idx(&mem, 0);
+        mem.write_bytes(0x2000 + 2, &0u16.to_le_bytes());
+
+        write_desc(&mem, 0, 0x20000, 64, 0, 0);
+        write_avail_entry(&mem, 0, 0);
+        set_avail_idx(&mem, 1);
+
+        dev.process_tx(&mut q, &mem);
+
+        assert!(tx_receiver.try_recv().is_err());
+    }
+
+    #[test]
+    fn tx_process_small_frame() {
+        let mac = [0x02, 0x00, 0x00, 0x00, 0x00, 0x01];
+        let (dev, tx_receiver, _rx_sender) = VirtioNetDevice::new(mac);
+
+        let mem = MockMem::new(0x10000);
+        let mut q = VirtQueue::new(16);
+        q.configure(0, 0x1000, 0x2000);
+        q.set_ready(true);
+        set_avail_idx(&mem, 0);
+        mem.write_bytes(0x2000 + 2, &0u16.to_le_bytes());
+
+        let small_frame = vec![0xAB; 10];
+        mem.write_bytes(0x4000, &small_frame);
+
+        write_desc(&mem, 0, 0x4000, small_frame.len() as u32, 0, 0);
+        write_avail_entry(&mem, 0, 0);
+        set_avail_idx(&mem, 1);
+
+        dev.process_tx(&mut q, &mem);
+
+        assert!(tx_receiver.try_recv().is_err());
+    }
+
+    #[test]
+    fn tx_process_multiple_descriptors() {
+        let mac = [0x02, 0x00, 0x00, 0x00, 0x00, 0x01];
+        let (dev, tx_receiver, _rx_sender) = VirtioNetDevice::new(mac);
+
+        let mem = MockMem::new(0x10000);
+        let mut q = VirtQueue::new(16);
+        q.configure(0, 0x1000, 0x2000);
+        q.set_ready(true);
+        set_avail_idx(&mem, 0);
+        mem.write_bytes(0x2000 + 2, &0u16.to_le_bytes());
+
+        let virtio_hdr = vec![0u8; VIRTIO_NET_HDR_SIZE];
+        let eth_frame = vec![0xAB; 64];
+
+        mem.write_bytes(0x4000, &virtio_hdr);
+        mem.write_bytes(0x5000, &eth_frame);
+
+        write_desc(&mem, 0, 0x4000, virtio_hdr.len() as u32, 1, 1);
+        write_desc(&mem, 1, 0x5000, eth_frame.len() as u32, 0, 0);
+
+        write_avail_entry(&mem, 0, 0);
+        set_avail_idx(&mem, 1);
+
+        dev.process_tx(&mut q, &mem);
+
+        let received = tx_receiver.try_recv().expect("should receive frame");
+        assert_eq!(received, eth_frame);
+    }
+
+    #[test]
+    fn rx_deliver_writes_to_guest_memory() {
+        let mac = [0x02, 0x00, 0x00, 0x00, 0x00, 0x01];
+        let (mut dev, _tx_receiver, rx_sender) = VirtioNetDevice::new(mac);
+
+        let mem = MockMem::new(0x10000);
+        let mut q = VirtQueue::new(16);
+        q.configure(0, 0x1000, 0x2000);
+        q.set_ready(true);
+        set_avail_idx(&mem, 0);
+        mem.write_bytes(0x2000 + 2, &0u16.to_le_bytes());
+
+        write_desc(&mem, 0, 0x4000, 100, 2, 0);
+        write_avail_entry(&mem, 0, 0);
+        set_avail_idx(&mem, 1);
+
+        let test_frame = vec![0xAB; 64];
+        rx_sender.send(test_frame.clone()).unwrap();
+
+        let _ = dev.poll_rx(&mut q, &mem);
+
+        let mut virtio_hdr = vec![0u8; VIRTIO_NET_HDR_SIZE];
+        virtio_hdr.extend_from_slice(&test_frame);
+
+        let mut buf = vec![0u8; virtio_hdr.len()];
+        mem.read_guest(0x4000, &mut buf).unwrap();
+
+        assert_eq!(buf, virtio_hdr);
+    }
+
+    #[test]
+    fn rx_deliver_multiple_descriptors() {
+        let mac = [0x02, 0x00, 0x00, 0x00, 0x00, 0x01];
+        let (mut dev, _tx_receiver, rx_sender) = VirtioNetDevice::new(mac);
+
+        let mem = MockMem::new(0x10000);
+        let mut q = VirtQueue::new(16);
+        q.configure(0, 0x1000, 0x2000);
+        q.set_ready(true);
+        set_avail_idx(&mem, 0);
+        mem.write_bytes(0x2000 + 2, &0u16.to_le_bytes());
+
+        write_desc(&mem, 0, 0x4000, 10, 3, 1);
+        write_desc(&mem, 1, 0x5000, 100, 2, 0);
+
+        write_avail_entry(&mem, 0, 0);
+        set_avail_idx(&mem, 1);
+
+        let test_frame = vec![0xAB; 64];
+        rx_sender.send(test_frame.clone()).unwrap();
+
+        let _ = dev.poll_rx(&mut q, &mem);
+
+        let mut virtio_hdr = vec![0u8; VIRTIO_NET_HDR_SIZE];
+        virtio_hdr.extend_from_slice(&test_frame);
+
+        let mut buf0 = vec![0u8; 10];
+        mem.read_guest(0x4000, &mut buf0).unwrap();
+        assert_eq!(buf0, &virtio_hdr[0..10]);
+
+        let mut buf1 = vec![0u8; virtio_hdr.len() - 10];
+        mem.read_guest(0x5000, &mut buf1).unwrap();
+        assert_eq!(buf1, &virtio_hdr[10..]);
+    }
+
+    #[test]
+    fn process_queue_unknown_queue() {
+        let mac = [0x02, 0x00, 0x00, 0x00, 0x00, 0x01];
+        let (mut dev, _tx_receiver, _rx_sender) = VirtioNetDevice::new(mac);
+        let mem = MockMem::new(0x10000);
+        let mut q = VirtQueue::new(16);
+        dev.process_queue(99, &mut q, &mem);
+    }
+
+    #[test]
+    fn deliver_rx_fails_no_pending() {
+        let mac = [0x02, 0x00, 0x00, 0x00, 0x00, 0x01];
+        let (mut dev, _tx_receiver, _rx_sender) = VirtioNetDevice::new(mac);
+
+        let mem = MockMem::new(0x10000);
+        let mut q = VirtQueue::new(16);
+
+        // No frames sent by rx_sender, so rx_pending is empty.
+        let delivered = dev.deliver_rx(&mut q, &mem);
+        assert!(!delivered);
+    }
+
+    #[test]
+    fn deliver_rx_guest_write_fails() {
+        let mac = [0x02, 0x00, 0x00, 0x00, 0x00, 0x01];
+        let (mut dev, _tx_receiver, rx_sender) = VirtioNetDevice::new(mac);
+
+        let mem = MockMem::new(0x10000);
+        let mut q = VirtQueue::new(16);
+        q.configure(0, 0x1000, 0x2000);
+        q.set_ready(true);
+        set_avail_idx(&mem, 0);
+        mem.write_bytes(0x2000 + 2, &0u16.to_le_bytes());
+
+        // Write descriptor pointing far outside memory boundaries
+        write_desc(&mem, 0, 0x20000, 100, 2, 0);
+        write_avail_entry(&mem, 0, 0);
+        set_avail_idx(&mem, 1);
+
+        let test_frame = vec![0xAB; 64];
+        rx_sender.send(test_frame).unwrap();
+
+        let _ = dev.poll_rx(&mut q, &mem);
+
+        // Check if nothing is written, we don't dequeue the frame
+        assert_eq!(dev.rx_pending.len(), 1);
+    }
+
+    #[test]
+    fn write_config() {
+        let mac = [0x02, 0x00, 0x00, 0x00, 0x00, 0x01];
+        let (mut dev, _tx_receiver, _rx_sender) = VirtioNetDevice::new(mac);
+        // This is a no-op, just ensuring it's covered
+        dev.write_config(0, &[0x11, 0x22]);
+    }
+
+    #[test]
+    fn process_queue_tx() {
+        let mac = [0x02, 0x00, 0x00, 0x00, 0x00, 0x01];
+        let (mut dev, tx_receiver, _rx_sender) = VirtioNetDevice::new(mac);
+
+        let mem = MockMem::new(0x10000);
+        let mut q = VirtQueue::new(16);
+        q.configure(0, 0x1000, 0x2000);
+        q.set_ready(true);
+        set_avail_idx(&mem, 0);
+        mem.write_bytes(0x2000 + 2, &0u16.to_le_bytes());
+
+        let virtio_hdr = vec![0u8; VIRTIO_NET_HDR_SIZE];
+        let eth_frame = vec![0xAB; 64];
+        let mut full_frame = virtio_hdr;
+        full_frame.extend_from_slice(&eth_frame);
+
+        mem.write_bytes(0x4000, &full_frame);
+
+        write_desc(&mem, 0, 0x4000, full_frame.len() as u32, 0, 0);
+        write_avail_entry(&mem, 0, 0);
+        set_avail_idx(&mem, 1);
+
+        dev.process_queue(TX_QUEUE, &mut q, &mem);
+
+        let received = tx_receiver.try_recv().expect("should receive frame");
+        assert_eq!(received, eth_frame);
+    }
+
+    #[test]
+    fn process_queue_rx() {
+        let mac = [0x02, 0x00, 0x00, 0x00, 0x00, 0x01];
+        let (mut dev, _tx_receiver, rx_sender) = VirtioNetDevice::new(mac);
+
+        let mem = MockMem::new(0x10000);
+        let mut q = VirtQueue::new(16);
+        q.configure(0, 0x1000, 0x2000);
+        q.set_ready(true);
+        set_avail_idx(&mem, 0);
+        mem.write_bytes(0x2000 + 2, &0u16.to_le_bytes());
+
+        write_desc(&mem, 0, 0x4000, 100, 2, 0);
+        write_avail_entry(&mem, 0, 0);
+        set_avail_idx(&mem, 1);
+
+        let test_frame = vec![0xAB; 64];
+        rx_sender.send(test_frame.clone()).unwrap();
+
+        // Normally handled by poll_rx, but let's emulate receiving manually to pending
+        dev.rx_pending.push_back(test_frame.clone());
+
+        dev.process_queue(RX_QUEUE, &mut q, &mem);
+
+        let mut virtio_hdr = vec![0u8; VIRTIO_NET_HDR_SIZE];
+        virtio_hdr.extend_from_slice(&test_frame);
+
+        let mut buf = vec![0u8; virtio_hdr.len()];
+        mem.read_guest(0x4000, &mut buf).unwrap();
+
+        assert_eq!(buf, virtio_hdr);
+    }
+
 }
