@@ -503,4 +503,78 @@ mod tests {
             "unexpected error: {err}"
         );
     }
+
+    #[test]
+    fn parse_program_header_oob() {
+        let data = vec![0u8; 10]; // Too small
+        let res = parse_program_header(&data, 0);
+        assert!(res.is_err());
+        if let Err(BootError::InvalidElf(msg)) = res {
+            assert!(msg.contains("extends past end of file"));
+        } else {
+            panic!("Expected InvalidElf error");
+        }
+    }
+
+    #[test]
+    fn load_elf_invalid_class() {
+        let mut buf = make_test_elf(0x1000, &[1, 2, 3]);
+        buf[4] = 0; // Not ELFCLASS64
+        let writer = MockWriter::new();
+        let res = load_elf(&buf, &writer);
+        assert!(res.is_err());
+        if let Err(BootError::InvalidElf(msg)) = res {
+            assert!(msg.contains("not ELF64"));
+        }
+    }
+
+    #[test]
+    fn load_elf_invalid_endianness() {
+        let mut buf = make_test_elf(0x1000, &[1, 2, 3]);
+        buf[5] = 0; // Not ELFDATA2LSB
+        let writer = MockWriter::new();
+        let res = load_elf(&buf, &writer);
+        assert!(res.is_err());
+        if let Err(BootError::InvalidElf(msg)) = res {
+            assert!(msg.contains("not little-endian"));
+        }
+    }
+
+    #[test]
+    fn load_elf_invalid_machine() {
+        let mut buf = make_test_elf(0x1000, &[1, 2, 3]);
+        buf[18..20].copy_from_slice(&0u16.to_le_bytes()); // Not EM_X86_64
+        let writer = MockWriter::new();
+        let res = load_elf(&buf, &writer);
+        assert!(res.is_err());
+        if let Err(BootError::InvalidElf(msg)) = res {
+            assert!(msg.contains("not x86_64"));
+        }
+    }
+
+    #[test]
+    fn load_elf_no_pt_load() {
+        let mut buf = make_test_elf(0x1000, &[1, 2, 3]);
+        let ph = ELF_HEADER_SIZE;
+        buf[ph..ph + 4].copy_from_slice(&0u32.to_le_bytes()); // Not PT_LOAD
+        let writer = MockWriter::new();
+        let res = load_elf(&buf, &writer);
+        assert!(res.is_err());
+        if let Err(BootError::InvalidElf(msg)) = res {
+            assert!(msg.contains("no PT_LOAD segments found"));
+        }
+    }
+
+    #[test]
+    fn load_elf_segment_oob() {
+        let mut buf = make_test_elf(0x1000, &[1, 2, 3]);
+        let ph = ELF_HEADER_SIZE;
+        buf[ph + 32..ph + 40].copy_from_slice(&100u64.to_le_bytes()); // filesz > data.len()
+        let writer = MockWriter::new();
+        let res = load_elf(&buf, &writer);
+        assert!(res.is_err());
+        if let Err(BootError::LoadSegment { reason, .. }) = res {
+            assert!(reason.contains("extends past end of file"));
+        }
+    }
 }
