@@ -842,6 +842,24 @@ mod tests {
     }
 
     #[test]
+    fn missing_status_descriptor() {
+        let f = create_temp_disk(2);
+        let mut dev = VirtioBlockDevice::new(f).expect("new block device");
+        let mem = MockMem::new(0x10000);
+        let mut q = setup_queue(&mem);
+
+        // Chain with header and data, but no status
+        write_desc(&mem, 0, HDR_GPA, 16, 1, 1); // F_NEXT
+        write_desc(&mem, 1, DATA_GPA, 32, 2, 0); // F_WRITE, no F_NEXT
+        write_blk_header(&mem, HDR_GPA, VIRTIO_BLK_T_IN, 0);
+        write_avail_entry(&mem, 0, 0);
+        set_avail_idx(&mem, 1);
+
+        dev.process_queue(0, &mut q, &mem);
+        // Returns early without updating status byte because it doesn't exist
+    }
+
+    #[test]
     fn havoc_blk_read_readonly_desc() {
         let f = create_temp_disk(1);
         let mut dev = VirtioBlockDevice::new(f).unwrap();
