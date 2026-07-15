@@ -776,34 +776,19 @@ fn run_vm(args: RunArgs) -> Result<ExitCode> {
             .with_writer(std::io::stderr)
             .init();
 
-        use comfy_table::presets::UTF8_FULL_CONDENSED;
-        use comfy_table::{Cell, Color, Table};
-        let mut table = Table::new();
-        let _ = table.load_preset(UTF8_FULL_CONDENSED);
-
-        let _ = table.set_header([
-            Cell::new("Configuration")
-                .add_attribute(comfy_table::Attribute::Bold)
-                .fg(Color::Cyan),
-            Cell::new("Value")
-                .add_attribute(comfy_table::Attribute::Bold)
-                .fg(Color::Cyan),
-        ]);
-
-        let _ = table.add_row(["Kernel", &args.kernel.display().to_string()]);
-        if let Some(ref initramfs) = args.initramfs {
-            let _ = table.add_row(["Initramfs", &initramfs.display().to_string()]);
-        }
-        if let Some(ref disk) = args.disk {
-            let _ = table.add_row(["Disk", &disk.display().to_string()]);
-        }
-        let _ = table.add_row(["RAM", &format!("{} MiB", args.ram)]);
-        let _ = table.add_row(["CPUs", &args.cpus.to_string()]);
-        let _ = table.add_row(["Cmdline", &args.cmdline]);
-
         use crossterm::style::Stylize;
         eprintln!("{}", "🚀 Booting standalone micro-VM".cyan().bold());
-        eprintln!("{table}");
+
+        eprintln!("  {} {}", "Kernel:".cyan().bold(), args.kernel.display());
+        if let Some(ref initramfs) = args.initramfs {
+            eprintln!("  {} {}", "Initramfs:".cyan().bold(), initramfs.display());
+        }
+        if let Some(ref disk) = args.disk {
+            eprintln!("  {} {}", "Disk:".cyan().bold(), disk.display());
+        }
+        eprintln!("  {} {} MiB", "RAM:".cyan().bold(), args.ram);
+        eprintln!("  {} {}", "CPUs:".cyan().bold(), args.cpus);
+        eprintln!("  {} {}", "Cmdline:".cyan().bold(), args.cmdline);
     }
 
     if !args.ports.is_empty() {
