@@ -488,6 +488,12 @@ mod rightsizer;
 #[cfg(feature = "rightsizer")]
 pub use rightsizer::{ResizeRecommendation, RightSizer};
 
+#[cfg(feature = "ecosizer")]
+/// EcoSizer module for estimating carbon savings from rightsizing.
+pub mod ecosizer;
+#[cfg(feature = "ecosizer")]
+pub use ecosizer::{EcoRecommendation, EcoSizer};
+
 #[cfg(feature = "terraform")]
 /// Terraform HCL generation module.
 mod terraform;
