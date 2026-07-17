@@ -493,3 +493,9 @@ pub use rightsizer::{ResizeRecommendation, RightSizer};
 mod terraform;
 #[cfg(feature = "terraform")]
 pub use terraform::ToTerraform;
+
+#[cfg(feature = "scorecard")]
+/// Scorecard module for generating VM grades.
+pub mod scorecard;
+#[cfg(feature = "scorecard")]
+pub use scorecard::{ScorecardGenerator, VmScorecard};
