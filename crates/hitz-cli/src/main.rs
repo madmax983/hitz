@@ -1790,13 +1790,13 @@ fn draw_vm_top_ui(
                 .fg(Color::Cyan)
                 .add_modifier(Modifier::BOLD),
         )
-        .block(Block::default().borders(Borders::ALL));
+        .block(Block::default().borders(Borders::ALL).padding(ratatui::widgets::Padding::symmetric(1, 1)));
     f.render_widget(header, main_chunks[0]);
 
     if let Some(ref err) = last_err {
         let err_p = Paragraph::new(err.as_str())
             .style(Style::default().fg(Color::Red))
-            .block(Block::default().borders(Borders::ALL).title("Error"));
+            .block(Block::default().borders(Borders::ALL).title("Error").padding(ratatui::widgets::Padding::symmetric(1, 1)));
         f.render_widget(err_p, main_chunks[1]);
         return;
     }
@@ -1813,7 +1813,7 @@ fn draw_vm_top_ui(
             snap.cpu.total_pct, snap.cpu.load_avg[0], snap.cpu.load_avg[1], snap.cpu.load_avg[2]
         );
         let cpu_gauge = Gauge::default()
-            .block(Block::default().title("CPU").borders(Borders::ALL))
+            .block(Block::default().title("CPU").borders(Borders::ALL).padding(ratatui::widgets::Padding::symmetric(1, 1)))
             .gauge_style(Style::default().fg(Color::Green))
             .percent((snap.cpu.total_pct as u16).min(100))
             .label(cpu_label);
@@ -1829,7 +1829,7 @@ fn draw_vm_top_ui(
         };
         let mem_label = format!("{used_mb} MB / {total_mb} MB");
         let mem_gauge = Gauge::default()
-            .block(Block::default().title("Memory").borders(Borders::ALL))
+            .block(Block::default().title("Memory").borders(Borders::ALL).padding(ratatui::widgets::Padding::symmetric(1, 1)))
             .gauge_style(Style::default().fg(Color::Yellow))
             .percent(mem_pct.min(100))
             .label(mem_label);
@@ -1867,7 +1867,7 @@ fn draw_vm_top_ui(
             Row::new(["Device", "Read KB", "Write KB"])
                 .style(Style::default().add_modifier(Modifier::BOLD)),
         )
-        .block(Block::default().title("Disks").borders(Borders::ALL));
+        .block(Block::default().title("Disks").borders(Borders::ALL).padding(ratatui::widgets::Padding::symmetric(1, 1)));
         f.render_widget(disk_table, io_chunks[0]);
 
         // Network Table
@@ -1890,7 +1890,7 @@ fn draw_vm_top_ui(
             Row::new(["Interface", "Rx KB", "Tx KB"])
                 .style(Style::default().add_modifier(Modifier::BOLD)),
         )
-        .block(Block::default().title("Networks").borders(Borders::ALL));
+        .block(Block::default().title("Networks").borders(Borders::ALL).padding(ratatui::widgets::Padding::symmetric(1, 1)));
         f.render_widget(net_table, io_chunks[1]);
 
         // Processes Table
@@ -1918,12 +1918,12 @@ fn draw_vm_top_ui(
         .block(
             Block::default()
                 .title("Top Processes")
-                .borders(Borders::ALL),
+                .borders(Borders::ALL).padding(ratatui::widgets::Padding::symmetric(1, 1)),
         );
         f.render_widget(proc_table, bottom_chunks[1]);
     } else if last_err.is_none() {
         let loading =
-            Paragraph::new("Loading metrics...").block(Block::default().borders(Borders::ALL));
+            Paragraph::new("Loading metrics...").block(Block::default().borders(Borders::ALL).padding(ratatui::widgets::Padding::symmetric(1, 1)));
         f.render_widget(loading, main_chunks[1]);
     }
 }
@@ -2478,7 +2478,7 @@ async fn handle_vm_dashboard(args: &VmListArgs) -> Result<()> {
 
             let header = Paragraph::new(header_text).block(
                 Block::default()
-                    .borders(Borders::ALL)
+                    .borders(Borders::ALL).padding(ratatui::widgets::Padding::symmetric(1, 1))
                     .title(" Dashboard ")
                     .title_style(
                         Style::default()
@@ -2493,7 +2493,7 @@ async fn handle_vm_dashboard(args: &VmListArgs) -> Result<()> {
                     .style(Style::default().fg(Color::Blue))
                     .block(
                         Block::default()
-                            .borders(Borders::ALL)
+                            .borders(Borders::ALL).padding(ratatui::widgets::Padding::symmetric(1, 1))
                             .title(" Virtual Machines "),
                     );
                 f.render_widget(no_vms_msg, chunks[1]);
@@ -2546,7 +2546,7 @@ async fn handle_vm_dashboard(args: &VmListArgs) -> Result<()> {
                 )
                 .block(
                     Block::default()
-                        .borders(Borders::ALL)
+                        .borders(Borders::ALL).padding(ratatui::widgets::Padding::symmetric(1, 1))
                         .title(" Virtual Machines "),
                 );
 
