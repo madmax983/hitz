@@ -38,7 +38,10 @@ pub trait ToTerraform {
 
 impl ToTerraform for VmConfig {
     fn to_terraform(&self, resource_name: &str) -> String {
-        let mut hcl = format!("resource \"hitz_vm\" \"{resource_name}\" {{\n");
+        // ⚡ Bolt Optimization: Use String::with_capacity to eliminate
+        // unnecessary heap reallocations as the HCL string grows incrementally.
+        let mut hcl = String::with_capacity(512);
+        let _ = writeln!(hcl, "resource \"hitz_vm\" \"{resource_name}\" {{");
         let _ = writeln!(hcl, "  kernel_path = \"{}\"", self.kernel_path.display());
 
         if let Some(initramfs) = &self.initramfs_path {
@@ -64,8 +67,8 @@ impl ToTerraform for VmConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
     use crate::GuestAgentMode;
+    use std::path::PathBuf;
 
     #[test]
     fn test_to_terraform_basic() {
@@ -87,5 +90,9 @@ mod tests {
         assert!(hcl.contains("kernel_path = \"/boot/vmlinux\""));
         assert!(hcl.contains("ram_mib = 512"));
         assert!(hcl.contains("cpus = 2"));
+        assert!(
+            hcl.capacity() >= 512,
+            "Capacity should be pre-allocated to at least 512 bytes"
+        );
     }
 }
