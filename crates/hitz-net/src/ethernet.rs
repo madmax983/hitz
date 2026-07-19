@@ -593,4 +593,50 @@ mod tests {
         assert_eq!(header.src_mac, [0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F]);
         assert_eq!(header.ethertype, 0x0800);
     }
+
+    #[test]
+    fn build_arp_reply_invalid_inputs() {
+        let guest_mac = [0x02, 0x00, 0x00, 0x00, 0x00, 0x01];
+        let gateway_mac = [0x02, 0x00, 0x00, 0x00, 0x00, 0xFE];
+        let guest_ip = [192, 168, 100, 2];
+        let gateway_ip = [192, 168, 100, 1];
+        let broadcast = [0xFF; 6];
+
+        let mut arp_payload = [0u8; 28];
+        arp_payload[0..2].copy_from_slice(&1u16.to_be_bytes()); // hw_type = 1
+        arp_payload[2..4].copy_from_slice(&0x0800u16.to_be_bytes()); // proto_type = IPv4
+        arp_payload[4] = 6; // hw_len = 6
+        arp_payload[5] = 4; // proto_len = 4
+        arp_payload[6..8].copy_from_slice(&ARP_OP_REQUEST.to_be_bytes()); // op = req
+        arp_payload[8..14].copy_from_slice(&guest_mac);
+        arp_payload[14..18].copy_from_slice(&guest_ip);
+        arp_payload[24..28].copy_from_slice(&gateway_ip);
+
+        // Test 1: Frame too short (< 42 bytes)
+        let mut short_frame = build_eth_frame(&guest_mac, &broadcast, ETHERTYPE_ARP, &arp_payload);
+        short_frame.truncate(41);
+        assert!(build_arp_reply(&short_frame, &gateway_mac, &gateway_ip).is_none());
+
+        // Test 2: Wrong ethertype
+        let wrong_ethertype = build_eth_frame(&guest_mac, &broadcast, ETHERTYPE_IPV4, &arp_payload);
+        assert!(build_arp_reply(&wrong_ethertype, &gateway_mac, &gateway_ip).is_none());
+
+        // Test 3: Wrong hardware type
+        let mut bad_hw_type = arp_payload.clone();
+        bad_hw_type[0..2].copy_from_slice(&2u16.to_be_bytes());
+        let bad_hw_frame = build_eth_frame(&guest_mac, &broadcast, ETHERTYPE_ARP, &bad_hw_type);
+        assert!(build_arp_reply(&bad_hw_frame, &gateway_mac, &gateway_ip).is_none());
+
+        // Test 4: Wrong ARP operation (Reply instead of Request)
+        let mut bad_op = arp_payload.clone();
+        bad_op[6..8].copy_from_slice(&ARP_OP_REPLY.to_be_bytes());
+        let bad_op_frame = build_eth_frame(&guest_mac, &broadcast, ETHERTYPE_ARP, &bad_op);
+        assert!(build_arp_reply(&bad_op_frame, &gateway_mac, &gateway_ip).is_none());
+
+        // Test 5: Wrong target IP (not the gateway IP)
+        let mut bad_target = arp_payload.clone();
+        bad_target[24..28].copy_from_slice(&[192, 168, 100, 99]);
+        let bad_target_frame = build_eth_frame(&guest_mac, &broadcast, ETHERTYPE_ARP, &bad_target);
+        assert!(build_arp_reply(&bad_target_frame, &gateway_mac, &gateway_ip).is_none());
+    }
 }
