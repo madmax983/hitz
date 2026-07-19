@@ -488,8 +488,15 @@ mod rightsizer;
 #[cfg(feature = "rightsizer")]
 pub use rightsizer::{ResizeRecommendation, RightSizer};
 
+#[cfg(feature = "threat")]
+/// Threat detection module for evaluating suspicious VM behavior.
+mod threat;
+#[cfg(feature = "threat")]
+pub use threat::{ThreatAssessment, ThreatDetector, ThreatType};
+
 #[cfg(feature = "terraform")]
 /// Terraform HCL generation module.
 mod terraform;
+
 #[cfg(feature = "terraform")]
 pub use terraform::ToTerraform;

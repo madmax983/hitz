@@ -24,6 +24,7 @@ prometheus = []
 classifier = ["diff"]
 carbon = []
 terraform = []
+threat = []
 
 sentinel = []
 efficiency = []
