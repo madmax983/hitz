@@ -493,3 +493,9 @@ pub use rightsizer::{ResizeRecommendation, RightSizer};
 mod terraform;
 #[cfg(feature = "terraform")]
 pub use terraform::ToTerraform;
+
+#[cfg(feature = "eco_advisor")]
+/// Eco Advisor module for unified GreenOps reporting.
+mod eco_advisor;
+#[cfg(feature = "eco_advisor")]
+pub use eco_advisor::{EcoAdvisor, EcoReport};
