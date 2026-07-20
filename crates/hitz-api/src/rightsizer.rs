@@ -54,6 +54,25 @@ use crate::{MetricsSnapshot, VmConfig};
 use serde::{Deserialize, Serialize};
 
 /// Specific actionable recommendation for resizing a VM.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::ResizeRecommendation;
+///
+/// let rec = ResizeRecommendation::ScaleUpCpu {
+///     current: 2,
+///     suggested: 4,
+///     reason: "CPU is pegged at 100%".to_string(),
+/// };
+///
+/// match rec {
+///     ResizeRecommendation::ScaleUpCpu { suggested, .. } => {
+///         assert_eq!(suggested, 4);
+///     }
+///     _ => panic!("Expected ScaleUpCpu"),
+/// }
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ResizeRecommendation {
     /// Suggests increasing the CPU count.
