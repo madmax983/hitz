@@ -396,7 +396,7 @@ pub fn boot_and_run<H: Hypervisor, W: Write + Send + 'static>(
 
     // ── 2-7. Load Guest Memory ──
     let mut guest_mem = GuestMemory::with_capacity(4); // Pre-allocate typical region count
-    let pml4_gpa = setup_guest_memory(&mut guest_mem, config, ram_bytes, gib_count)?;
+    let (pml4_gpa, entry_point) = setup_guest_memory(&mut guest_mem, config, ram_bytes, gib_count)?;
 
     // ── 8. Write command line ──
     build_kernel_cmdline(&mut guest_mem, config, &extras)?;
@@ -413,7 +413,6 @@ pub fn boot_and_run<H: Hypervisor, W: Write + Send + 'static>(
     guest_mem.map_to_partition(&mut partition, MemFlags::READ_WRITE_EXEC)?;
 
     // ── 11. Create vCPUs ──
-    let entry_point = load_elf(&fs::read(&config.kernel_path)?, &guest_mem)?.entry_point;
     let mut vcpus = Vec::with_capacity(config.cpus as usize);
     for i in 0..config.cpus {
         let mut vcpu = partition.create_vcpu(VcpuId::new(i))?;
@@ -457,7 +456,7 @@ fn setup_guest_memory(
     config: &VmConfig,
     ram_bytes: u64,
     gib_count: u32,
-) -> Result<Gpa, VmError> {
+) -> Result<(Gpa, u64), VmError> {
     guest_mem.add_region(
         Gpa::new(0),
         usize::try_from(ram_bytes).unwrap_or(usize::MAX),
@@ -504,7 +503,7 @@ fn setup_guest_memory(
         guest_mem.write_slice(Gpa::new(BOOT_PARAMS_GPA), boot_params.as_bytes())?;
     }
 
-    Ok(pml4_gpa)
+    Ok((pml4_gpa, load_result.entry_point))
 }
 
 fn build_kernel_cmdline(
