@@ -1204,30 +1204,21 @@ fn format_error_response(status: hyper::StatusCode, resp: &str, error_prefix: &s
         } else if let Some(err) = v.get("error").and_then(|e| e.as_str()) {
             format!("✗ {error_prefix}: {}", err)
         } else {
-            // ⚡ Bolt Optimization: Replace intermediate `Vec` heap allocations and `.join(...)`
-            // with an iterator chain using `.fold(String::new(), ...)` to eliminate
-            // intermediate heap allocations and multiple `format!` calls when formatting CLI error responses.
             let parts_str = v.as_object().map_or_else(String::new, |obj| {
-                obj.iter().fold(String::new(), |mut acc, (k, val)| {
-                    use std::fmt::Write;
-                    if let Some(s) = val.as_str() {
-                        if !acc.is_empty() {
-                            let _ = write!(acc, ", ");
+                obj.iter()
+                    .filter_map(|(k, val)| {
+                        if let Some(s) = val.as_str() {
+                            Some(format!("{k}: {s}"))
+                        } else if let Some(n) = val.as_number() {
+                            Some(format!("{k}: {n}"))
+                        } else if val.is_boolean() || val.is_null() {
+                            Some(format!("{k}: {val}"))
+                        } else {
+                            None
                         }
-                        let _ = write!(acc, "{k}: {s}");
-                    } else if let Some(n) = val.as_number() {
-                        if !acc.is_empty() {
-                            let _ = write!(acc, ", ");
-                        }
-                        let _ = write!(acc, "{k}: {n}");
-                    } else if val.is_boolean() || val.is_null() {
-                        if !acc.is_empty() {
-                            let _ = write!(acc, ", ");
-                        }
-                        let _ = write!(acc, "{k}: {val}");
-                    }
-                    acc
-                })
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", ")
             });
             if parts_str.is_empty() {
                 format!("✗ {error_prefix} ({status})")
