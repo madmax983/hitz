@@ -470,6 +470,12 @@ mod efficiency;
 #[cfg(feature = "efficiency")]
 pub use efficiency::{EfficiencyScore, EfficiencyScorer};
 
+#[cfg(feature = "waste")]
+/// Carbon Waste Estimator module for estimating wasted emissions.
+mod waste;
+#[cfg(feature = "waste")]
+pub use waste::CarbonWasteEstimator;
+
 #[cfg(feature = "fingerprint")]
 /// Fingerprinting module for categorizing VM workload behavior.
 mod fingerprint;
