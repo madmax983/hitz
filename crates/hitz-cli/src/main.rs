@@ -1256,7 +1256,10 @@ fn format_error_response(status: hyper::StatusCode, resp: &str, error_prefix: &s
 fn print_error_response(status: hyper::StatusCode, resp: &str, error_prefix: &str) {
     use crossterm::style::Stylize;
     let msg = format_error_response(status, resp, error_prefix);
-    println!("\r\x1b[2K{}", msg.red());
+    println!("\r\x1b[2K");
+    println!("{}", "╭───────────────────────────────────────────────╮".red());
+    println!("{} {}", "│".red(), msg.red().bold());
+    println!("{}", "╰───────────────────────────────────────────────╯".red());
 }
 
 fn print_action_result(
