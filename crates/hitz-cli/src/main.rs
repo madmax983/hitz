@@ -1196,60 +1196,67 @@ fn format_metrics_snapshot(snap: &hitz_api::MetricsSnapshot) -> String {
 // ── hitz vm * ──
 
 fn format_error_response(status: hyper::StatusCode, resp: &str, error_prefix: &str) -> String {
-    let msg = if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(resp) {
-        format!("✗ {error_prefix}: {}", err.message)
+    let title = format!(" ✗ {error_prefix} ({status}) ");
+    let mut details = String::new();
+
+    if let Ok(err) = serde_json::from_str::<hitz_api::ApiError>(resp) {
+        details = err.message.clone();
     } else if let Ok(v) = serde_json::from_str::<serde_json::Value>(resp) {
         if let Some(msg) = v.get("message").and_then(|m| m.as_str()) {
-            format!("✗ {error_prefix}: {}", msg)
+            details = msg.to_string();
         } else if let Some(err) = v.get("error").and_then(|e| e.as_str()) {
-            format!("✗ {error_prefix}: {}", err)
+            details = err.to_string();
         } else {
-            // ⚡ Bolt Optimization: Replace intermediate `Vec` heap allocations and `.join(...)`
-            // with an iterator chain using `.fold(String::new(), ...)` to eliminate
-            // intermediate heap allocations and multiple `format!` calls when formatting CLI error responses.
             let parts_str = v.as_object().map_or_else(String::new, |obj| {
                 obj.iter().fold(String::new(), |mut acc, (k, val)| {
                     use std::fmt::Write;
                     if let Some(s) = val.as_str() {
                         if !acc.is_empty() {
-                            let _ = write!(acc, ", ");
+                            let _ = write!(acc, "\n│    ");
                         }
                         let _ = write!(acc, "{k}: {s}");
                     } else if let Some(n) = val.as_number() {
                         if !acc.is_empty() {
-                            let _ = write!(acc, ", ");
+                            let _ = write!(acc, "\n│    ");
                         }
                         let _ = write!(acc, "{k}: {n}");
                     } else if val.is_boolean() || val.is_null() {
                         if !acc.is_empty() {
-                            let _ = write!(acc, ", ");
+                            let _ = write!(acc, "\n│    ");
                         }
                         let _ = write!(acc, "{k}: {val}");
                     }
                     acc
                 })
             });
-            if parts_str.is_empty() {
-                format!("✗ {error_prefix} ({status})")
-            } else {
-                format!("✗ {error_prefix} ({status}): {parts_str}")
+            if !parts_str.is_empty() {
+                details = parts_str;
             }
         }
     } else {
         let clean = resp.trim();
-        if clean.is_empty() {
-            format!("✗ {error_prefix} ({status})")
-        } else {
+        if !clean.is_empty() {
             let max_len = 200;
-            let display_text = if clean.chars().count() > max_len {
+            details = if clean.chars().count() > max_len {
                 let truncated: String = clean.chars().take(max_len).collect();
                 format!("{}...", truncated)
             } else {
                 clean.to_string()
             };
-            format!("✗ {error_prefix} ({status}): {display_text}")
         }
-    };
+    }
+
+    let mut msg = format!("\n╭{}╮\n", "─".repeat(title.chars().count()));
+    msg.push_str(&format!("│{title}│\n"));
+
+    if !details.is_empty() {
+        msg.push_str(&format!("├{}┤\n", "─".repeat(title.chars().count())));
+        for line in details.lines() {
+            msg.push_str(&format!("│ {line}\n"));
+        }
+    }
+    msg.push_str(&format!("╰{}╯", "─".repeat(title.chars().count())));
+
     format!("\r\x1b[2K{}", msg)
 }
 
