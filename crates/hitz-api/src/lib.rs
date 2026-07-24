@@ -493,3 +493,9 @@ pub use rightsizer::{ResizeRecommendation, RightSizer};
 mod terraform;
 #[cfg(feature = "terraform")]
 pub use terraform::ToTerraform;
+
+#[cfg(feature = "greenops")]
+/// GreenOps module for evaluating combined carbon emissions and resource efficiency.
+mod greenops;
+#[cfg(feature = "greenops")]
+pub use greenops::{GreenOpsAnalyzer, GreenOpsResult};
