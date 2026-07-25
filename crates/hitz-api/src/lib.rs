@@ -493,3 +493,9 @@ pub use rightsizer::{ResizeRecommendation, RightSizer};
 mod terraform;
 #[cfg(feature = "terraform")]
 pub use terraform::ToTerraform;
+
+#[cfg(feature = "predict")]
+/// Trend prediction module for forecasting resource exhaustion.
+mod predict;
+#[cfg(feature = "predict")]
+pub use predict::{TrendPrediction, TrendPredictor};
