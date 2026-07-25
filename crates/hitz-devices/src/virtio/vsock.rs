@@ -623,4 +623,40 @@ mod tests {
 
         let _ = device.poll_rx(&mut q, &mem);
     }
+
+    #[test]
+    fn should_handle_missing_payload_when_hdr_len_too_large() {
+        let (mut device, rx_recv, _tx_send) = VirtioVsockDevice::new(3);
+        let mem = MockMem::new(0x10000);
+        let mut q = setup_queue(&mem);
+
+        let hdr = VsockHdr {
+            src_cid: 3,
+            dst_cid: 2,
+            src_port: 2000,
+            dst_port: 1000,
+            len: 100, // Declare 100 bytes of payload
+            r#type: VSOCK_TYPE_STREAM,
+            op: VsockOp::Rw as u16,
+            flags: 0,
+            buf_alloc: 1024,
+            fwd_cnt: 0,
+        };
+        let packet = hdr.to_bytes().to_vec();
+
+        // One readable descriptor of only 44 bytes (VSOCK_HDR_SIZE)
+        mem.write_bytes(0x4000, &packet);
+        write_desc(&mem, 0, 0x4000, packet.len() as u32, 0, 0); // F_WRITE = 0
+        write_avail_entry(&mem, 0, 0);
+        set_avail_idx(&mem, 1);
+
+        // Call VirtioBackend::process_queue(1, ...) directly to trigger process_tx.
+        device.process_queue(1, &mut q, &mem);
+
+        // Receiver should get packet with empty payload, despite len=100
+        let (out_hdr, out_payload) = rx_recv.try_recv().expect("Mutex poisoned");
+        assert_eq!(out_hdr.len, 100);
+        assert_eq!(out_hdr.dst_cid, 2);
+        assert_eq!(out_payload, vec![]);
+    }
 }
