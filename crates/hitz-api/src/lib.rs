@@ -493,3 +493,9 @@ pub use rightsizer::{ResizeRecommendation, RightSizer};
 mod terraform;
 #[cfg(feature = "terraform")]
 pub use terraform::ToTerraform;
+
+#[cfg(feature = "finops")]
+/// FinOps cost and waste estimation module.
+pub mod finops;
+#[cfg(feature = "finops")]
+pub use finops::{CostAnalysis, FinOpsEstimator, HourlyRates};
