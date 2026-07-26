@@ -425,4 +425,82 @@ mod tests {
 
         dev.process_tx(&mut q, &mem);
     }
+
+    #[test]
+    fn process_tx_success() {
+        let mac = [0x02, 0x00, 0x00, 0x00, 0x00, 0x01];
+        let (dev, tx_receiver, _rx_sender) = VirtioNetDevice::new(mac);
+
+        let mem = MockMem::new(0x10000);
+        let mut q = VirtQueue::new(16);
+        q.configure(0, 0x1000, 0x2000);
+        q.set_ready(true);
+        set_avail_idx(&mem, 0);
+        mem.write_bytes(0x2000 + 2, &0u16.to_le_bytes());
+
+        // Write a payload: 12 bytes header + 14 bytes ethernet frame
+        let mut payload = vec![0u8; 12];
+        payload.extend_from_slice(b"hello ethernet");
+        mem.write_bytes(0x4000, &payload);
+
+        write_desc(&mem, 0, 0x4000, payload.len() as u32, 0, 0);
+        write_avail_entry(&mem, 0, 0);
+        set_avail_idx(&mem, 1);
+
+        dev.process_tx(&mut q, &mem);
+
+        let received = tx_receiver.try_recv().expect("should receive frame");
+        assert_eq!(received, b"hello ethernet");
+    }
+
+    #[test]
+    fn process_tx_read_guest_fails() {
+        let mac = [0x02, 0x00, 0x00, 0x00, 0x00, 0x01];
+        let (dev, tx_receiver, _rx_sender) = VirtioNetDevice::new(mac);
+
+        let mem = MockMem::new(0x5000);
+        let mut q = VirtQueue::new(16);
+        q.configure(0, 0x1000, 0x2000);
+        q.set_ready(true);
+        set_avail_idx(&mem, 0);
+        mem.write_bytes(0x2000 + 2, &0u16.to_le_bytes());
+
+        // Try to read from 0x6000 which is out of bounds
+        write_desc(&mem, 0, 0x6000, 100, 0, 0);
+        write_avail_entry(&mem, 0, 0);
+        set_avail_idx(&mem, 1);
+
+        dev.process_tx(&mut q, &mem);
+
+        assert!(tx_receiver.try_recv().is_err());
+    }
+
+    #[test]
+    fn deliver_rx_success() {
+        let mac = [0x02, 0x00, 0x00, 0x00, 0x00, 0x01];
+        let (mut dev, _tx_receiver, rx_sender) = VirtioNetDevice::new(mac);
+
+        rx_sender.send(b"hello rx".to_vec()).unwrap();
+
+        let mem = MockMem::new(0x10000);
+        let mut q = VirtQueue::new(16);
+        q.configure(0, 0x1000, 0x2000);
+        q.set_ready(true);
+        set_avail_idx(&mem, 0);
+        mem.write_bytes(0x2000 + 2, &0u16.to_le_bytes());
+
+        // RX requires a writable descriptor
+        write_desc(&mem, 0, 0x4000, 100, 2, 0); // VIRTQ_DESC_F_WRITE = 2
+        write_avail_entry(&mem, 0, 0);
+        set_avail_idx(&mem, 1);
+
+        assert!(dev.poll_rx(&mut q, &mem));
+
+        let mut expected = vec![0u8; 12]; // 12-byte header
+        expected.extend_from_slice(b"hello rx");
+
+        let mut actual = vec![0u8; expected.len()];
+        mem.read_guest(0x4000, &mut actual).unwrap();
+        assert_eq!(actual, expected);
+    }
 }
