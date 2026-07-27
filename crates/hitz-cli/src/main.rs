@@ -1437,35 +1437,49 @@ async fn handle_vm_status(args: &VmIdArgs) -> Result<()> {
             };
 
             let _ = table.add_row([
-                Cell::new("ID:").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                Cell::new("ID:")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(comfy_table::Color::Cyan),
                 Cell::new(&info.id),
             ]);
             let _ = table.add_row([
-                Cell::new("State:").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                Cell::new("State:")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(comfy_table::Color::Cyan),
                 state_cell,
             ]);
             let _ = table.add_row([
-                Cell::new("Kernel:").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                Cell::new("Kernel:")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(comfy_table::Color::Cyan),
                 Cell::new(info.config.kernel_path.display().to_string()),
             ]);
             if let Some(ref path) = info.config.initramfs_path {
                 let _ = table.add_row([
-                    Cell::new("Initramfs:").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                    Cell::new("Initramfs:")
+                        .add_attribute(comfy_table::Attribute::Bold)
+                        .fg(comfy_table::Color::Cyan),
                     Cell::new(path.display().to_string()),
                 ]);
             }
             if let Some(ref path) = info.config.disk_path {
                 let _ = table.add_row([
-                    Cell::new("Disk:").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                    Cell::new("Disk:")
+                        .add_attribute(comfy_table::Attribute::Bold)
+                        .fg(comfy_table::Color::Cyan),
                     Cell::new(path.display().to_string()),
                 ]);
             }
             let _ = table.add_row([
-                Cell::new("RAM:").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                Cell::new("RAM:")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(comfy_table::Color::Cyan),
                 Cell::new(format!("{} MiB", info.config.ram_mib)),
             ]);
             let _ = table.add_row([
-                Cell::new("CPUs:").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                Cell::new("CPUs:")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(comfy_table::Color::Cyan),
                 Cell::new(info.config.cpus.to_string()),
             ]);
             let agent_str = match info.config.guest_agent {
@@ -1474,11 +1488,15 @@ async fn handle_vm_status(args: &VmIdArgs) -> Result<()> {
                 hitz_api::GuestAgentMode::Disabled => "Disabled".to_string(),
             };
             let _ = table.add_row([
-                Cell::new("Guest Agent:").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                Cell::new("Guest Agent:")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(comfy_table::Color::Cyan),
                 Cell::new(agent_str),
             ]);
             let _ = table.add_row([
-                Cell::new("Guest CID:").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                Cell::new("Guest CID:")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(comfy_table::Color::Cyan),
                 Cell::new(info.config.guest_cid.to_string()),
             ]);
             if let Some(ref net) = info.config.net {
@@ -1488,7 +1506,9 @@ async fn handle_vm_status(args: &VmIdArgs) -> Result<()> {
                     net.host_ip, net.guest_ip, mac_str
                 );
                 let _ = table.add_row([
-                    Cell::new("Network:").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                    Cell::new("Network:")
+                        .add_attribute(comfy_table::Attribute::Bold)
+                        .fg(comfy_table::Color::Cyan),
                     Cell::new(net_str),
                 ]);
             }
@@ -1507,13 +1527,17 @@ async fn handle_vm_status(args: &VmIdArgs) -> Result<()> {
                     let _ = write!(ports_str, "0.0.0.0:{} -> {}", p.host_port, p.guest_port);
                 }
                 let _ = table.add_row([
-                    Cell::new("Ports:").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                    Cell::new("Ports:")
+                        .add_attribute(comfy_table::Attribute::Bold)
+                        .fg(comfy_table::Color::Cyan),
                     Cell::new(ports_str),
                 ]);
             }
             if let Some(reason) = &info.exit_reason {
                 let _ = table.add_row([
-                    Cell::new("Exit:").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                    Cell::new("Exit:")
+                        .add_attribute(comfy_table::Attribute::Bold)
+                        .fg(comfy_table::Color::Cyan),
                     Cell::new(reason),
                 ]);
             }
@@ -1558,11 +1582,21 @@ async fn handle_vm_list(args: &VmListArgs) -> Result<()> {
             let mut table = Table::new();
             let _ = table.load_preset(UTF8_FULL_CONDENSED);
             let _ = table.set_header([
-                Cell::new("ID").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
-                Cell::new("State").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
-                Cell::new("RAM (MiB)").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
-                Cell::new("CPUs").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
-                Cell::new("Exit Reason").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+                Cell::new("ID")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(comfy_table::Color::Cyan),
+                Cell::new("State")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(comfy_table::Color::Cyan),
+                Cell::new("RAM (MiB)")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(comfy_table::Color::Cyan),
+                Cell::new("CPUs")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(comfy_table::Color::Cyan),
+                Cell::new("Exit Reason")
+                    .add_attribute(comfy_table::Attribute::Bold)
+                    .fg(comfy_table::Color::Cyan),
             ]);
 
             for info in vms {
@@ -1777,7 +1811,7 @@ fn draw_vm_top_ui(
     let main_chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3), // Header
+            Constraint::Length(7), // Header
             Constraint::Length(4), // CPU & Mem Gauges
             Constraint::Min(5),    // Main content (Tables)
         ])
@@ -1790,13 +1824,22 @@ fn draw_vm_top_ui(
                 .fg(Color::Cyan)
                 .add_modifier(Modifier::BOLD),
         )
-        .block(Block::default().borders(Borders::ALL));
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .padding(ratatui::widgets::Padding::symmetric(1, 2)),
+        );
     f.render_widget(header, main_chunks[0]);
 
     if let Some(ref err) = last_err {
         let err_p = Paragraph::new(err.as_str())
             .style(Style::default().fg(Color::Red))
-            .block(Block::default().borders(Borders::ALL).title("Error"));
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("Error")
+                    .padding(ratatui::widgets::Padding::horizontal(1)),
+            );
         f.render_widget(err_p, main_chunks[1]);
         return;
     }
@@ -1813,7 +1856,12 @@ fn draw_vm_top_ui(
             snap.cpu.total_pct, snap.cpu.load_avg[0], snap.cpu.load_avg[1], snap.cpu.load_avg[2]
         );
         let cpu_gauge = Gauge::default()
-            .block(Block::default().title("CPU").borders(Borders::ALL))
+            .block(
+                Block::default()
+                    .title("CPU")
+                    .borders(Borders::ALL)
+                    .padding(ratatui::widgets::Padding::horizontal(1)),
+            )
             .gauge_style(Style::default().fg(Color::Green))
             .percent((snap.cpu.total_pct as u16).min(100))
             .label(cpu_label);
@@ -1829,7 +1877,12 @@ fn draw_vm_top_ui(
         };
         let mem_label = format!("{used_mb} MB / {total_mb} MB");
         let mem_gauge = Gauge::default()
-            .block(Block::default().title("Memory").borders(Borders::ALL))
+            .block(
+                Block::default()
+                    .title("Memory")
+                    .borders(Borders::ALL)
+                    .padding(ratatui::widgets::Padding::horizontal(1)),
+            )
             .gauge_style(Style::default().fg(Color::Yellow))
             .percent(mem_pct.min(100))
             .label(mem_label);
@@ -1867,7 +1920,12 @@ fn draw_vm_top_ui(
             Row::new(["Device", "Read KB", "Write KB"])
                 .style(Style::default().add_modifier(Modifier::BOLD)),
         )
-        .block(Block::default().title("Disks").borders(Borders::ALL));
+        .block(
+            Block::default()
+                .title("Disks")
+                .borders(Borders::ALL)
+                .padding(ratatui::widgets::Padding::horizontal(1)),
+        );
         f.render_widget(disk_table, io_chunks[0]);
 
         // Network Table
@@ -1890,7 +1948,12 @@ fn draw_vm_top_ui(
             Row::new(["Interface", "Rx KB", "Tx KB"])
                 .style(Style::default().add_modifier(Modifier::BOLD)),
         )
-        .block(Block::default().title("Networks").borders(Borders::ALL));
+        .block(
+            Block::default()
+                .title("Networks")
+                .borders(Borders::ALL)
+                .padding(ratatui::widgets::Padding::horizontal(1)),
+        );
         f.render_widget(net_table, io_chunks[1]);
 
         // Processes Table
@@ -1918,12 +1981,16 @@ fn draw_vm_top_ui(
         .block(
             Block::default()
                 .title("Top Processes")
-                .borders(Borders::ALL),
+                .borders(Borders::ALL)
+                .padding(ratatui::widgets::Padding::horizontal(1)),
         );
         f.render_widget(proc_table, bottom_chunks[1]);
     } else if last_err.is_none() {
-        let loading =
-            Paragraph::new("Loading metrics...").block(Block::default().borders(Borders::ALL));
+        let loading = Paragraph::new("Loading metrics...").block(
+            Block::default()
+                .borders(Borders::ALL)
+                .padding(ratatui::widgets::Padding::horizontal(1)),
+        );
         f.render_widget(loading, main_chunks[1]);
     }
 }
@@ -2079,10 +2146,18 @@ fn handle_vm_timeline(args: &VmTimelineArgs) -> Result<()> {
     let mut table = Table::new();
     let _ = table.load_preset(UTF8_FULL_CONDENSED);
     let _ = table.set_header([
-        Cell::new("Time").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
-        Cell::new("Status").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
-        Cell::new("Reasons Added").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
-        Cell::new("Reasons Removed").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+        Cell::new("Time")
+            .add_attribute(comfy_table::Attribute::Bold)
+            .fg(comfy_table::Color::Cyan),
+        Cell::new("Status")
+            .add_attribute(comfy_table::Attribute::Bold)
+            .fg(comfy_table::Color::Cyan),
+        Cell::new("Reasons Added")
+            .add_attribute(comfy_table::Attribute::Bold)
+            .fg(comfy_table::Color::Cyan),
+        Cell::new("Reasons Removed")
+            .add_attribute(comfy_table::Attribute::Bold)
+            .fg(comfy_table::Color::Cyan),
     ]);
 
     for (line_num, line_result) in reader.lines().enumerate() {
@@ -2370,8 +2445,12 @@ async fn handle_vm_analyze(args: &VmIdArgs) -> Result<()> {
         let _ = table.load_preset(UTF8_FULL_CONDENSED);
 
         let _ = table.set_header([
-            Cell::new("Level").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
-            Cell::new("Insight").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+            Cell::new("Level")
+                .add_attribute(comfy_table::Attribute::Bold)
+                .fg(comfy_table::Color::Cyan),
+            Cell::new("Insight")
+                .add_attribute(comfy_table::Attribute::Bold)
+                .fg(comfy_table::Color::Cyan),
         ]);
 
         for insight in insights {
@@ -2466,7 +2545,7 @@ async fn handle_vm_dashboard(args: &VmListArgs) -> Result<()> {
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .margin(1)
-                .constraints([Constraint::Length(3), Constraint::Min(5)].as_ref())
+                .constraints([Constraint::Length(7), Constraint::Min(5)].as_ref())
                 .split(f.area());
 
             let mut header_text =
@@ -2484,7 +2563,8 @@ async fn handle_vm_dashboard(args: &VmListArgs) -> Result<()> {
                         Style::default()
                             .fg(Color::Cyan)
                             .add_modifier(Modifier::BOLD),
-                    ),
+                    )
+                    .padding(ratatui::widgets::Padding::symmetric(1, 2)),
             );
             f.render_widget(header, chunks[0]);
 
@@ -2494,7 +2574,8 @@ async fn handle_vm_dashboard(args: &VmListArgs) -> Result<()> {
                     .block(
                         Block::default()
                             .borders(Borders::ALL)
-                            .title(" Virtual Machines "),
+                            .title(" Virtual Machines ")
+                            .padding(ratatui::widgets::Padding::horizontal(1)),
                     );
                 f.render_widget(no_vms_msg, chunks[1]);
             } else {
@@ -2547,7 +2628,8 @@ async fn handle_vm_dashboard(args: &VmListArgs) -> Result<()> {
                 .block(
                     Block::default()
                         .borders(Borders::ALL)
-                        .title(" Virtual Machines "),
+                        .title(" Virtual Machines ")
+                        .padding(ratatui::widgets::Padding::horizontal(1)),
                 );
 
                 f.render_widget(table, chunks[1]);
