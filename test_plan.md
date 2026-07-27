@@ -1,0 +1,5 @@
+1. Profile: The function `to_terraform` in `crates/hitz-api/src/terraform.rs` formats a string representing a Terraform HCL block by repeatedly calling `writeln!(hcl, ...)` after initializing `hcl` via `format!`. The initial string (`hcl`) uses a default capacity that just fits the string literal, meaning each subsequent `writeln!` must repeatedly reallocate and copy the string buffer on the heap as it grows.
+2. Select: We will refactor `to_terraform` to use `String::with_capacity(capacity)` followed by `writeln!(...)` calls instead of `let mut hcl = format!(...)`. This will eliminate unnecessary heap reallocations.
+3. Optimize: In `crates/hitz-api/src/terraform.rs`, rewrite `to_terraform` to initialize `hcl` using `String::with_capacity(512)` (which is enough to hold the complete output) and then write the resource name and fields to it.
+4. Verify: Run `cargo clippy -p hitz-api --all-targets --all-features -- -D warnings` and `cargo test -p hitz-api` and `cargo fmt --all` to ensure tests pass and code is well-formatted.
+5. Present: Pre-commit and create PR.
