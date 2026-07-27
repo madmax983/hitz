@@ -493,3 +493,9 @@ pub use rightsizer::{ResizeRecommendation, RightSizer};
 mod terraform;
 #[cfg(feature = "terraform")]
 pub use terraform::ToTerraform;
+
+#[cfg(feature = "predictor")]
+/// Predictive analytics for VM telemetry.
+mod predictor;
+#[cfg(feature = "predictor")]
+pub use predictor::{OomPrediction, OomPredictor};
