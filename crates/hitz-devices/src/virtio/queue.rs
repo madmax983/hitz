@@ -251,14 +251,6 @@ pub struct DescriptorChain {
 ///
 /// # The Hero's Journey
 /// ```
-/// use hitz_devices::virtio::queue::Descriptor;
-///
-/// // Descriptors are typically returned by the chain via the VirtQueue.
-/// // They are simple structs containing GPA and length.
-/// // Example of what a descriptor would look like when populated:
-/// let desc = Descriptor { gpa: 0x1000, len: 4096, is_device_writable: true };
-/// assert_eq!(desc.len, 4096);
-/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Descriptor {
     /// Guest physical address of the buffer.
