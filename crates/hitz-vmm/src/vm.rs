@@ -691,19 +691,10 @@ fn run_multi_vcpu<H: Hypervisor>(
 
                     let exit = match result {
                         Ok(r) => r,
-                        Err(payload) => {
-                            let msg = payload.downcast_ref::<&str>().map_or_else(
-                                || {
-                                    payload
-                                        .downcast_ref::<String>()
-                                        .map_or_else(|| "unknown panic".to_string(), Clone::clone)
-                                },
-                                |s| (*s).to_string(),
-                            );
-                            Ok(ExitReason::Unexpected(format!(
-                                "vCPU {idx} panicked: {msg}"
-                            )))
-                        }
+                        Err(payload) => Ok(ExitReason::Unexpected(format!(
+                            "vCPU {idx} panicked: {}",
+                            format_panic_payload(&payload)
+                        ))),
                     };
 
                     let _ = tx.send(exit);
@@ -745,6 +736,14 @@ fn run_multi_vcpu<H: Hypervisor>(
     }
 
     Ok(final_reason)
+}
+
+fn format_panic_payload(payload: &Box<dyn std::any::Any + Send + 'static>) -> String {
+    payload
+        .downcast_ref::<&str>()
+        .map(|s| (*s).to_string())
+        .or_else(|| payload.downcast_ref::<String>().cloned())
+        .unwrap_or_else(|| "unknown panic".to_string())
 }
 
 #[cfg(test)]
