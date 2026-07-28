@@ -493,3 +493,9 @@ pub use rightsizer::{ResizeRecommendation, RightSizer};
 mod terraform;
 #[cfg(feature = "terraform")]
 pub use terraform::ToTerraform;
+
+#[cfg(feature = "placement")]
+/// VM Placement module for multi-host environments.
+pub mod placement;
+#[cfg(feature = "placement")]
+pub use placement::{HostCandidate, PlacementEngine, PlacementScore};
