@@ -493,3 +493,9 @@ pub use rightsizer::{ResizeRecommendation, RightSizer};
 mod terraform;
 #[cfg(feature = "terraform")]
 pub use terraform::ToTerraform;
+
+#[cfg(feature = "sustainability")]
+/// Sustainability module for evaluating unified eco-score.
+mod sustainability;
+#[cfg(feature = "sustainability")]
+pub use sustainability::{SustainabilityScore, SustainabilityScorer};
