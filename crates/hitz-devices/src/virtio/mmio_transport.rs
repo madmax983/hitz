@@ -117,9 +117,38 @@ pub const STATUS_FAILED: u8 = 0x80;
 
 /// A virtio device backend that processes queue requests.
 ///
-/// Implementations provide the device-specific logic (block, net, etc.)
+/// # Abstract
+///
+/// Implementations provide the device-specific logic (block, net, vsock, etc.)
 /// while the [`VirtioMmioTransport`] handles MMIO register decode and
-/// queue management.
+/// queue management. This trait abstracts the backend implementation from the
+/// transport layer.
+///
+/// # The Hero's Journey
+///
+/// ```rust
+/// use hitz_devices::{VirtioBackend, VirtQueue};
+/// use hitz_hal::GuestMemAccess;
+///
+/// struct MyBackend;
+///
+/// impl VirtioBackend for MyBackend {
+///     fn device_id(&self) -> u32 { 0x42 } // Custom device ID
+///     fn device_features(&self) -> u64 { 0 }
+///     fn queue_count(&self) -> usize { 1 }
+///
+///     fn process_queue(&mut self, queue_idx: u16, queue: &mut VirtQueue, mem: &dyn GuestMemAccess) {
+///         // Pop descriptors from the queue and process them!
+///         while let Some(chain) = queue.pop_chain(mem) {
+///             println!("Processing descriptor chain for queue {}", queue_idx);
+///             // ... process chain ...
+///             queue.push_used(mem, chain.head_index(), 0);
+///         }
+///     }
+///     fn read_config(&self, _offset: u64, _data: &mut [u8]) {}
+///     fn write_config(&mut self, _offset: u64, _data: &[u8]) {}
+/// }
+/// ```
 pub trait VirtioBackend: Send {
     /// Return the virtio device ID (e.g., 2 for block, 1 for net).
     fn device_id(&self) -> u32;
@@ -187,9 +216,42 @@ struct QueueState {
 
 /// Virtio MMIO transport wrapping a backend device.
 ///
-/// Implements `MmioDevice` and manages the MMIO register file,
+/// # Abstract
+///
+/// Implements [`crate::MmioDevice`] and manages the MMIO register file,
 /// virtqueue configuration, and device status state machine. Supports
-/// multiple virtqueues as reported by `VirtioBackend::queue_count`.
+/// multiple virtqueues as reported by [`VirtioBackend::queue_count`].
+///
+/// # The Hero's Journey
+///
+/// ```rust
+/// use hitz_devices::{VirtioMmioTransport, VirtioBackend, VirtQueue, MmioDevice};
+/// use hitz_hal::GuestMemAccess;
+/// use std::sync::Arc;
+///
+/// # struct DummyBackend;
+/// # impl VirtioBackend for DummyBackend {
+/// #     fn device_id(&self) -> u32 { 1 }
+/// #     fn device_features(&self) -> u64 { 0 }
+/// #     fn process_queue(&mut self, _idx: u16, _q: &mut VirtQueue, _mem: &dyn GuestMemAccess) {}
+/// #     fn read_config(&self, _offset: u64, _data: &mut [u8]) {}
+/// #     fn write_config(&mut self, _offset: u64, _data: &[u8]) {}
+/// # }
+/// # struct DummyMem;
+/// # impl GuestMemAccess for DummyMem {
+/// #     fn read_guest(&self, _gpa: u64, _buf: &mut [u8]) -> Result<(), hitz_hal::HalError> { Ok(()) }
+/// #     fn write_guest(&self, _gpa: u64, _data: &[u8]) -> Result<(), hitz_hal::HalError> { Ok(()) }
+/// # }
+/// // Create a backend device (e.g., block, net, or a custom one)
+/// let backend = DummyBackend;
+/// let mem: Arc<dyn GuestMemAccess> = Arc::new(DummyMem);
+///
+/// // Wrap it in the MMIO transport layer with an assigned IRQ
+/// let mut transport = VirtioMmioTransport::new(backend, mem.clone(), 5);
+///
+/// // Now it can be registered into an MmioBus!
+/// // bus.register(0xd0000000, 0x200, Box::new(transport));
+/// ```
 pub struct VirtioMmioTransport<D: VirtioBackend> {
     /// The backend device.
     device: D,
