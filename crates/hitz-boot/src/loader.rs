@@ -503,4 +503,15 @@ mod tests {
             "unexpected error: {err}"
         );
     }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn parse_program_header_out_of_bounds() {
+        // We just need a dummy array that is smaller than PROGRAM_HEADER_SIZE (56).
+        let data = vec![0u8; 10];
+
+        let err = parse_program_header(&data, 0).unwrap_err();
+
+        assert!(err.to_string().contains("extends past end of file"));
+    }
 }
