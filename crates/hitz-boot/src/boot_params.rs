@@ -481,4 +481,24 @@ mod tests {
             "acpi_rsdp_addr must be at offset 0x070"
         );
     }
+
+    #[test]
+    #[allow(clippy::unwrap_used, clippy::field_reassign_with_default)]
+    fn boot_params_debug_format() {
+        let mut bp = BootParams::default();
+        bp.e820_entries = 2;
+        bp.hdr.boot_flag = 0xAA55;
+        bp.hdr.header = 0x5372_6448;
+        bp.hdr.type_of_loader = 0xFF;
+        bp.hdr.loadflags = 0x81;
+        bp.hdr.cmd_line_ptr = 0x1234;
+
+        let debug_str = format!("{bp:?}");
+        assert!(debug_str.contains("e820_entries: 2"));
+        assert!(debug_str.contains("boot_flag: 0xaa55"));
+        assert!(debug_str.contains("header: 0x53726448"));
+        assert!(debug_str.contains("type_of_loader: 0xff"));
+        assert!(debug_str.contains("loadflags: 0x81"));
+        assert!(debug_str.contains("cmd_line_ptr: 0x1234"));
+    }
 }
