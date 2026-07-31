@@ -493,3 +493,7 @@ pub use rightsizer::{ResizeRecommendation, RightSizer};
 mod terraform;
 #[cfg(feature = "terraform")]
 pub use terraform::ToTerraform;
+#[cfg(feature = "sustainability")]
+pub mod sustainability;
+#[cfg(feature = "sustainability")]
+pub use sustainability::{SustainabilityAnalyzer, SustainabilityReport};
