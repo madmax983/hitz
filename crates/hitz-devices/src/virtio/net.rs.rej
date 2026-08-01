@@ -1,0 +1,26 @@
+--- net.rs
++++ net.rs
+@@ -456,23 +456,6 @@
+         // Just verify it doesn't panic
+         dev.write_config(0, &[0xAA, 0xBB]);
+     }
+-
+-    #[test]
+-    fn deliver_rx_fails_read_guest() {
+-        let mac = [0x02, 0x00, 0x00, 0x00, 0x00, 0x01];
+-        let (_dev, _tx_receiver, _rx_sender) = VirtioNetDevice::new(mac);
+-
+-        let mem = MockMem::new(0x10000);
+-        let mut q = VirtQueue::new(16);
+-        q.configure(0, 0x1000, 0x2000);
+-        q.set_ready(true);
+-        set_avail_idx(&mem, 0);
+-        mem.write_bytes(0x2000 + 2, &0u16.to_le_bytes());
+-
+-        // Write empty writable descriptor for rx
+-        // We don't read guest memory in deliver_rx, we write to guest memory!
+-        // The previous test deliver_rx_write_guest_fails already covers `write_guest` failing.
+-    }
+
+     #[test]
+     fn deliver_rx_drops_if_no_chain() {
