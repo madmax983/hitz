@@ -352,29 +352,10 @@ impl<D: VirtioBackend> VirtioMmioTransport<D> {
                 }
             }
             MMIO_QUEUE_READY => {
-                let ready = value != 0;
-                if let Some(qs) = self.queues.get_mut(self.queue_sel) {
-                    if ready {
-                        // Configure the queue GPAs before marking ready.
-                        let desc_gpa = u64::from(qs.desc_low) | (u64::from(qs.desc_high) << 32);
-                        let avail_gpa = u64::from(qs.avail_low) | (u64::from(qs.avail_high) << 32);
-                        let used_gpa = u64::from(qs.used_low) | (u64::from(qs.used_high) << 32);
-                        qs.queue.configure(desc_gpa, avail_gpa, used_gpa);
-                    }
-                    qs.queue.set_ready(ready);
-                }
+                self.handle_queue_ready(value);
             }
             MMIO_QUEUE_NOTIFY => {
-                // Value is the queue index the guest is notifying.
-                #[allow(clippy::cast_possible_truncation)]
-                let queue_idx = value as u16;
-                if let Some(qs) = self.queues.get_mut(usize::from(queue_idx)) {
-                    self.device
-                        .process_queue(queue_idx, &mut qs.queue, &*self.mem);
-                    // Signal used ring update.
-                    self.interrupt_status |= 1;
-                    return Some(self.irq_vector);
-                }
+                return self.handle_queue_notify(value);
             }
             MMIO_INTERRUPT_ACK => {
                 self.interrupt_status &= !value;
@@ -423,6 +404,34 @@ impl<D: VirtioBackend> VirtioMmioTransport<D> {
             _ => {
                 tracing::debug!(offset, value, "unhandled MMIO write");
             }
+        }
+        None
+    }
+
+    fn handle_queue_ready(&mut self, value: u32) {
+        let ready = value != 0;
+        if let Some(qs) = self.queues.get_mut(self.queue_sel) {
+            if ready {
+                // Configure the queue GPAs before marking ready.
+                let desc_gpa = u64::from(qs.desc_low) | (u64::from(qs.desc_high) << 32);
+                let avail_gpa = u64::from(qs.avail_low) | (u64::from(qs.avail_high) << 32);
+                let used_gpa = u64::from(qs.used_low) | (u64::from(qs.used_high) << 32);
+                qs.queue.configure(desc_gpa, avail_gpa, used_gpa);
+            }
+            qs.queue.set_ready(ready);
+        }
+    }
+
+    fn handle_queue_notify(&mut self, value: u32) -> Option<u8> {
+        // Value is the queue index the guest is notifying.
+        #[allow(clippy::cast_possible_truncation)]
+        let queue_idx = value as u16;
+        if let Some(qs) = self.queues.get_mut(usize::from(queue_idx)) {
+            self.device
+                .process_queue(queue_idx, &mut qs.queue, &*self.mem);
+            // Signal used ring update.
+            self.interrupt_status |= 1;
+            return Some(self.irq_vector);
         }
         None
     }
