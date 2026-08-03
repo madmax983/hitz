@@ -1,0 +1,30 @@
+<<<<<<< SEARCH
+        let debug_str = format!("{:?}", cpu);
+=======
+        let debug_str = format!("{cpu:?}");
+>>>>>>> REPLACE
+<<<<<<< SEARCH
+        let debug_str = format!("{:?}", mem);
+=======
+        let debug_str = format!("{mem:?}");
+>>>>>>> REPLACE
+<<<<<<< SEARCH
+        let debug_str = format!("{:?}", disk);
+=======
+        let debug_str = format!("{disk:?}");
+>>>>>>> REPLACE
+<<<<<<< SEARCH
+        let debug_str = format!("{:?}", net);
+=======
+        let debug_str = format!("{net:?}");
+>>>>>>> REPLACE
+<<<<<<< SEARCH
+        let debug_str = format!("{:?}", proc);
+=======
+        let debug_str = format!("{proc:?}");
+>>>>>>> REPLACE
+<<<<<<< SEARCH
+        let debug_str = format!("{:?}", snap);
+=======
+        let debug_str = format!("{snap:?}");
+>>>>>>> REPLACE

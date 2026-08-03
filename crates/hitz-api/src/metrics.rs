@@ -283,3 +283,180 @@ pub struct ProcMetrics {
     /// Process state character (e.g., 'R' for running, 'S' for sleeping).
     pub state: char,
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_metrics_request_snapshot_serde() {
+        let req = MetricsRequest::Snapshot;
+        let serialized = serde_json::to_string(&req).unwrap();
+        assert_eq!(serialized, "\"Snapshot\"");
+
+        let deserialized: MetricsRequest = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(deserialized, MetricsRequest::Snapshot);
+    }
+
+    #[test]
+    fn test_cpu_metrics_serde_and_debug() {
+        let cpu = CpuMetrics {
+            total_pct: 12.5,
+            per_core: vec![10.0, 15.0],
+            load_avg: [0.5, 0.4, 0.3],
+        };
+
+        // Test Debug
+        let debug_str = format!("{cpu:?}");
+        assert!(debug_str.contains("CpuMetrics"));
+        assert!(debug_str.contains("total_pct: 12.5"));
+
+        // Test Serde
+        let json = serde_json::to_string(&cpu).unwrap();
+        let deserialized: CpuMetrics = serde_json::from_str(&json).unwrap();
+        assert_eq!(cpu, deserialized);
+    }
+
+    #[test]
+    fn test_memory_metrics_serde_and_debug() {
+        let mem = MemoryMetrics {
+            total_bytes: 1024,
+            used_bytes: 512,
+            free_bytes: 512,
+            buffers_bytes: 0,
+            cached_bytes: 0,
+            swap_total: 2048,
+            swap_used: 1024,
+        };
+
+        // Test Debug
+        let debug_str = format!("{mem:?}");
+        assert!(debug_str.contains("MemoryMetrics"));
+        assert!(debug_str.contains("total_bytes: 1024"));
+
+        // Test Serde
+        let json = serde_json::to_string(&mem).unwrap();
+        let deserialized: MemoryMetrics = serde_json::from_str(&json).unwrap();
+        assert_eq!(mem, deserialized);
+    }
+
+    #[test]
+    fn test_disk_metrics_serde_and_debug() {
+        let disk = DiskMetrics {
+            name: "vda".to_string(),
+            read_bytes: 100,
+            write_bytes: 200,
+            reads_total: 10,
+            writes_total: 20,
+        };
+
+        // Test Debug
+        let debug_str = format!("{disk:?}");
+        assert!(debug_str.contains("DiskMetrics"));
+        assert!(debug_str.contains("name: \"vda\""));
+
+        // Test Serde
+        let json = serde_json::to_string(&disk).unwrap();
+        let deserialized: DiskMetrics = serde_json::from_str(&json).unwrap();
+        assert_eq!(disk, deserialized);
+    }
+
+    #[test]
+    fn test_net_metrics_serde_and_debug() {
+        let net = NetMetrics {
+            interface: "eth0".to_string(),
+            rx_bytes: 1000,
+            tx_bytes: 2000,
+            rx_packets: 10,
+            tx_packets: 20,
+            rx_errors: 1,
+            tx_errors: 2,
+        };
+
+        // Test Debug
+        let debug_str = format!("{net:?}");
+        assert!(debug_str.contains("NetMetrics"));
+        assert!(debug_str.contains("interface: \"eth0\""));
+
+        // Test Serde
+        let json = serde_json::to_string(&net).unwrap();
+        let deserialized: NetMetrics = serde_json::from_str(&json).unwrap();
+        assert_eq!(net, deserialized);
+    }
+
+    #[test]
+    fn test_proc_metrics_serde_and_debug() {
+        let proc = ProcMetrics {
+            pid: 1,
+            name: "init".to_string(),
+            cpu_pct: 0.1,
+            rss_bytes: 4096,
+            state: 'S',
+        };
+
+        // Test Debug
+        let debug_str = format!("{proc:?}");
+        assert!(debug_str.contains("ProcMetrics"));
+        assert!(debug_str.contains("pid: 1"));
+
+        // Test Serde
+        let json = serde_json::to_string(&proc).unwrap();
+        let deserialized: ProcMetrics = serde_json::from_str(&json).unwrap();
+        assert_eq!(proc, deserialized);
+    }
+
+    #[test]
+    fn test_metrics_snapshot_serde_and_debug() {
+        let snap = MetricsSnapshot {
+            timestamp_ms: 123_456_789,
+            cpu: CpuMetrics {
+                total_pct: 12.5,
+                per_core: vec![10.0, 15.0],
+                load_avg: [0.5, 0.4, 0.3],
+            },
+            memory: MemoryMetrics {
+                total_bytes: 1024,
+                used_bytes: 512,
+                free_bytes: 512,
+                buffers_bytes: 0,
+                cached_bytes: 0,
+                swap_total: 0,
+                swap_used: 0,
+            },
+            disks: vec![DiskMetrics {
+                name: "vda".to_string(),
+                read_bytes: 100,
+                write_bytes: 200,
+                reads_total: 10,
+                writes_total: 20,
+            }],
+            networks: vec![NetMetrics {
+                interface: "eth0".to_string(),
+                rx_bytes: 1000,
+                tx_bytes: 2000,
+                rx_packets: 10,
+                tx_packets: 20,
+                rx_errors: 1,
+                tx_errors: 2,
+            }],
+            processes: vec![ProcMetrics {
+                pid: 1,
+                name: "init".to_string(),
+                cpu_pct: 0.1,
+                rss_bytes: 4096,
+                state: 'S',
+            }],
+        };
+
+        // Test Debug
+        let debug_str = format!("{snap:?}");
+        assert!(debug_str.contains("MetricsSnapshot"));
+        assert!(debug_str.contains("timestamp_ms: 123456789"));
+
+        // Test Serde
+        let json = serde_json::to_string(&snap).unwrap();
+        let deserialized: MetricsSnapshot = serde_json::from_str(&json).unwrap();
+        assert_eq!(snap, deserialized);
+    }
+}

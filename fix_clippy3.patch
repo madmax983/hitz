@@ -1,0 +1,10 @@
+<<<<<<< SEARCH
+#[cfg(test)]
+mod tests {
+    use super::*;
+=======
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+>>>>>>> REPLACE
