@@ -1,0 +1,11 @@
+<<<<<<< SEARCH
+        let serialized = serde_json::to_string(&req).unwrap();
+        assert_eq!(serialized, "\"Snapshot\"");
+
+        let deserialized: MetricsRequest = serde_json::from_str(&serialized).unwrap();
+=======
+        let serialized = serde_json::to_string(&req).expect("serialize");
+        assert_eq!(serialized, "\"Snapshot\"");
+
+        let deserialized: MetricsRequest = serde_json::from_str(&serialized).expect("deserialize");
+>>>>>>> REPLACE
