@@ -166,7 +166,9 @@ fn poll_devices<V: Vcpu, W: Write>(
     let pending_vector = devs.mmio_bus.poll_devices();
     drop(devs);
 
-    let Some(vector) = pending_vector else { return Ok(()); };
+    let Some(vector) = pending_vector else {
+        return Ok(());
+    };
     if vcpu.inject_interrupt(vector).is_err() {
         *pending_irq = Some(vector);
         vcpu.request_interrupt_window()?;
@@ -207,7 +209,9 @@ fn dispatch_exit<V: Vcpu, W: Write>(
             record_exit(exit_counter, "InterruptWindow");
             // Guest is now interruptible. WHP auto-clears the
             // deliverability notification after this exit fires.
-            let Some(vector) = pending_irq.take() else { return Ok(None); };
+            let Some(vector) = pending_irq.take() else {
+                return Ok(None);
+            };
             vcpu.inject_interrupt(vector)?;
             tracing::debug!(vector, "deferred interrupt injected via interrupt window");
             Ok(None)
@@ -229,6 +233,17 @@ fn dispatch_exit<V: Vcpu, W: Write>(
             ))))
         }
     }
+}
+
+/// Context for executing an MMIO instruction.
+struct MmioContext<'a, V: Vcpu, W: Write> {
+    vcpu: &'a mut V,
+    devices: &'a Mutex<SharedDevices<W>>,
+    mem: &'a dyn GuestMemAccess,
+    mmio: &'a hitz_hal::MmioExit,
+    pending_irq: &'a mut Option<u8>,
+    decoded: &'a mmio_decode::DecodedMmio,
+    instr_len: u8,
 }
 
 /// Dispatch an MMIO exit to the appropriate device handler.
@@ -265,69 +280,68 @@ fn handle_mmio<V: Vcpu, W: Write>(
     // (it's always 0). Use the decoder-computed length instead.
     let instr_len = decoded.instruction_len;
 
+    let ctx = MmioContext {
+        vcpu,
+        devices,
+        mem,
+        mmio,
+        pending_irq,
+        decoded: &decoded,
+        instr_len,
+    };
+
     if mmio.is_write {
-        handle_mmio_write(vcpu, devices, mem, mmio, pending_irq, &decoded, instr_len)
+        handle_mmio_write(ctx)
     } else {
-        handle_mmio_read(vcpu, devices, mmio, &decoded, instr_len)
+        handle_mmio_read(ctx)
     }
 }
 
-fn handle_mmio_read<V: Vcpu, W: Write>(
-    vcpu: &mut V,
-    devices: &Mutex<SharedDevices<W>>,
-    mmio: &hitz_hal::MmioExit,
-    decoded: &mmio_decode::DecodedMmio,
-    instr_len: u8,
-) -> Result<(), HalError> {
+fn handle_mmio_read<V: Vcpu, W: Write>(mut ctx: MmioContext<'_, V, W>) -> Result<(), HalError> {
     // Read: lock → device read → unlock, then update registers.
-    let size = usize::from(decoded.size).min(8);
+    let size = usize::from(ctx.decoded.size).min(8);
     let mut data = [0u8; 8];
     {
-        let mut devs = devices.lock().expect("device lock poisoned");
-        devs.mmio_bus.read(mmio.gpa.as_u64(), &mut data[..size]);
+        let mut devs = ctx.devices.lock().expect("device lock poisoned");
+        devs.mmio_bus.read(ctx.mmio.gpa.as_u64(), &mut data[..size]);
     }
     let value = u64::from_le_bytes(data);
 
-    let mut regs = vcpu.get_regs()?;
-    mmio_decode::set_register(&mut regs, decoded.register, value);
-    regs.rip = regs.rip.wrapping_add(u64::from(instr_len));
-    vcpu.set_regs(&regs)
+    let mut regs = ctx.vcpu.get_regs()?;
+    mmio_decode::set_register(&mut regs, ctx.decoded.register, value);
+    regs.rip = regs.rip.wrapping_add(u64::from(ctx.instr_len));
+    ctx.vcpu.set_regs(&regs)
 }
 
-fn handle_mmio_write<V: Vcpu, W: Write>(
-    vcpu: &mut V,
-    devices: &Mutex<SharedDevices<W>>,
-    mem: &dyn GuestMemAccess,
-    mmio: &hitz_hal::MmioExit,
-    pending_irq: &mut Option<u8>,
-    decoded: &mmio_decode::DecodedMmio,
-    instr_len: u8,
-) -> Result<(), HalError> {
+fn handle_mmio_write<V: Vcpu, W: Write>(mut ctx: MmioContext<'_, V, W>) -> Result<(), HalError> {
     let mut data = [0u8; 8];
-    let value = if let Some(imm) = decoded.immediate {
+    let value = if let Some(imm) = ctx.decoded.immediate {
         u64::from(imm)
     } else {
-        let regs = vcpu.get_regs()?;
-        mmio_decode::register_value(&regs, decoded.register)
+        let regs = ctx.vcpu.get_regs()?;
+        mmio_decode::register_value(&regs, ctx.decoded.register)
     };
-    let size = usize::from(decoded.size).min(8);
+    let size = usize::from(ctx.decoded.size).min(8);
     data[..size].copy_from_slice(&value.to_le_bytes()[..size]);
 
     // Lock → device write → unlock, then handle IRQ.
     let irq = {
-        let mut devs = devices.lock().expect("device lock poisoned");
-        devs.mmio_bus.write(mmio.gpa.as_u64(), &data[..size], mem)
+        let mut devs = ctx.devices.lock().expect("device lock poisoned");
+        devs.mmio_bus
+            .write(ctx.mmio.gpa.as_u64(), &data[..size], ctx.mem)
     };
-    advance_rip(vcpu, instr_len)?;
+    advance_rip(ctx.vcpu, ctx.instr_len)?;
 
-    let Some(vector) = irq else { return Ok(()); };
+    let Some(vector) = irq else {
+        return Ok(());
+    };
     // Try to inject immediately. If the guest has IF=0
     // (interrupts disabled) or is in interrupt shadow,
     // WHP rejects the injection — stash the IRQ and
     // request an interrupt window exit.
-    if vcpu.inject_interrupt(vector).is_err() {
-        *pending_irq = Some(vector);
-        vcpu.request_interrupt_window()?;
+    if ctx.vcpu.inject_interrupt(vector).is_err() {
+        *ctx.pending_irq = Some(vector);
+        ctx.vcpu.request_interrupt_window()?;
         tracing::debug!(vector, "interrupt deferred, requested interrupt window");
     }
 
