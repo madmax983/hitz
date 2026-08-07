@@ -493,3 +493,9 @@ pub use rightsizer::{ResizeRecommendation, RightSizer};
 mod terraform;
 #[cfg(feature = "terraform")]
 pub use terraform::ToTerraform;
+
+#[cfg(feature = "ascii")]
+/// ASCII Chart module for generating text-based charts from metrics.
+mod ascii;
+#[cfg(feature = "ascii")]
+pub use ascii::AsciiChart;
