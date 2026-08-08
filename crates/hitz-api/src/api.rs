@@ -292,3 +292,58 @@ pub struct ApiError {
     /// A human-readable, descriptive error message explaining the failure.
     pub message: String,
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_vm_action_display() {
+        assert_eq!(VmAction::Start.to_string(), "start");
+        assert_eq!(VmAction::Stop.to_string(), "stop");
+        assert_eq!(VmAction::Restart.to_string(), "restart");
+    }
+
+    #[test]
+    fn test_vm_action_gerund_and_past_tense() {
+        let cases = vec![
+            (VmAction::Start, "Starting", "started"),
+            (VmAction::Stop, "Stopping", "stopped"),
+            (VmAction::Restart, "Restarting", "restarted"),
+        ];
+
+        for (action, expected_gerund, expected_past_tense) in cases {
+            assert_eq!(action.gerund(), expected_gerund);
+            assert_eq!(action.past_tense(), expected_past_tense);
+        }
+    }
+
+    #[test]
+    fn test_vm_state_serialization() {
+        let states = vec![
+            (VmState::Created, "\"Created\""),
+            (VmState::Running, "\"Running\""),
+            (VmState::Stopped, "\"Stopped\""),
+            (VmState::Failed, "\"Failed\""),
+        ];
+
+        for (state, expected_json) in states {
+            let serialized = serde_json::to_string(&state).expect("Serialization failed");
+            assert_eq!(serialized, expected_json);
+            let deserialized: VmState =
+                serde_json::from_str(&serialized).expect("Deserialization failed");
+            assert_eq!(deserialized, state);
+        }
+    }
+
+    #[test]
+    fn test_api_error_round_trip() {
+        let err = ApiError {
+            message: "test error".to_string(),
+        };
+        let serialized = serde_json::to_string(&err).unwrap();
+        let deserialized: ApiError = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(deserialized.message, err.message);
+    }
+}
