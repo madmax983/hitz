@@ -493,3 +493,5 @@ pub use rightsizer::{ResizeRecommendation, RightSizer};
 mod terraform;
 #[cfg(feature = "terraform")]
 pub use terraform::ToTerraform;
+#[cfg(feature = "mermaid")]
+pub mod mermaid;
