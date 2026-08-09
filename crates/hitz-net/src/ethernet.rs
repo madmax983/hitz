@@ -230,6 +230,15 @@ pub fn random_mac() -> [u8; 6] {
 
 /// Parse a MAC address string in "AA:BB:CC:DD:EE:FF" format.
 ///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_net::parse_mac;
+///
+/// let mac = parse_mac("11:22:33:44:55:66").unwrap();
+/// assert_eq!(mac, [0x11, 0x22, 0x33, 0x44, 0x55, 0x66]);
+/// ```
+///
 /// # Errors
 ///
 /// Returns an error string if the format is invalid.
@@ -260,6 +269,16 @@ pub fn parse_mac(s: &str) -> Result<[u8; 6], String> {
 /// Parse a CIDR notation string like "192.168.100.1/24".
 ///
 /// Returns the IPv4 address and prefix length.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_net::parse_cidr;
+///
+/// let (ip, prefix) = parse_cidr("192.168.100.1/24").unwrap();
+/// assert_eq!(ip, [192, 168, 100, 1]);
+/// assert_eq!(prefix, 24);
+/// ```
 ///
 /// # Errors
 ///
