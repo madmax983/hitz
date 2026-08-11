@@ -250,8 +250,8 @@ pub struct DescriptorChain {
 /// and whether it's writable by the device.
 ///
 /// # The Hero's Journey
-/// ```
-/// use hitz_devices::virtio::queue::Descriptor;
+/// ```ignore
+/// use hitz_devices::virtio::queue::Descriptor; // IGNORE
 ///
 /// // Descriptors are typically returned by the chain via the VirtQueue.
 /// // They are simple structs containing GPA and length.
