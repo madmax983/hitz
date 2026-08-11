@@ -51,6 +51,24 @@ pub struct ImbalanceResult {
 }
 
 /// Trait to analyze core utilization imbalance.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::{CoreImbalanceAnalyzer, ImbalanceResult, MetricsSnapshot, CpuMetrics, MemoryMetrics};
+///
+/// let snap = MetricsSnapshot {
+///     timestamp_ms: 1000,
+///     cpu: CpuMetrics { total_pct: 25.0, per_core: vec![100.0, 0.0, 0.0, 0.0], load_avg: [1.0, 0.5, 0.2] },
+///     memory: MemoryMetrics { total_bytes: 1024, used_bytes: 512, free_bytes: 512, buffers_bytes: 0, cached_bytes: 0, swap_total: 0, swap_used: 0 },
+///     disks: vec![],
+///     networks: vec![],
+///     processes: vec![],
+/// };
+///
+/// let result = snap.analyze_imbalance();
+/// assert!(result.is_imbalanced);
+/// ```
 pub trait CoreImbalanceAnalyzer {
     /// Analyzes per-core utilization and computes an imbalance score.
     fn analyze_imbalance(&self) -> ImbalanceResult;
