@@ -95,6 +95,38 @@ pub enum ResizeRecommendation {
 }
 
 /// Trait for objects that can evaluate metrics and configuration to recommend resizing.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::{RightSizer, ResizeRecommendation, VmConfig, MetricsSnapshot, CpuMetrics, MemoryMetrics, GuestAgentMode};
+/// use std::path::PathBuf;
+///
+/// let config = VmConfig {
+///     kernel_path: PathBuf::from("vmlinux"),
+///     initramfs_path: None,
+///     disk_path: None,
+///     ram_mib: 1024,
+///     cpus: 4,
+///     cmdline: None,
+///     net: None,
+///     ports: vec![],
+///     guest_cid: 3,
+///     guest_agent: GuestAgentMode::Auto,
+/// };
+///
+/// let snap = MetricsSnapshot {
+///     timestamp_ms: 1000,
+///     cpu: CpuMetrics { total_pct: 5.0, per_core: vec![5.0; 4], load_avg: [0.1, 0.1, 0.1] },
+///     memory: MemoryMetrics { total_bytes: 1024, used_bytes: 100, free_bytes: 900, buffers_bytes: 0, cached_bytes: 0, swap_total: 0, swap_used: 0 },
+///     disks: vec![],
+///     networks: vec![],
+///     processes: vec![],
+/// };
+///
+/// let recommendations = snap.recommend_sizing(&config);
+/// assert!(recommendations.len() > 0);
+/// ```
 pub trait RightSizer {
     /// Analyzes current metrics against the VM's configuration and returns recommendations.
     fn recommend_sizing(&self, config: &VmConfig) -> Vec<ResizeRecommendation>;

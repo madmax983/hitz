@@ -63,6 +63,24 @@ pub struct EfficiencyScore {
 }
 
 /// Trait to calculate efficiency.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::{EfficiencyScorer, EfficiencyScore, MetricsSnapshot, CpuMetrics, MemoryMetrics};
+///
+/// let snap = MetricsSnapshot {
+///     timestamp_ms: 1000,
+///     cpu: CpuMetrics { total_pct: 10.0, per_core: vec![10.0], load_avg: [0.1, 0.1, 0.1] },
+///     memory: MemoryMetrics { total_bytes: 1024, used_bytes: 512, free_bytes: 512, buffers_bytes: 0, cached_bytes: 0, swap_total: 0, swap_used: 0 },
+///     disks: vec![],
+///     networks: vec![],
+///     processes: vec![],
+/// };
+///
+/// let score = snap.calculate_efficiency();
+/// assert!(score.score < 100.0);
+/// ```
 pub trait EfficiencyScorer {
     /// Calculates efficiency from metrics.
     ///
