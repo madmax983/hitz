@@ -26,6 +26,7 @@ carbon = []
 terraform = []
 
 sentinel = []
+finops = []
 efficiency = []
 fingerprint = []
 imbalance = []
