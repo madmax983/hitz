@@ -1,49 +1,29 @@
-Ok, I added `proptest`. Now I can add the `proptest!` test to `hitz-devices/src/virtio/block.rs`.
+Idea: "Cost Estimator": Calculate estimated cloud cost equivalent of running this micro-vm (based on CPU/RAM config).
 
-Wait! Is there ANY other place where `hitz-devices` uses `proptest`? I can just add `use proptest::prelude::*;` inside `mod tests { ... }`.
-I'll replace `havoc_test_status_descriptor_overwrite` with a `proptest!` fuzzing block that covers `req_type`, `desc_len`, `sector`, `is_writable`, and `status_writable`.
+Let's look at `crates/hitz-api/src/config.rs`. We have `VmConfig` with `cpus` and `ram_mib`.
+I can create a new feature in `hitz-api`: `cost_estimator.rs`.
+It calculates the estimated hourly and monthly cost of running the VM based on typical cloud pricing (e.g. AWS fargate/ec2).
+E.g., $0.04048 per vCPU per hour, $0.004445 per GB per hour.
 
-```rust
-    use proptest::prelude::*;
+Or Idea 3: "Security Context/Audit":
+A `SecurityContext` analyzer. It takes `VmConfig` and `MetricsSnapshot` and returns a `SecurityScore` or `RiskProfile`.
+- Is root (uid 0) running the process? (Maybe we don't have that in `ProcMetrics` - just `pid` and `name`).
+- Are there exposed ports? `config.ports` has `PortForward`.
+- Is the guest agent enabled?
+- Is memory completely maxed out? (DOS risk?)
+- Are there suspicious process names?
 
-    proptest! {
-        #[test]
-        fn havoc_fuzz_block_process_queue(
-            desc_len in 0u32..=100000,
-            sector in 0u64..100,
-            req_type in prop::sample::select(vec![VIRTIO_BLK_T_IN, VIRTIO_BLK_T_OUT, 99]),
-            is_writable in any::<bool>(),
-            status_writable in any::<bool>(),
-        ) {
-            let f = create_temp_disk(2);
-            let mut dev = VirtioBlockDevice::new(f).unwrap();
-            let mem = MockMem::new(0x10000);
-            let mut q = setup_queue(&mem);
+Let's go with "Security Context/Audit" or `RiskAnalyzer`. Let's call it `SecurityAudit`.
 
-            let base_desc = 0;
-            const F_NEXT: u16 = 1;
-            const F_WRITE: u16 = 2;
-
-            write_desc(&mem, base_desc, HDR_GPA, 16, F_NEXT, base_desc + 1);
-            write_blk_header(&mem, HDR_GPA, req_type, sector);
-
-            let data_flags = if is_writable {
-                F_NEXT | F_WRITE
-            } else {
-                F_NEXT
-            };
-            write_desc(&mem, base_desc + 1, DATA_GPA, desc_len, data_flags, base_desc + 2);
-
-            let status_flags = if status_writable { F_WRITE } else { 0 };
-            write_desc(&mem, base_desc + 2, STATUS_GPA, 1, status_flags, 0);
-
-            write_avail_entry(&mem, 0, base_desc);
-            set_avail_idx(&mem, 1);
-
-            dev.process_queue(0, &mut q, &mem);
-        }
-    }
-```
-Wait, if `desc_len` is random, it could exceed `DATA_GPA + desc_len > 0x10000`, which might panic the `MockMem::write_bytes` IF the device attempts to read/write it. But wait, `MockMem` has length `0x10000`. So it will return `HalError::InvalidGpa` and `process_queue` will just return early without panic! Wait, `MockMem` returns `HalError::InvalidGpa` gracefully because we implemented `GuestMemAccess` properly for it!
-
-So `dev.process_queue` should just handle it and NEVER panic! This satisfies "Havoc: if I can crash it, I win" by proving it doesn't crash anymore.
+Wait, the prompt says "Nova" creates new features.
+"Innovation is connecting two existing modules that haven't met yet."
+We have `VmConfig` and `MetricsSnapshot`.
+Let's build `SecurityAudit` feature.
+Or even better: "Predictive Scaling" - maybe too similar to rightsizer.
+What about "Cost Estimator"? That connects `VmConfig` to real-world impact.
+Let's build a "Cost Estimator" feature. It takes a `VmConfig` and optionally `MetricsSnapshot` (to determine "active" cost vs "idle" cost?). No, just `VmConfig` for the allocated cost, and `MetricsSnapshot` for the utilized cost!
+That's brilliant! Connecting Config (allocated) and Metrics (utilized) to show *wasted money*.
+Let's call it `FinOpsAnalyzer`. It calculates:
+- `allocated_monthly_cost`
+- `utilized_monthly_cost` (based on average CPU/RAM usage from a snapshot)
+- `wasted_monthly_cost`
