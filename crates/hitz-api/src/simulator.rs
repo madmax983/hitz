@@ -9,7 +9,7 @@
 //! # The Hero's Journey
 //!
 //! ```rust
-//! use hitz_api::simulator::{VmSimulator, WorkloadProfile};
+//! use hitz_api::{VmSimulator, WorkloadProfile};
 //!
 //! // 1. Create a new simulator designed to trigger a CPU alert
 //! let mut simulator = VmSimulator::new(WorkloadProfile::CpuSpike);
@@ -70,7 +70,7 @@ impl VmSimulator {
     /// ## Examples
     ///
     /// ```rust
-    /// use hitz_api::simulator::{VmSimulator, WorkloadProfile};
+    /// use hitz_api::{VmSimulator, WorkloadProfile};
     ///
     /// let sim = VmSimulator::new(WorkloadProfile::MemoryLeak);
     /// ```
