@@ -493,3 +493,9 @@ pub use rightsizer::{ResizeRecommendation, RightSizer};
 mod terraform;
 #[cfg(feature = "terraform")]
 pub use terraform::ToTerraform;
+
+#[cfg(feature = "finops")]
+/// `FinOps` analysis module for cloud cost projection.
+mod finops;
+#[cfg(feature = "finops")]
+pub use finops::{FinOpsAnalyzer, FinOpsReport, PricingModel};
