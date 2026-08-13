@@ -31,8 +31,63 @@ use crate::VmConfig;
 use std::fmt::Write as _;
 
 /// Trait to export structures to Terraform HCL representation.
+///
+/// # Abstract
+/// Implementing this trait allows domain structures (like [`VmConfig`]) to be
+/// translated into a declarative representation suitable for infrastructure-as-code deployments.
+///
+/// ## Examples
+///
+/// ```rust
+/// use hitz_api::{VmConfig, ToTerraform, GuestAgentMode};
+/// use std::path::PathBuf;
+///
+/// let config = VmConfig {
+///     kernel_path: PathBuf::from("/boot/vmlinux"),
+///     initramfs_path: None,
+///     disk_path: None,
+///     ram_mib: 1024,
+///     cpus: 4,
+///     cmdline: None,
+///     net: None,
+///     ports: vec![],
+///     guest_cid: 4,
+///     guest_agent: GuestAgentMode::Auto,
+/// };
+///
+/// let hcl = config.to_terraform("my_app_vm");
+/// assert!(hcl.starts_with("resource \"hitz_vm\" \"my_app_vm\""));
+/// ```
 pub trait ToTerraform {
     /// Returns the Terraform HCL representation as a String.
+    ///
+    /// # Abstract
+    /// Generates the HCL block mapping this instance's specific configuration variables
+    /// to the properties defined by the target Terraform provider resource schema.
+    ///
+    /// ## Examples
+    ///
+    /// ```rust
+    /// use hitz_api::{VmConfig, ToTerraform, GuestAgentMode};
+    /// use std::path::PathBuf;
+    ///
+    /// let config = VmConfig {
+    ///     kernel_path: PathBuf::from("/boot/vmlinux"),
+    ///     initramfs_path: None,
+    ///     disk_path: None,
+    ///     ram_mib: 512,
+    ///     cpus: 1,
+    ///     cmdline: None,
+    ///     net: None,
+    ///     ports: vec![],
+    ///     guest_cid: 3,
+    ///     guest_agent: GuestAgentMode::Auto,
+    /// };
+    ///
+    /// // Generate the HCL configuration snippet for "worker_node"
+    /// let hcl_snippet = config.to_terraform("worker_node");
+    /// assert!(hcl_snippet.contains("worker_node"));
+    /// ```
     fn to_terraform(&self, resource_name: &str) -> String;
 }
 
