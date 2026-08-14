@@ -191,7 +191,7 @@ impl Write for SerialBuf {
             inner.buf[..remaining].copy_from_slice(&data_to_write[space_to_end..]);
             inner.write_pos = remaining;
         }
-        inner.total_written += len as u64;
+        inner.total_written = inner.total_written.saturating_add(len as u64);
         drop(inner);
         let _ = self.notify_tx.send(());
         Ok(len)
@@ -418,5 +418,19 @@ mod tests {
                 "Infinite loop detected! Task did not return."
             );
         });
+    }
+
+    #[test]
+    fn test_total_written_overflow() {
+        let mut buf = SerialBuf::new();
+        {
+            let mut inner = buf.inner.lock().unwrap();
+            inner.total_written = u64::MAX - 5;
+        }
+        let data = [0u8; 10];
+        let res = buf.write(&data);
+        assert!(res.is_ok());
+        let inner = buf.inner.lock().unwrap();
+        assert_eq!(inner.total_written, u64::MAX);
     }
 }
