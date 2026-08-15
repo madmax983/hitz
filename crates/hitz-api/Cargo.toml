@@ -30,3 +30,5 @@ efficiency = []
 fingerprint = []
 imbalance = []
 rightsizer = []
+
+scorecard = ["efficiency", "health_check", "imbalance"]
