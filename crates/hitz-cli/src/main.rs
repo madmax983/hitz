@@ -2395,7 +2395,7 @@ async fn handle_vm_analyze(args: &VmIdArgs) -> Result<()> {
                         .fg(Color::White)
                         .bg(Color::Blue)
                         .add_attribute(comfy_table::Attribute::Bold),
-                    Cell::new(insight.message),
+                    Cell::new(insight.message).fg(Color::Blue),
                 ),
             };
             let _ = table.add_row([level_cell, msg_cell]);
