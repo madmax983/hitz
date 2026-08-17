@@ -488,6 +488,12 @@ mod rightsizer;
 #[cfg(feature = "rightsizer")]
 pub use rightsizer::{ResizeRecommendation, RightSizer};
 
+#[cfg(feature = "cost")]
+/// `FinOps` Cost Estimation module.
+mod cost;
+#[cfg(feature = "cost")]
+pub use cost::{CostAnalysis, CostBreakdown, CostEstimator, PricingModel};
+
 #[cfg(feature = "terraform")]
 /// Terraform HCL generation module.
 mod terraform;
