@@ -493,3 +493,10 @@ pub use rightsizer::{ResizeRecommendation, RightSizer};
 mod terraform;
 #[cfg(feature = "terraform")]
 pub use terraform::ToTerraform;
+
+#[cfg(feature = "finops")]
+/// `FinOps` cost estimator for micro-VMs.
+mod finops;
+
+#[cfg(feature = "finops")]
+pub use finops::{CostEstimator, PricingModel};
