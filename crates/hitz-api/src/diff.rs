@@ -450,3 +450,34 @@ mod tests {
         assert_eq!(diff.networks[0].rx_bytes_per_sec, 0.0);
     }
 }
+
+#[cfg(test)]
+#[allow(clippy::expect_used)]
+mod tests_serialize {
+    use super::*;
+
+    #[test]
+    fn test_metrics_diff_serialization() {
+        let diff = MetricsDiff {
+            elapsed_secs: 1.0,
+            disks: vec![DiskRate {
+                name: "vda".to_string(),
+                reads_per_sec: 100.0,
+                writes_per_sec: 50.0,
+                read_bytes_per_sec: 1024.0,
+                write_bytes_per_sec: 512.0,
+            }],
+            networks: vec![NetRate {
+                interface: "eth0".to_string(),
+                rx_bytes_per_sec: 1024.0,
+                tx_bytes_per_sec: 512.0,
+                rx_packets_per_sec: 10.0,
+                tx_packets_per_sec: 5.0,
+            }],
+        };
+
+        let json = serde_json::to_string(&diff).expect("serialize");
+        let restored: MetricsDiff = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(diff, restored);
+    }
+}
