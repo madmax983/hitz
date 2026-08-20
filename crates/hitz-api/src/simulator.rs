@@ -4,7 +4,7 @@
 //! This module provides a synthetic [`VmSimulator`] that produces realistic,
 //! time-series telemetry data without requiring an actual micro-VM to be running.
 //! It is useful for testing, continuous integration, and validating alerting
-//! thresholds (e.g., via the [`health`](crate::health) module).
+//! thresholds (e.g., via the [`SystemHealth`](crate::SystemHealth) struct).
 //!
 //! # The Hero's Journey
 //!
