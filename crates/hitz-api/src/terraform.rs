@@ -32,7 +32,8 @@ use std::fmt::Write as _;
 
 /// Trait to export structures to Terraform HCL representation.
 pub trait ToTerraform {
-    /// Returns the Terraform HCL representation as a String.
+    /// Converts the configuration into a `terraform` HCL resource block, allowing users to
+    /// export their running or desired VM configurations into Infrastructure-as-Code.
     fn to_terraform(&self, resource_name: &str) -> String;
 }
 

@@ -76,7 +76,8 @@ impl std::fmt::Display for VmAction {
 }
 
 impl VmAction {
-    /// Returns the gerund form of the action (e.g., "Starting", "Stopping").
+    /// Converts the action into its gerund form (e.g., "Starting", "Stopping")
+    /// for use in active progress indicators or streaming log messages.
     #[must_use]
     pub const fn gerund(&self) -> &'static str {
         match self {
@@ -86,7 +87,8 @@ impl VmAction {
         }
     }
 
-    /// Returns the past tense form of the action (e.g., "started", "stopped").
+    /// Converts the action into its past tense form (e.g., "started", "stopped")
+    /// for use in completion notifications or audit logs.
     #[must_use]
     pub const fn past_tense(&self) -> &'static str {
         match self {
